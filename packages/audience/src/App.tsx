@@ -1,10 +1,68 @@
+import { useState, useCallback } from 'react';
+import type { InteractionConfig } from '@twilio-preso/shared';
+import { initSync, subscribeToEvents, publishResponse } from './sync';
+import { Register } from './pages/Register';
+import { Waiting } from './pages/Waiting';
+import { Poll } from './pages/Poll';
+import { TextInput } from './pages/TextInput';
+import { Trigger } from './pages/Trigger';
+import { Sentiment } from './pages/Sentiment';
+
+type AppState = 'register' | 'waiting' | 'interaction';
+
 export function App() {
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-white">SIGNAL World Tour</h1>
-        <p className="text-twilio-red mt-2">Audience app loading...</p>
-      </div>
-    </div>
-  );
+  const [state, setState] = useState<AppState>('register');
+  const [participantId, setParticipantId] = useState('');
+  const [name, setName] = useState('');
+  const [activeInteraction, setActiveInteraction] = useState<InteractionConfig | null>(null);
+
+  const handleRegistered = useCallback(async (id: string, participantName: string) => {
+    setParticipantId(id);
+    setName(participantName);
+    setState('waiting');
+
+    await initSync(id);
+    await subscribeToEvents(
+      (interaction) => {
+        setActiveInteraction(interaction);
+        setState('interaction');
+      },
+      () => {
+        setActiveInteraction(null);
+        setState('waiting');
+      }
+    );
+  }, []);
+
+  const handleResponse = useCallback((value: string) => {
+    if (!activeInteraction) return;
+    publishResponse(
+      participantId,
+      name,
+      activeInteraction.stageIndex,
+      activeInteraction.type,
+      value
+    );
+  }, [participantId, name, activeInteraction]);
+
+  if (state === 'register') {
+    return <Register onRegistered={handleRegistered} />;
+  }
+
+  if (state === 'waiting' || !activeInteraction) {
+    return <Waiting name={name} />;
+  }
+
+  switch (activeInteraction.type) {
+    case 'poll':
+      return <Poll interaction={activeInteraction} onSubmit={handleResponse} />;
+    case 'text':
+      return <TextInput interaction={activeInteraction} onSubmit={handleResponse} />;
+    case 'trigger':
+      return <Trigger interaction={activeInteraction} onSubmit={handleResponse} />;
+    case 'sentiment':
+      return <Sentiment interaction={activeInteraction} onSubmit={handleResponse} />;
+    default:
+      return <Waiting name={name} />;
+  }
 }
