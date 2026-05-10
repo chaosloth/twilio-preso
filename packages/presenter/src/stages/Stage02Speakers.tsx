@@ -3,24 +3,20 @@ import { TwilioGem, FloatingText, ParticleField } from '../objects';
 export default function Stage02Speakers() {
   return (
     <group>
-      <TwilioGem scale={0.6} position={[0, 0, -2]} emissiveIntensity={0.3} rotationSpeed={0.05} />
-      <ParticleField count={100} spread={12} color="#F22F46" speed={0.1} size={0.015} />
+      <TwilioGem scale={2} position={[0, 0, -3]} emissiveIntensity={0.4} rotationSpeed={0.08} wireframe />
+      <ParticleField count={200} spread={14} color="#F22F46" speed={0.08} size={0.02} />
 
-      {/* Single presenter */}
-      <group position={[0, 0.3, 0]}>
-        <mesh>
-          <planeGeometry args={[2.5, 3]} />
-          <meshStandardMaterial color="#1a1a3e" emissive="#F22F46" emissiveIntensity={0.05} />
-        </mesh>
-        <FloatingText position={[0, -2.2, 0]} fontSize={0.28} color="#ffffff" bold delay={0.3}>
-          Christopher Connolly
-        </FloatingText>
-        <FloatingText position={[0, -2.8, 0]} fontSize={0.14} color="#888888" delay={0.5}>
-          Director, Solutions Engineering, Twilio APJ
-        </FloatingText>
-      </group>
+      <FloatingText position={[0, 1.5, 0]} fontSize={0.55} color="#F22F46" heading delay={0.2}>
+        SIGNAL
+      </FloatingText>
+      <FloatingText position={[0, 0.5, 0]} fontSize={0.45} color="#ffffff" bold delay={0.4}>
+        World Tour 2026
+      </FloatingText>
+      <FloatingText position={[0, -0.8, 0]} fontSize={0.16} color="#888888" delay={0.7}>
+        Wonder — reconnecting technology to imagination
+      </FloatingText>
 
-      <pointLight position={[0, 3, 2]} intensity={1} color="#ffffff" />
+      <pointLight position={[0, 3, 3]} color="#F22F46" intensity={1.5} distance={10} />
     </group>
   );
 }

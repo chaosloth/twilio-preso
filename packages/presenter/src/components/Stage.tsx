@@ -2,7 +2,7 @@ import { Suspense, lazy, type ComponentType } from 'react';
 import { STAGES } from '@twilio-preso/shared';
 import { usePresenterStore } from '../store';
 
-const STAGE_SPACING = 30;
+const STAGE_SPACING = 50;
 
 const stageComponents: Record<string, React.LazyExoticComponent<ComponentType>> = {
   opening: lazy(() => import('../stages/Stage01Opening')),

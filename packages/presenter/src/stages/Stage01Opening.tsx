@@ -1,28 +1,52 @@
 import { TwilioGem, ParticleField, FloatingText } from '../objects';
 import { Html } from '@react-three/drei';
 import { usePresenterStore } from '../store';
+import { QRCodeSVG } from 'qrcode.react';
+
+const AUDIENCE_URL = import.meta.env.VITE_AUDIENCE_URL || 'http://localhost:3002';
 
 export default function Stage01Opening() {
   const participants = usePresenterStore((s) => s.totalParticipants);
 
   return (
     <group>
-      <TwilioGem scale={1.8} emissiveIntensity={1} rotationSpeed={0.15} />
-      <ParticleField count={Math.min(participants * 10 + 50, 600)} spread={10} size={0.025} speed={0.2} />
-      <FloatingText position={[0, 3.2, 0]} fontSize={0.18} color="#888888" delay={0.5}>
-        Scan to join the experience
-      </FloatingText>
-      <FloatingText position={[0, -3.2, 0]} fontSize={0.25} color="#F22F46" delay={0.8}>
-        {`${participants} connected`}
-      </FloatingText>
-      <Html position={[0, -1.8, 0]} center transform>
-        <div style={{ background: 'white', padding: 16, borderRadius: 12, boxShadow: '0 0 40px rgba(242,47,70,0.3)' }}>
-          <div style={{ width: 130, height: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#666' }}>
-            QR CODE
+      <TwilioGem scale={1.2} emissiveIntensity={0.6} rotationSpeed={0.1} position={[0, 0, -2]} />
+      <ParticleField count={Math.min(participants * 10 + 80, 600)} spread={12} size={0.02} speed={0.15} />
+
+      {/* Left side: Speaker info */}
+      <group position={[-3, 0, 0]}>
+        <mesh>
+          <planeGeometry args={[3, 3.5]} />
+          <meshStandardMaterial color="#1a1a3e" emissive="#F22F46" emissiveIntensity={0.03} />
+        </mesh>
+        <FloatingText position={[0, -2.4, 0.1]} fontSize={0.24} color="#ffffff" bold delay={0.3}>
+          Christopher Connolly
+        </FloatingText>
+        <FloatingText position={[0, -3, 0.1]} fontSize={0.12} color="#888888" delay={0.5}>
+          Director, Solutions Engineering, Twilio APJ
+        </FloatingText>
+      </group>
+
+      {/* Right side: QR + join */}
+      <group position={[3, 0, 0]}>
+        <FloatingText position={[0, 2.2, 0]} fontSize={0.32} color="#ffffff" bold delay={0.2}>
+          Scan to Join
+        </FloatingText>
+        <FloatingText position={[0, 1.6, 0]} fontSize={0.14} color="#888888" delay={0.4}>
+          Be part of the live demo
+        </FloatingText>
+        <Html position={[0, -0.3, 0]} center transform>
+          <div style={{ background: 'white', padding: 20, borderRadius: 16, boxShadow: '0 0 60px rgba(242,47,70,0.4)' }}>
+            <QRCodeSVG value={AUDIENCE_URL} size={180} level="M" />
           </div>
-        </div>
-      </Html>
-      <pointLight position={[0, 0, 2]} color="#F22F46" intensity={2} distance={8} />
+        </Html>
+        <FloatingText position={[0, -2.8, 0]} fontSize={0.22} color="#F22F46" delay={0.8}>
+          {`${participants} connected`}
+        </FloatingText>
+      </group>
+
+      <pointLight position={[0, 2, 3]} color="#F22F46" intensity={1.5} distance={10} />
+      <pointLight position={[0, -2, 3]} color="#ffffff" intensity={0.5} distance={6} />
     </group>
   );
 }

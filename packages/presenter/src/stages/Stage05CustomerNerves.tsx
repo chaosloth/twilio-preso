@@ -4,20 +4,32 @@ import { usePresenterStore } from '../store';
 export default function Stage05CustomerNerves() {
   const results = usePresenterStore((s) => s.aggregateResults);
   const pollData = results?.stageIndex === 4 ? results.results : {};
+  const hasResponses = Object.keys(pollData).length > 0;
 
   return (
     <group>
-      <ParticleField count={400} color="#F22F46" speed={1.2} spread={14} size={0.025} />
-      <ParticleField count={100} color="#ffffff" speed={0.8} spread={10} size={0.015} />
+      <ParticleField count={300} color="#F22F46" speed={0.8} spread={12} size={0.02} />
+      <ParticleField count={80} color="#ffffff" speed={0.5} spread={8} size={0.015} />
 
-      <FloatingText position={[0, 3.5, 0]} fontSize={0.35} color="#ffffff" bold delay={0.2} maxWidth={10}>
+      <FloatingText position={[0, 2.5, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
         {"Who's getting on their\ncustomers' nerves?"}
       </FloatingText>
 
-      <BarChart3D data={pollData} position={[0, -0.5, 0]} maxHeight={2.5} barWidth={1.2} />
+      {hasResponses ? (
+        <BarChart3D data={pollData} position={[0, -0.5, 0]} maxHeight={2.5} barWidth={1.2} />
+      ) : (
+        <group>
+          <FloatingText position={[0, 0, 0]} fontSize={0.2} color="#F22F46" delay={0.8}>
+            Check your phone to vote
+          </FloatingText>
+          <FloatingText position={[0, -0.5, 0]} fontSize={0.14} color="#888888" delay={1}>
+            Results will appear here in real-time
+          </FloatingText>
+        </group>
+      )}
 
-      <pointLight position={[3, 3, 2]} color="#F22F46" intensity={2} distance={10} />
-      <pointLight position={[-3, -2, 2]} color="#F22F46" intensity={1} distance={8} />
+      <pointLight position={[3, 2, 3]} color="#F22F46" intensity={1.5} distance={10} />
+      <pointLight position={[-3, -1, 2]} color="#F22F46" intensity={0.8} distance={8} />
     </group>
   );
 }

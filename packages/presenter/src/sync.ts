@@ -10,7 +10,12 @@ const AGGREGATE_RESULTS_DOC = 'aggregate-results';
 let syncClient: InstanceType<typeof SyncClient> | null = null;
 
 export async function initPresenterSync(): Promise<void> {
-  const res = await fetch(`${BACKEND_URL}/api/token?identity=presenter`);
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND_URL}/api/token?identity=presenter`);
+  } catch {
+    return; // Backend not available — run in offline/preview mode
+  }
   const { token } = await res.json();
 
   syncClient = new SyncClient(token);
@@ -53,9 +58,11 @@ export async function publishInteractionPrompt(interaction: InteractionConfig): 
 }
 
 export async function triggerDemo(triggerId: string, targetParticipantId?: string): Promise<void> {
-  await fetch(`${BACKEND_URL}/api/trigger`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ triggerId, targetParticipantId }),
-  });
+  try {
+    await fetch(`${BACKEND_URL}/api/trigger`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ triggerId, targetParticipantId }),
+    });
+  } catch {}
 }

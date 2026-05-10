@@ -31,7 +31,7 @@ function HUD() {
 
 export function App() {
   useEffect(() => {
-    initPresenterSync().catch(console.error);
+    initPresenterSync().catch(() => {});
   }, []);
 
   return (
@@ -42,6 +42,7 @@ export function App() {
         style={{ width: '100vw', height: '100vh' }}
       >
         <color attach="background" args={['#0D1B2A']} />
+        <fog attach="fog" args={['#0D1B2A', 15, 40]} />
         <Scene />
       </Canvas>
       <HUD />
