@@ -1,4 +1,4 @@
-import { FloatingText, ParticleField } from '../objects';
+import { FloatingText, ParticleField, SceneAccents } from '../objects';
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Group } from 'three';
@@ -61,6 +61,7 @@ export default function Stage06PatienceDeficit() {
         Travel compensation
       </FloatingText>
 
+      <SceneAccents count={8} spread={10} seed={6} />
       <pointLight position={[0, 2, 3]} color="#F22F46" intensity={1.5} distance={8} />
     </group>
   );

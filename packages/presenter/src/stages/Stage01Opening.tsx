@@ -1,4 +1,4 @@
-import { TwilioGem, ParticleField, FloatingText } from '../objects';
+import { TwilioGem, ParticleField, FloatingText, SceneAccents } from '../objects';
 import { Html } from '@react-three/drei';
 import { usePresenterStore } from '../store';
 import { QRCodeSVG } from 'qrcode.react';
@@ -45,6 +45,7 @@ export default function Stage01Opening() {
         </FloatingText>
       </group>
 
+      <SceneAccents count={10} spread={10} seed={1} />
       <pointLight position={[0, 2, 3]} color="#F22F46" intensity={1.5} distance={10} />
       <pointLight position={[0, -2, 3]} color="#ffffff" intensity={0.5} distance={6} />
     </group>

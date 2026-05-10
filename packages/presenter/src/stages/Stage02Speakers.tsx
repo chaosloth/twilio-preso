@@ -1,4 +1,4 @@
-import { TwilioGem, FloatingText, ParticleField } from '../objects';
+import { TwilioGem, FloatingText, ParticleField, SceneAccents } from '../objects';
 
 export default function Stage02Speakers() {
   return (
@@ -16,6 +16,7 @@ export default function Stage02Speakers() {
         Wonder — reconnecting technology to imagination
       </FloatingText>
 
+      <SceneAccents count={8} spread={12} seed={2} />
       <pointLight position={[0, 3, 3]} color="#F22F46" intensity={1.5} distance={10} />
     </group>
   );

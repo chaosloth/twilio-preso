@@ -1,4 +1,4 @@
-import { ParticleField, FloatingText } from '../objects';
+import { ParticleField, FloatingText, SceneAccents } from '../objects';
 
 export default function Stage03WhyWonder() {
   return (
@@ -16,6 +16,7 @@ export default function Stage03WhyWonder() {
         Behind every experience that feels like magic is someone who built it.
       </FloatingText>
 
+      <SceneAccents count={14} spread={10} seed={3} />
       <pointLight position={[0, 3, 3]} intensity={0.8} color="#F22F46" />
     </group>
   );

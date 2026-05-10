@@ -1,4 +1,4 @@
-import { FloatingText } from '../objects';
+import { FloatingText, SceneAccents } from '../objects';
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Group } from 'three';
@@ -56,6 +56,7 @@ export default function Stage07ThinkChannels() {
           <pointLight position={[0, 0, 1]} color="#F22F46" intensity={0.4} distance={3} />
         </group>
       ))}
+      <SceneAccents count={10} spread={12} seed={7} />
     </group>
   );
 }

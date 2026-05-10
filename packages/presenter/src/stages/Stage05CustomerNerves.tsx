@@ -1,4 +1,4 @@
-import { ParticleField, FloatingText, BarChart3D } from '../objects';
+import { ParticleField, FloatingText, BarChart3D, SceneAccents } from '../objects';
 import { usePresenterStore } from '../store';
 
 export default function Stage05CustomerNerves() {
@@ -28,6 +28,7 @@ export default function Stage05CustomerNerves() {
         </group>
       )}
 
+      <SceneAccents count={10} spread={10} seed={5} />
       <pointLight position={[3, 2, 3]} color="#F22F46" intensity={1.5} distance={10} />
       <pointLight position={[-3, -1, 2]} color="#F22F46" intensity={0.8} distance={8} />
     </group>

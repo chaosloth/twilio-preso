@@ -1,4 +1,4 @@
-import { FloatingText, ParticleField } from '../objects';
+import { FloatingText, ParticleField, SceneAccents } from '../objects';
 
 const chapters = [
   { title: 'The invisible\nextraordinary', subtitle: 'Amazing experiences exist' },
@@ -55,6 +55,7 @@ export default function Stage04StoryArc() {
         );
       })}
 
+      <SceneAccents count={8} spread={14} seed={4} />
       <pointLight position={[0, 3, 3]} intensity={1} color="#ffffff" distance={10} />
     </group>
   );
