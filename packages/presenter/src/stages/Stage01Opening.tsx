@@ -1,9 +1,19 @@
 import { TwilioGem, ParticleField, FloatingText, SceneAccents } from '../objects';
-import { Html } from '@react-three/drei';
+import { Html, useTexture } from '@react-three/drei';
 import { usePresenterStore } from '../store';
 import { QRCodeSVG } from 'qrcode.react';
 
 const AUDIENCE_URL = import.meta.env.VITE_AUDIENCE_URL || 'http://localhost:3002';
+
+function PresenterPhoto() {
+  const texture = useTexture('/images/connolly.png');
+  return (
+    <mesh>
+      <planeGeometry args={[3, 3.5]} />
+      <meshBasicMaterial map={texture} transparent />
+    </mesh>
+  );
+}
 
 export default function Stage01Opening() {
   const participants = usePresenterStore((s) => s.totalParticipants);
@@ -13,12 +23,9 @@ export default function Stage01Opening() {
       <TwilioGem scale={1.2} emissiveIntensity={0.6} rotationSpeed={0.1} position={[0, 0, -2]} />
       <ParticleField count={Math.min(participants * 10 + 80, 600)} spread={12} size={0.02} speed={0.15} />
 
-      {/* Left side: Speaker info */}
+      {/* Left side: Speaker photo + info */}
       <group position={[-3, 0, 0]}>
-        <mesh>
-          <planeGeometry args={[3, 3.5]} />
-          <meshStandardMaterial color="#0a1535" emissive="#ef223a" emissiveIntensity={0.03} />
-        </mesh>
+        <PresenterPhoto />
         <FloatingText position={[0, -2.4, 0.1]} fontSize={0.24} color="#ffffff" bold delay={0.3}>
           Christopher Connolly
         </FloatingText>
