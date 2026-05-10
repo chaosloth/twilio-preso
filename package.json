@@ -1,0 +1,13 @@
+{
+  "name": "twilio-preso",
+  "private": true,
+  "scripts": {
+    "dev:presenter": "pnpm --filter @twilio-preso/presenter dev",
+    "dev:audience": "pnpm --filter @twilio-preso/audience dev",
+    "dev:backend": "pnpm --filter @twilio-preso/backend dev",
+    "dev": "pnpm run --parallel dev:backend dev:presenter dev:audience",
+    "build": "pnpm --filter @twilio-preso/shared build && pnpm run --parallel build:apps",
+    "build:apps": "pnpm --filter @twilio-preso/presenter build && pnpm --filter @twilio-preso/audience build && pnpm --filter @twilio-preso/backend build",
+    "typecheck": "pnpm -r typecheck"
+  }
+}
