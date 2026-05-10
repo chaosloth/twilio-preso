@@ -37,7 +37,7 @@ export function App() {
   return (
     <>
       <Canvas
-        camera={{ position: [0, 0, 5], fov: 60 }}
+        camera={{ position: [0, 0, 8], fov: 50 }}
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
         style={{ width: '100vw', height: '100vh' }}
       >
