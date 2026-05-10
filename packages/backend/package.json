@@ -1,0 +1,24 @@
+{
+  "name": "@twilio-preso/backend",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.0",
+    "@twilio-preso/shared": "workspace:*",
+    "dotenv": "^16.4.0",
+    "fastify": "^5.0.0",
+    "twilio": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
