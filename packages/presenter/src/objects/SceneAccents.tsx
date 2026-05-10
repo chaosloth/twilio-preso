@@ -23,7 +23,7 @@ function seededRandom(seed: number) {
 export function SceneAccents({
   count = 12,
   spread = 8,
-  color = '#F22F46',
+  color = '#ef223a',
   seed = 42,
 }: SceneAccentsProps) {
   const elements = useMemo(() => {

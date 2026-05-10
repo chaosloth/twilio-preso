@@ -24,7 +24,7 @@ export default function Stage09CustomersAre() {
 
   return (
     <group>
-      <ParticleField count={100} spread={12} color="#F22F46" speed={0.1} size={0.015} />
+      <ParticleField count={100} spread={12} color="#ef223a" speed={0.1} size={0.015} />
 
       <FloatingText position={[0, 3.5, 0]} fontSize={0.3} color="#ffffff" bold delay={0.2} maxWidth={10}>
         {'In one word, your biggest\nCX challenge?'}
@@ -32,11 +32,11 @@ export default function Stage09CustomersAre() {
 
       <WordCloud3D words={words} spread={5} position={[0, 0, 0]} />
 
-      <FloatingText position={[0, -3.5, 0]} fontSize={0.15} color="#888888" delay={0.5}>
+      <FloatingText position={[0, -3.5, 0]} fontSize={0.15} color="#7e869c" delay={0.5}>
         {`${words.length} responses`}
       </FloatingText>
 
-      <pointLight position={[0, 0, 3]} color="#F22F46" intensity={1} distance={8} />
+      <pointLight position={[0, 0, 3]} color="#ef223a" intensity={1} distance={8} />
     </group>
   );
 }

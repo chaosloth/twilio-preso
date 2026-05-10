@@ -15,7 +15,7 @@ export function GlowingPillar({
   label,
   sublabel,
   position = [0, 0, 0],
-  color = '#F22F46',
+  color = '#ef223a',
   intensity = 1,
 }: GlowingPillarProps) {
   const meshRef = useRef<Mesh>(null);

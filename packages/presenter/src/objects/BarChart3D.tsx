@@ -42,7 +42,7 @@ export function BarChart3D({
   position = [0, 0, 0],
   maxHeight = 3,
   barWidth = 0.8,
-  color = '#F22F46',
+  color = '#ef223a',
 }: BarChart3DProps) {
   const entries = Object.entries(data);
   const maxValue = Math.max(...Object.values(data), 1);

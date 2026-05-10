@@ -16,10 +16,10 @@ export default function Stage14Intelligence() {
 
   return (
     <group>
-      <FloatingText position={[0, 3.5, 0]} fontSize={0.45} color="#F22F46" bold delay={0}>
+      <FloatingText position={[0, 3.5, 0]} fontSize={0.45} color="#ef223a" bold delay={0}>
         Conversation Intelligence
       </FloatingText>
-      <FloatingText position={[0, 2.7, 0]} fontSize={0.13} color="#888888" delay={0.3}>
+      <FloatingText position={[0, 2.7, 0]} fontSize={0.13} color="#7e869c" delay={0.3}>
         GA
       </FloatingText>
 
@@ -39,8 +39,8 @@ export default function Stage14Intelligence() {
           <mesh key={i} position={[(i - 15) * 0.15, 0, 0]}>
             <boxGeometry args={[0.08, 0.3, 0.08]} />
             <meshStandardMaterial
-              color={i % 3 === 0 ? '#F22F46' : '#4488ff'}
-              emissive={i % 3 === 0 ? '#F22F46' : '#4488ff'}
+              color={i % 3 === 0 ? '#ef223a' : '#4488ff'}
+              emissive={i % 3 === 0 ? '#ef223a' : '#4488ff'}
               emissiveIntensity={0.8}
             />
           </mesh>
@@ -49,7 +49,7 @@ export default function Stage14Intelligence() {
 
       <ParticleField count={100} spread={8} color="#4488ff" speed={0.1} size={0.015} />
       <pointLight position={[2, 0, 2]} color="#4488ff" intensity={1} distance={6} />
-      <pointLight position={[-2, 2, 2]} color="#F22F46" intensity={0.8} distance={6} />
+      <pointLight position={[-2, 2, 2]} color="#ef223a" intensity={0.8} distance={6} />
     </group>
   );
 }

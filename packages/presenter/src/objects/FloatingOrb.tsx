@@ -12,7 +12,7 @@ interface FloatingOrbProps {
 export function FloatingOrb({
   position = [0, 0, 0],
   scale = 0.3,
-  color = '#F22F46',
+  color = '#ef223a',
   speed = 1,
 }: FloatingOrbProps) {
   const ref = useRef<Mesh>(null);

@@ -15,7 +15,7 @@ export default function Stage04StoryArc() {
 
   return (
     <group>
-      <ParticleField count={100} spread={14} color="#F22F46" speed={0.05} size={0.015} />
+      <ParticleField count={100} spread={14} color="#ef223a" speed={0.05} size={0.015} />
 
       <FloatingText position={[0, 3, 0]} fontSize={0.45} color="#ffffff" bold delay={0}>
         Wonder Story Arc
@@ -29,27 +29,27 @@ export default function Stage04StoryArc() {
             <mesh>
               <boxGeometry args={[1.9, 2.8, 0.05]} />
               <meshStandardMaterial
-                color="#0f1525"
-                emissive="#F22F46"
+                color="#06102a"
+                emissive="#ef223a"
                 emissiveIntensity={0.08}
               />
             </mesh>
             {/* Part number */}
-            <FloatingText position={[0, 0.9, 0.05]} fontSize={0.12} color="#888888" delay={0.2 + i * 0.1}>
+            <FloatingText position={[0, 0.9, 0.05]} fontSize={0.12} color="#7e869c" delay={0.2 + i * 0.1}>
               {`Part ${i + 1}`}
             </FloatingText>
             {/* Title */}
-            <FloatingText position={[0, 0.2, 0.05]} fontSize={0.14} color="#F22F46" bold delay={0.3 + i * 0.1} maxWidth={1.6}>
+            <FloatingText position={[0, 0.2, 0.05]} fontSize={0.14} color="#ef223a" bold delay={0.3 + i * 0.1} maxWidth={1.6}>
               {chapter.title}
             </FloatingText>
             {/* Subtitle */}
-            <FloatingText position={[0, -0.8, 0.05]} fontSize={0.09} color="#888888" delay={0.4 + i * 0.1} maxWidth={1.6}>
+            <FloatingText position={[0, -0.8, 0.05]} fontSize={0.09} color="#7e869c" delay={0.4 + i * 0.1} maxWidth={1.6}>
               {chapter.subtitle}
             </FloatingText>
             {/* Divider line */}
             <mesh position={[0, 0.55, 0.05]}>
               <boxGeometry args={[1.5, 0.01, 0.01]} />
-              <meshStandardMaterial color="#F22F46" emissive="#F22F46" emissiveIntensity={1} />
+              <meshStandardMaterial color="#ef223a" emissive="#ef223a" emissiveIntensity={1} />
             </mesh>
           </group>
         );

@@ -38,7 +38,7 @@ export default function Stage16Innovation() {
         intensity={(pollData['Agent Connect'] || 0) / maxVotes * 2 + 0.3}
       />
 
-      <ParticleField count={200} spread={14} color="#F22F46" speed={0.1} size={0.015} />
+      <ParticleField count={200} spread={14} color="#ef223a" speed={0.1} size={0.015} />
     </group>
   );
 }

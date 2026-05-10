@@ -34,12 +34,12 @@ export default function Stage08Siloes() {
             <mesh>
               <boxGeometry args={[1.8, 1, 0.3]} />
               <meshStandardMaterial
-                color="#0f1525"
-                emissive="#F22F46"
+                color="#06102a"
+                emissive="#ef223a"
                 emissiveIntensity={0.05}
               />
             </mesh>
-            <FloatingText position={[0, 0, 0.2]} fontSize={0.15} color="#F22F46" delay={0.3 + i * 0.15}>
+            <FloatingText position={[0, 0, 0.2]} fontSize={0.15} color="#ef223a" delay={0.3 + i * 0.15}>
               {island.label}
             </FloatingText>
           </group>
@@ -47,7 +47,7 @@ export default function Stage08Siloes() {
       </group>
 
       {/* Broken connections - red dashed lines that don't connect */}
-      <ParticleField count={150} spread={10} color="#F22F46" speed={0.02} size={0.015} />
+      <ParticleField count={150} spread={10} color="#ef223a" speed={0.02} size={0.015} />
     </group>
   );
 }

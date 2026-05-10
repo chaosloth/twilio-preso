@@ -13,7 +13,7 @@ interface HexRingProps {
 export function HexRing({
   position = [0, 0, 0],
   scale = 1,
-  color = '#F22F46',
+  color = '#ef223a',
   rotationSpeed = 0.3,
   tilt = 0.4,
 }: HexRingProps) {

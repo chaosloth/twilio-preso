@@ -9,29 +9,46 @@ interface ParticleFieldProps {
   speed?: number;
   size?: number;
   position?: [number, number, number];
+  vignette?: boolean;
 }
 
 export function ParticleField({
   count = 500,
   spread = 10,
-  color = '#F22F46',
+  color = '#ef223a',
   speed = 0.3,
   size = 0.02,
   position = [0, 0, 0],
+  vignette = true,
 }: ParticleFieldProps) {
   const meshRef = useRef<InstancedMesh>(null);
   const dummy = useMemo(() => new Object3D(), []);
 
   const particles = useMemo(() => {
-    return Array.from({ length: count }, () => ({
-      x: (Math.random() - 0.5) * spread,
-      y: (Math.random() - 0.5) * spread,
-      z: (Math.random() - 0.5) * spread * 0.5,
-      vx: (Math.random() - 0.5) * speed * 0.01,
-      vy: (Math.random() - 0.5) * speed * 0.01,
-      vz: (Math.random() - 0.5) * speed * 0.005,
-    }));
-  }, [count, spread, speed]);
+    return Array.from({ length: count }, () => {
+      let x: number, y: number;
+      if (vignette) {
+        // Push particles toward edges — use rejection sampling for center exclusion
+        const angle = Math.random() * Math.PI * 2;
+        const minR = spread * 0.3;
+        const maxR = spread * 0.5;
+        const r = minR + Math.random() * (maxR - minR);
+        x = Math.cos(angle) * r;
+        y = Math.sin(angle) * r;
+      } else {
+        x = (Math.random() - 0.5) * spread;
+        y = (Math.random() - 0.5) * spread;
+      }
+      return {
+        x,
+        y,
+        z: (Math.random() - 0.5) * spread * 0.5,
+        vx: (Math.random() - 0.5) * speed * 0.01,
+        vy: (Math.random() - 0.5) * speed * 0.01,
+        vz: (Math.random() - 0.5) * speed * 0.005,
+      };
+    });
+  }, [count, spread, speed, vignette]);
 
   useFrame(() => {
     if (!meshRef.current) return;
@@ -54,7 +71,7 @@ export function ParticleField({
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, count]} position={position}>
       <sphereGeometry args={[size, 6, 6]} />
-      <meshBasicMaterial color={color} transparent opacity={0.8} />
+      <meshBasicMaterial color={color} transparent opacity={0.6} />
     </instancedMesh>
   );
 }

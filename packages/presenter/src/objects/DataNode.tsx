@@ -12,7 +12,7 @@ interface DataNodeProps {
 export function DataNode({
   position = [0, 0, 0],
   scale = 0.15,
-  color = '#F22F46',
+  color = '#ef223a',
   pulseSpeed = 2,
 }: DataNodeProps) {
   const ref = useRef<Mesh>(null);

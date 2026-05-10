@@ -12,7 +12,7 @@ interface WireframeCubeProps {
 export function WireframeCube({
   position = [0, 0, 0],
   scale = 0.4,
-  color = '#F22F46',
+  color = '#ef223a',
   rotationSpeed = 0.2,
 }: WireframeCubeProps) {
   const ref = useRef<Mesh>(null);

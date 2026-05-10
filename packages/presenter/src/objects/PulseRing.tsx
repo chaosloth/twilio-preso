@@ -11,7 +11,7 @@ interface PulseRingProps {
 
 export function PulseRing({
   position = [0, 0, 0],
-  color = '#F22F46',
+  color = '#ef223a',
   speed = 0.8,
   maxScale = 3,
 }: PulseRingProps) {

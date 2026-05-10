@@ -25,7 +25,7 @@ export default function Stage07ThinkChannels() {
         {Array.from({ length: 15 }).map((_, i) => (
           <mesh key={i} position={[(i - 7) * 1.2, -3.5, -1]}>
             <boxGeometry args={[0.02, 0.4 + Math.random() * 0.6, 0.02]} />
-            <meshStandardMaterial color="#F22F46" emissive="#F22F46" emissiveIntensity={0.5} transparent opacity={0.3} />
+            <meshStandardMaterial color="#ef223a" emissive="#ef223a" emissiveIntensity={0.5} transparent opacity={0.3} />
           </mesh>
         ))}
       </group>
@@ -40,20 +40,20 @@ export default function Stage07ThinkChannels() {
           <mesh>
             <boxGeometry args={[1.5, 3, 0.1]} />
             <meshStandardMaterial
-              color="#0D1B2A"
-              emissive="#F22F46"
+              color="#000d25"
+              emissive="#ef223a"
               emissiveIntensity={0.15}
             />
           </mesh>
           {/* Door panel */}
           <mesh position={[0, 0, 0.06]}>
             <boxGeometry args={[1.3, 2.8, 0.02]} />
-            <meshStandardMaterial color="#1a1a3e" />
+            <meshStandardMaterial color="#0a1535" />
           </mesh>
-          <FloatingText position={[0, -1.8, 0.1]} fontSize={0.18} color="#F22F46" delay={0.4 + i * 0.2}>
+          <FloatingText position={[0, -1.8, 0.1]} fontSize={0.18} color="#ef223a" delay={0.4 + i * 0.2}>
             {door.label}
           </FloatingText>
-          <pointLight position={[0, 0, 1]} color="#F22F46" intensity={0.4} distance={3} />
+          <pointLight position={[0, 0, 1]} color="#ef223a" intensity={0.4} distance={3} />
         </group>
       ))}
       <SceneAccents count={10} spread={12} seed={7} />

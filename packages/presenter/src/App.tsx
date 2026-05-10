@@ -41,8 +41,8 @@ export function App() {
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
         style={{ width: '100vw', height: '100vh' }}
       >
-        <color attach="background" args={['#0D1B2A']} />
-        <fog attach="fog" args={['#0D1B2A', 15, 40]} />
+        <color attach="background" args={['#000d25']} />
+        <fog attach="fog" args={['#000d25', 15, 40]} />
         <Scene />
       </Canvas>
       <HUD />

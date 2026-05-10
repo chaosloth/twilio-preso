@@ -22,7 +22,7 @@ export default function Stage18MassCall() {
       <FloatingText position={[0, 3.5, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
         Every phone in the room...
       </FloatingText>
-      <FloatingText position={[0, 2.7, 0]} fontSize={0.4} color="#F22F46" bold delay={0.5} maxWidth={10}>
+      <FloatingText position={[0, 2.7, 0]} fontSize={0.4} color="#ef223a" bold delay={0.5} maxWidth={10}>
         rings simultaneously.
       </FloatingText>
 
@@ -30,7 +30,7 @@ export default function Stage18MassCall() {
       <group ref={ringRef}>
         <mesh>
           <ringGeometry args={[2, 2.1, 64]} />
-          <meshStandardMaterial color="#F22F46" emissive="#F22F46" emissiveIntensity={2} />
+          <meshStandardMaterial color="#ef223a" emissive="#ef223a" emissiveIntensity={2} />
         </mesh>
       </group>
 
@@ -49,8 +49,8 @@ export default function Stage18MassCall() {
       </group>
 
       {/* Center burst */}
-      <pointLight position={[0, 0, 2]} color="#F22F46" intensity={3} distance={8} />
-      <ParticleField count={400} spread={8} color="#F22F46" speed={0.8} size={0.03} />
+      <pointLight position={[0, 0, 2]} color="#ef223a" intensity={3} distance={8} />
+      <ParticleField count={400} spread={8} color="#ef223a" speed={0.8} size={0.03} />
     </group>
   );
 }

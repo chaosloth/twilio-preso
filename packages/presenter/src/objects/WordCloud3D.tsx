@@ -33,7 +33,7 @@ export function WordCloud3D({ words, spread = 4, position = [0, 0, 0] }: WordClo
             key={`${word.text}-${i}`}
             position={[pos.x, pos.y, pos.z]}
             fontSize={scale}
-            color={word.count > maxCount * 0.5 ? '#F22F46' : '#ffffff'}
+            color={word.count > maxCount * 0.5 ? '#ef223a' : '#ffffff'}
             anchorX="center"
             anchorY="middle"
           >

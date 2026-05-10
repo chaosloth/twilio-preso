@@ -14,10 +14,10 @@ export default function Stage12Orchestrator() {
 
   return (
     <group>
-      <FloatingText position={[0, 3.5, 0]} fontSize={0.45} color="#F22F46" bold delay={0}>
+      <FloatingText position={[0, 3.5, 0]} fontSize={0.45} color="#ef223a" bold delay={0}>
         Conversation Orchestrator
       </FloatingText>
-      <FloatingText position={[0, 2.7, 0]} fontSize={0.13} color="#888888" delay={0.3}>
+      <FloatingText position={[0, 2.7, 0]} fontSize={0.13} color="#7e869c" delay={0.3}>
         GA
       </FloatingText>
 
@@ -34,17 +34,17 @@ export default function Stage12Orchestrator() {
       {/* Flowing message indicator */}
       <mesh ref={flowRef} position={[0, -1.5, 0]}>
         <sphereGeometry args={[0.15, 16, 16]} />
-        <meshStandardMaterial color="#F22F46" emissive="#F22F46" emissiveIntensity={2} />
+        <meshStandardMaterial color="#ef223a" emissive="#ef223a" emissiveIntensity={2} />
       </mesh>
 
       {/* Channel line */}
       <mesh position={[0, -1.5, 0]}>
         <boxGeometry args={[8, 0.02, 0.02]} />
-        <meshStandardMaterial color="#F22F46" emissive="#F22F46" emissiveIntensity={0.5} />
+        <meshStandardMaterial color="#ef223a" emissive="#ef223a" emissiveIntensity={0.5} />
       </mesh>
 
-      <ParticleField count={150} spread={10} color="#F22F46" speed={0.1} size={0.015} />
-      <pointLight position={[0, 0, 3]} color="#F22F46" intensity={1.5} distance={8} />
+      <ParticleField count={150} spread={10} color="#ef223a" speed={0.1} size={0.015} />
+      <pointLight position={[0, 0, 3]} color="#ef223a" intensity={1.5} distance={8} />
     </group>
   );
 }

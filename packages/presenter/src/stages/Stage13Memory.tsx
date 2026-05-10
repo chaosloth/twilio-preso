@@ -26,10 +26,10 @@ export default function Stage13Memory() {
 
   return (
     <group>
-      <FloatingText position={[0, 3.5, 0]} fontSize={0.45} color="#F22F46" bold delay={0}>
+      <FloatingText position={[0, 3.5, 0]} fontSize={0.45} color="#ef223a" bold delay={0}>
         Conversation Memory
       </FloatingText>
-      <FloatingText position={[0, 2.7, 0]} fontSize={0.13} color="#888888" delay={0.3}>
+      <FloatingText position={[0, 2.7, 0]} fontSize={0.13} color="#7e869c" delay={0.3}>
         GA
       </FloatingText>
 
@@ -48,13 +48,13 @@ export default function Stage13Memory() {
         {nodes.map((node, i) => (
           <mesh key={i} position={[node.x, node.y, node.z]}>
             <sphereGeometry args={[0.06, 8, 8]} />
-            <meshStandardMaterial color="#F22F46" emissive="#F22F46" emissiveIntensity={1.5} />
+            <meshStandardMaterial color="#ef223a" emissive="#ef223a" emissiveIntensity={1.5} />
           </mesh>
         ))}
       </group>
 
-      <ParticleField count={100} spread={8} color="#F22F46" speed={0.05} size={0.01} position={[2, 0, 0]} />
-      <pointLight position={[2, 0, 2]} color="#F22F46" intensity={1.5} distance={6} />
+      <ParticleField count={100} spread={8} color="#ef223a" speed={0.05} size={0.01} position={[2, 0, 0]} />
+      <pointLight position={[2, 0, 2]} color="#ef223a" intensity={1.5} distance={6} />
     </group>
   );
 }

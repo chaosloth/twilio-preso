@@ -26,7 +26,7 @@ interface TwilioGemProps {
 
 export function TwilioGem({
   scale = 1,
-  color = '#F22F46',
+  color = '#ef223a',
   wireframe = true,
   rotationSpeed = 0.2,
   emissiveIntensity = 0.5,
