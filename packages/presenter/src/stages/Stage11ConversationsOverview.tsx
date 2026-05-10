@@ -1,12 +1,12 @@
-import { GlowingPillar, FloatingText, ParticleField } from '../objects';
+import { GlowingPillar, FloatingText, ParticleField, SceneAccents } from '../objects';
 
 export default function Stage11ConversationsOverview() {
   return (
     <group>
-      <FloatingText position={[0, 4, 0]} fontSize={0.5} color="#ef223a" bold delay={0}>
+      <FloatingText position={[0, 2.8, 0]} fontSize={0.5} color="#ef223a" bold delay={0}>
         Twilio Conversations
       </FloatingText>
-      <FloatingText position={[0, 3.2, 0]} fontSize={0.15} color="#babecc" delay={0.3} maxWidth={10}>
+      <FloatingText position={[0, 2.0, 0]} fontSize={0.2} color="#babecc" delay={0.3} maxWidth={10}>
         A foundation for driving customer lifetime value through every interaction
       </FloatingText>
 
@@ -15,7 +15,8 @@ export default function Stage11ConversationsOverview() {
       <GlowingPillar label="Intelligence" sublabel="Actionability" position={[1.3, 0, 0]} intensity={1.2} />
       <GlowingPillar label="Agent Connect" sublabel="Connection" position={[4, 0, 0]} intensity={1.2} />
 
-      <ParticleField count={200} spread={14} color="#ef223a" speed={0.08} size={0.015} />
+      <ParticleField count={150} spread={14} color="#ef223a" speed={0.08} size={0.015} />
+      <SceneAccents count={10} spread={12} seed={11} />
     </group>
   );
 }

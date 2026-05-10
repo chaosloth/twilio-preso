@@ -1,4 +1,4 @@
-import { GlowingPillar, FloatingText, ParticleField, BarChart3D } from '../objects';
+import { GlowingPillar, FloatingText, ParticleField, BarChart3D, SceneAccents } from '../objects';
 import { usePresenterStore } from '../store';
 
 export default function Stage16Innovation() {
@@ -9,7 +9,7 @@ export default function Stage16Innovation() {
 
   return (
     <group>
-      <FloatingText position={[0, 4, 0]} fontSize={0.35} color="#ffffff" bold delay={0.2} maxWidth={10}>
+      <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
         Which product are you most excited to explore?
       </FloatingText>
 
@@ -38,7 +38,8 @@ export default function Stage16Innovation() {
         intensity={(pollData['Agent Connect'] || 0) / maxVotes * 2 + 0.3}
       />
 
-      <ParticleField count={200} spread={14} color="#ef223a" speed={0.1} size={0.015} />
+      <ParticleField count={150} spread={14} color="#ef223a" speed={0.1} size={0.015} />
+      <SceneAccents count={10} spread={12} seed={16} />
     </group>
   );
 }

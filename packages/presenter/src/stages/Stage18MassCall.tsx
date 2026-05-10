@@ -1,4 +1,4 @@
-import { FloatingText, ParticleField } from '../objects';
+import { FloatingText, ParticleField, SceneAccents } from '../objects';
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Group } from 'three';
@@ -19,10 +19,10 @@ export default function Stage18MassCall() {
 
   return (
     <group>
-      <FloatingText position={[0, 3.5, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
+      <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
         Every phone in the room...
       </FloatingText>
-      <FloatingText position={[0, 2.7, 0]} fontSize={0.4} color="#ef223a" bold delay={0.5} maxWidth={10}>
+      <FloatingText position={[0, 2.0, 0]} fontSize={0.4} color="#ef223a" bold delay={0.5} maxWidth={10}>
         rings simultaneously.
       </FloatingText>
 
@@ -50,7 +50,8 @@ export default function Stage18MassCall() {
 
       {/* Center burst */}
       <pointLight position={[0, 0, 2]} color="#ef223a" intensity={3} distance={8} />
-      <ParticleField count={400} spread={8} color="#ef223a" speed={0.8} size={0.03} />
+      <ParticleField count={150} spread={8} color="#ef223a" speed={0.8} size={0.03} />
+      <SceneAccents count={10} spread={12} seed={18} />
     </group>
   );
 }

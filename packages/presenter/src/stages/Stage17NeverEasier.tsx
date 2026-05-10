@@ -1,4 +1,4 @@
-import { FloatingText, ParticleField, TwilioGem } from '../objects';
+import { FloatingText, ParticleField, TwilioGem, SceneAccents } from '../objects';
 import { usePresenterStore } from '../store';
 
 export default function Stage17NeverEasier() {
@@ -8,8 +8,8 @@ export default function Stage17NeverEasier() {
   return (
     <group>
       <TwilioGem scale={2.5} position={[0, 0, -2]} wireframe emissiveIntensity={0.3} rotationSpeed={0.05} />
-      <ParticleField count={500} spread={15} color="#ef223a" speed={0.08} size={0.02} />
-      <ParticleField count={300} spread={12} color="#ffffff" speed={0.05} size={0.015} />
+      <ParticleField count={150} spread={15} color="#ef223a" speed={0.08} size={0.02} />
+      <ParticleField count={100} spread={12} color="#ffffff" speed={0.05} size={0.015} />
 
       <FloatingText position={[0, 3, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
         It's never been easier to build amazing engagement.
@@ -38,6 +38,7 @@ export default function Stage17NeverEasier() {
       </FloatingText>
 
       <pointLight position={[0, 3, 3]} color="#ef223a" intensity={1.5} distance={10} />
+      <SceneAccents count={12} spread={12} seed={17} />
     </group>
   );
 }

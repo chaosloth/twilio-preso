@@ -1,4 +1,4 @@
-import { FloatingText, ParticleField, TwilioGem } from '../objects';
+import { FloatingText, ParticleField, TwilioGem, SceneAccents } from '../objects';
 
 export default function Stage15AgentConnect() {
   const agents = [
@@ -11,20 +11,20 @@ export default function Stage15AgentConnect() {
 
   return (
     <group>
-      <FloatingText position={[0, 3.5, 0]} fontSize={0.45} color="#ef223a" bold delay={0}>
+      <FloatingText position={[0, 2.8, 0]} fontSize={0.45} color="#ef223a" bold delay={0}>
         Agent Connect
       </FloatingText>
-      <FloatingText position={[0, 2.7, 0]} fontSize={0.13} color="#7e869c" delay={0.3}>
+      <FloatingText position={[0, 2.0, 0]} fontSize={0.13} color="#7e869c" delay={0.3}>
         GA
       </FloatingText>
 
-      <FloatingText position={[-3.5, -2, 0]} fontSize={0.14} color="#ffffff" delay={0.4} maxWidth={4} anchorX="left">
+      <FloatingText position={[-3.5, -2, 0]} fontSize={0.2} color="#ffffff" delay={0.4} maxWidth={4} anchorX="left">
         Bring Your Own AI Runtime
       </FloatingText>
-      <FloatingText position={[-3.5, -2.7, 0]} fontSize={0.14} color="#ffffff" delay={0.6} maxWidth={4} anchorX="left">
+      <FloatingText position={[-3.5, -2.7, 0]} fontSize={0.2} color="#ffffff" delay={0.6} maxWidth={4} anchorX="left">
         Seamless Real-Time Interaction
       </FloatingText>
-      <FloatingText position={[-3.5, -3.4, 0]} fontSize={0.14} color="#ffffff" delay={0.8} maxWidth={4} anchorX="left">
+      <FloatingText position={[-3.5, -3.4, 0]} fontSize={0.2} color="#ffffff" delay={0.8} maxWidth={4} anchorX="left">
         Enrich AI with Context
       </FloatingText>
 
@@ -45,6 +45,7 @@ export default function Stage15AgentConnect() {
 
       <ParticleField count={150} spread={8} color="#ef223a" speed={0.15} size={0.015} />
       <pointLight position={[0, 0, 3]} color="#ef223a" intensity={2} distance={8} />
+      <SceneAccents count={10} spread={12} seed={15} />
     </group>
   );
 }

@@ -1,4 +1,4 @@
-import { FloatingText, ParticleField } from '../objects';
+import { FloatingText, ParticleField, SceneAccents } from '../objects';
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Group } from 'three';
@@ -16,20 +16,20 @@ export default function Stage14Intelligence() {
 
   return (
     <group>
-      <FloatingText position={[0, 3.5, 0]} fontSize={0.45} color="#ef223a" bold delay={0}>
+      <FloatingText position={[0, 2.8, 0]} fontSize={0.45} color="#ef223a" bold delay={0}>
         Conversation Intelligence
       </FloatingText>
-      <FloatingText position={[0, 2.7, 0]} fontSize={0.13} color="#7e869c" delay={0.3}>
+      <FloatingText position={[0, 2.0, 0]} fontSize={0.13} color="#7e869c" delay={0.3}>
         GA
       </FloatingText>
 
-      <FloatingText position={[-3.5, 1.5, 0]} fontSize={0.14} color="#ffffff" delay={0.4} maxWidth={4} anchorX="left">
+      <FloatingText position={[-3.5, 1.5, 0]} fontSize={0.2} color="#ffffff" delay={0.4} maxWidth={4} anchorX="left">
         Real-time Reasoning Engine
       </FloatingText>
-      <FloatingText position={[-3.5, 0.5, 0]} fontSize={0.14} color="#ffffff" delay={0.6} maxWidth={4} anchorX="left">
+      <FloatingText position={[-3.5, 0.5, 0]} fontSize={0.2} color="#ffffff" delay={0.6} maxWidth={4} anchorX="left">
         Persistent Customer Context
       </FloatingText>
-      <FloatingText position={[-3.5, -0.5, 0]} fontSize={0.14} color="#ffffff" delay={0.8} maxWidth={4} anchorX="left">
+      <FloatingText position={[-3.5, -0.5, 0]} fontSize={0.2} color="#ffffff" delay={0.8} maxWidth={4} anchorX="left">
         Customer and Business Aware Guidance
       </FloatingText>
 
@@ -50,6 +50,7 @@ export default function Stage14Intelligence() {
       <ParticleField count={100} spread={8} color="#4488ff" speed={0.1} size={0.015} />
       <pointLight position={[2, 0, 2]} color="#4488ff" intensity={1} distance={6} />
       <pointLight position={[-2, 2, 2]} color="#ef223a" intensity={0.8} distance={6} />
+      <SceneAccents count={10} spread={12} seed={14} />
     </group>
   );
 }

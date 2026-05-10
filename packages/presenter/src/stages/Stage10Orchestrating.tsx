@@ -1,4 +1,4 @@
-import { FloatingText, ParticleField } from '../objects';
+import { FloatingText, ParticleField, SceneAccents } from '../objects';
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Group } from 'three';
@@ -40,8 +40,9 @@ export default function Stage10Orchestrating() {
         })}
       </group>
 
-      <ParticleField count={300} spread={12} color="#ef223a" speed={0.15} size={0.02} />
+      <ParticleField count={150} spread={12} color="#ef223a" speed={0.15} size={0.02} />
       <pointLight position={[0, 3, 3]} color="#ef223a" intensity={2} distance={10} />
+      <SceneAccents count={10} spread={12} seed={10} />
     </group>
   );
 }

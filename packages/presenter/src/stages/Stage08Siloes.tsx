@@ -1,4 +1,4 @@
-import { FloatingText, ParticleField } from '../objects';
+import { FloatingText, ParticleField, SceneAccents } from '../objects';
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Group } from 'three';
@@ -24,7 +24,7 @@ export default function Stage08Siloes() {
 
   return (
     <group>
-      <FloatingText position={[0, 3.5, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
+      <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
         {'The result for employees\nand customers is siloes.'}
       </FloatingText>
 
@@ -39,7 +39,7 @@ export default function Stage08Siloes() {
                 emissiveIntensity={0.05}
               />
             </mesh>
-            <FloatingText position={[0, 0, 0.2]} fontSize={0.15} color="#ef223a" delay={0.3 + i * 0.15}>
+            <FloatingText position={[0, 0, 0.2]} fontSize={0.18} color="#ef223a" delay={0.3 + i * 0.15}>
               {island.label}
             </FloatingText>
           </group>
@@ -48,6 +48,7 @@ export default function Stage08Siloes() {
 
       {/* Broken connections - red dashed lines that don't connect */}
       <ParticleField count={150} spread={10} color="#ef223a" speed={0.02} size={0.015} />
+      <SceneAccents count={10} spread={12} seed={8} />
     </group>
   );
 }
