@@ -34,8 +34,9 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
 
       case 'sms-memory': {
         await sendSmsToAll(participants, (p) => {
-          const challengeResponse = Object.values(p.responses).find((r) => r.stageIndex === 10);
-          const challenge = challengeResponse?.value || 'customer experience';
+          const responses = p.responses || {};
+          const challengeResponse = Object.values(responses).find((r: any) => r.stageIndex === 10);
+          const challenge = (challengeResponse as any)?.value || 'customer experience';
           return `Hey ${p.name}, you said "${challenge}" was your biggest challenge. We remembered — no database lookup, no asking again. That's Conversation Memory. — Twilio`;
         });
         return { sent: participants.length };
