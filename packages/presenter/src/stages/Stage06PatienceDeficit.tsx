@@ -117,10 +117,10 @@ export default function Stage06PatienceDeficit() {
       </group>
 
       {/* Time cards in 2x2 grid */}
-      <TimeCard time={cards[0].time} label={cards[0].label} targetX={-2} targetY={0.5} index={0} />
-      <TimeCard time={cards[1].time} label={cards[1].label} targetX={2} targetY={0.5} index={1} />
-      <TimeCard time={cards[2].time} label={cards[2].label} targetX={-2} targetY={-1.2} index={2} />
-      <TimeCard time={cards[3].time} label={cards[3].label} targetX={2} targetY={-1.2} index={3} />
+      <TimeCard time={cards[0].time} label={cards[0].label} targetX={-2} targetY={0.8} index={0} />
+      <TimeCard time={cards[1].time} label={cards[1].label} targetX={2} targetY={0.8} index={1} />
+      <TimeCard time={cards[2].time} label={cards[2].label} targetX={-2} targetY={-1.5} index={2} />
+      <TimeCard time={cards[3].time} label={cards[3].label} targetX={2} targetY={-1.5} index={3} />
 
       <FloatingText position={[0, -2.8, 0]} fontSize={0.1} color="#4d5777" delay={1.5}>
         Source: Decoding Digital Patience Report, Twilio
