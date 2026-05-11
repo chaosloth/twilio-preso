@@ -26,15 +26,29 @@ async function getApp() {
   await app.register(adminRoutes);
   await app.register(responseRoutes);
   app.get('/health', async () => ({ status: 'ok' }));
+  await app.ready();
   if (!initialized) {
-    await initSync();
+    try {
+      await initSync();
+    } catch {}
     initialized = true;
   }
-  await app.ready();
   return app;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const fastify = await getApp();
-  fastify.server.emit('request', req, res);
+
+  const response = await fastify.inject({
+    method: req.method as any,
+    url: req.url || '/',
+    headers: req.headers as any,
+    payload: req.body ? JSON.stringify(req.body) : undefined,
+  });
+
+  res.status(response.statusCode);
+  for (const [key, value] of Object.entries(response.headers)) {
+    if (value) res.setHeader(key, value as string);
+  }
+  res.end(response.body);
 }

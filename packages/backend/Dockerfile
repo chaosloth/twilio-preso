@@ -3,13 +3,20 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/shared/ packages/shared/
 COPY packages/backend/ packages/backend/
-RUN corepack enable && pnpm install --frozen-lockfile
+RUN corepack enable && corepack prepare pnpm@10 --activate && pnpm install --frozen-lockfile
+RUN pnpm --filter @twilio-preso/shared build
 RUN pnpm --filter @twilio-preso/backend build
 
 FROM node:22-slim
 WORKDIR /app
-COPY --from=builder /app/packages/backend/dist ./dist
-COPY --from=builder /app/packages/backend/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
+RUN corepack enable && corepack prepare pnpm@10 --activate
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+COPY --from=builder /app/packages/shared/package.json ./packages/shared/
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/packages/backend/package.json ./packages/backend/
+COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
+RUN pnpm install --frozen-lockfile --prod --filter @twilio-preso/backend
+WORKDIR /app/packages/backend
 EXPOSE 3001
+ENV PORT=3001
 CMD ["node", "dist/index.js"]

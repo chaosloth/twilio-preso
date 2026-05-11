@@ -2,5 +2,8 @@
   "buildCommand": "cd ../.. && pnpm --filter @twilio-preso/shared build && pnpm --filter @twilio-preso/presenter build",
   "outputDirectory": "dist",
   "installCommand": "cd ../.. && pnpm install",
-  "framework": "vite"
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
