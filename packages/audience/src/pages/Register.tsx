@@ -10,6 +10,8 @@ type Step = 'phone' | 'otp' | 'name';
 
 export function Register({ onRegistered }: RegisterProps) {
   const [step, setStep] = useState<Step>('phone');
+  const [countryCode, setCountryCode] = useState('+61');
+  const [localNumber, setLocalNumber] = useState('');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [name, setName] = useState('');
@@ -22,11 +24,14 @@ export function Register({ onRegistered }: RegisterProps) {
     setLoading(true);
     setError('');
 
+    const fullPhone = countryCode + localNumber.replace(/^0/, '');
+    setPhone(fullPhone);
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/verify/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone: fullPhone }),
       });
 
       if (!res.ok) {
@@ -103,15 +108,34 @@ export function Register({ onRegistered }: RegisterProps) {
 
         {step === 'phone' && (
           <form onSubmit={handlePhoneSubmit} className="space-y-4">
-            <input
-              type="tel"
-              placeholder="Your mobile number (e.g. +61...)"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
-              autoFocus
-              className="w-full px-4 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white placeholder-accent-2 focus:outline-none focus:border-twilio-red text-lg"
-            />
+            <div className="flex gap-2">
+              <select
+                value={countryCode}
+                onChange={(e) => setCountryCode(e.target.value)}
+                className="px-3 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white focus:outline-none focus:border-twilio-red text-lg"
+              >
+                <option value="+61">+61</option>
+                <option value="+1">+1</option>
+                <option value="+44">+44</option>
+                <option value="+65">+65</option>
+                <option value="+91">+91</option>
+                <option value="+64">+64</option>
+                <option value="+81">+81</option>
+                <option value="+82">+82</option>
+                <option value="+86">+86</option>
+                <option value="+852">+852</option>
+              </select>
+              <input
+                type="tel"
+                placeholder="Mobile number"
+                value={localNumber}
+                onChange={(e) => setLocalNumber(e.target.value.replace(/[^\d]/g, ''))}
+                required
+                autoFocus
+                autoComplete="tel-national"
+                className="flex-1 px-4 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white placeholder-accent-2 focus:outline-none focus:border-twilio-red text-lg"
+              />
+            </div>
             {error && <p className="text-twilio-red text-sm">{error}</p>}
             <button type="submit" disabled={loading} className="w-full py-3 rounded-lg bg-twilio-red text-white font-bold text-lg disabled:opacity-50">
               {loading ? 'Verifying...' : 'Continue'}
