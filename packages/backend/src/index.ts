@@ -1,6 +1,7 @@
 import './env.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import formbody from '@fastify/formbody';
 import { config } from './config.js';
 import { initSync } from './services/sync.js';
 import { tokenRoutes } from './routes/token.js';
@@ -11,6 +12,7 @@ import { triggerRoutes } from './routes/trigger.js';
 const app = Fastify({ logger: true });
 
 await app.register(cors, { origin: true });
+await app.register(formbody);
 await app.register(tokenRoutes);
 await app.register(verifyRoutes);
 await app.register(registerRoutes);
