@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.env.prod
+.end.*
+*.local
+.git
+packages/presenter
+packages/audience
+packages/conversation-relay
