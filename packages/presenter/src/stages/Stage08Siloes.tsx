@@ -1,4 +1,5 @@
 import { FloatingText, ParticleField, SceneAccents } from '../objects';
+import { Html } from '@react-three/drei';
 import { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import gsap from 'gsap';
@@ -35,25 +36,44 @@ function SiloCard({ label, targetX, index }: { label: string; targetX: number; i
 
   useFrame((state) => {
     if (ref.current) {
-      ref.current.position.y = -0.5 + Math.sin(state.clock.elapsedTime * 0.5 + index * 1.3) * 0.06;
+      ref.current.position.y = -0.3 + Math.sin(state.clock.elapsedTime * 0.5 + index * 1.3) * 0.05;
     }
   });
 
   return (
-    <group ref={ref} position={[0, -0.5, 0]}>
-      {/* Card background */}
-      <mesh position={[0, 0, -0.02]}>
-        <planeGeometry args={[1.4, 1]} />
-        <meshStandardMaterial color="#000d25" transparent opacity={0.95} />
-      </mesh>
-      {/* Border */}
-      <mesh position={[0, 0, -0.03]}>
-        <planeGeometry args={[1.45, 1.05]} />
-        <meshStandardMaterial color="#ef223a" transparent opacity={0.3} />
-      </mesh>
-      <FloatingText position={[0, 0, 0]} fontSize={0.2} color="#ef223a" delay={0.4 + index * 0.12}>
-        {label}
-      </FloatingText>
+    <group ref={ref} position={[0, -0.3, 0]}>
+      <pointLight position={[0, 0, -0.2]} color="#ef223a" intensity={0.3} distance={1.2} />
+      <Html center transform>
+        <div style={{
+          width: 80,
+          height: 70,
+          background: '#000d25',
+          borderRadius: 10,
+          padding: '10px 8px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          border: '2px solid rgba(239, 34, 58, 0.4)',
+          boxShadow: '0 0 12px rgba(239, 34, 58, 0.2)',
+          animation: `shimmer 3s ease-in-out ${index * 0.4}s infinite`,
+        }}>
+          <div style={{
+            fontSize: 14,
+            fontWeight: 600,
+            color: '#ef223a',
+            fontFamily: "'Space Grotesk', sans-serif",
+          }}>
+            {label}
+          </div>
+        </div>
+        <style>{`
+          @keyframes shimmer {
+            0%, 100% { border-color: rgba(239, 34, 58, 0.4); box-shadow: 0 0 12px rgba(239, 34, 58, 0.2); }
+            50% { border-color: rgba(239, 34, 58, 0.7); box-shadow: 0 0 20px rgba(239, 34, 58, 0.4); }
+          }
+        `}</style>
+      </Html>
     </group>
   );
 }
@@ -78,10 +98,8 @@ export default function Stage08Siloes() {
         />
       ))}
 
-      {/* Broken connections */}
-      <ParticleField count={80} spread={10} color="#ef223a" speed={0.02} size={0.012} />
-      <SceneAccents count={6} spread={12} seed={8} />
-      <pointLight position={[0, 0, 3]} color="#ef223a" intensity={0.8} distance={8} />
+      <ParticleField count={60} spread={10} color="#ef223a" speed={0.02} size={0.012} />
+      <pointLight position={[0, 0, 3]} color="#ef223a" intensity={0.6} distance={8} />
     </group>
   );
 }

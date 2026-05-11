@@ -34,8 +34,8 @@ export function StageContainer() {
   return (
     <group>
       {STAGES.map((stage, i) => {
-        // Only render stages within ±1 of current (culling)
-        if (Math.abs(i - currentStageIndex) > 1) return null;
+        // Only render the current stage (Html elements bleed if we render neighbors)
+        if (i !== currentStageIndex) return null;
 
         const StageComponent = stageComponents[stage.id];
         return (
