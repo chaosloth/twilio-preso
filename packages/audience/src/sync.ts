@@ -1,7 +1,7 @@
 import { SyncClient } from 'twilio-sync';
 import type { InteractionConfig } from '@twilio-preso/shared';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 const EVENT_STREAM = 'event-stream';
 
 let syncClient: SyncClient | null = null;
