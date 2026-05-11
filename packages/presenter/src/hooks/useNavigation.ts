@@ -13,7 +13,6 @@ export function useNavigation() {
   const advance = usePresenterStore((s) => s.advance);
   const back = usePresenterStore((s) => s.back);
   const currentStageIndex = usePresenterStore((s) => s.currentStageIndex);
-  const isLive = usePresenterStore((s) => s.isLive);
   const prevStageIndex = useRef(currentStageIndex);
 
   useEffect(() => {
@@ -80,11 +79,12 @@ export function useNavigation() {
       channel.close();
 
       // If stage has a demo trigger AND demos are enabled, fire it
-      if (stage.demoTrigger && isLive) {
+      // Re-read isLive from store at trigger time in case mode changed mid-presentation
+      if (stage.demoTrigger && usePresenterStore.getState().isLive) {
         triggerDemo(stage.demoTrigger).catch((err) => {
           console.error(`Demo trigger failed for ${stage.demoTrigger}:`, err);
         });
       }
     }
-  }, [currentStageIndex, isLive]);
+  }, [currentStageIndex]);
 }

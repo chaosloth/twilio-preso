@@ -50,6 +50,9 @@ export async function initPresenterSync(): Promise<void> {
   if (initialData.totalParticipants) {
     usePresenterStore.getState().setTotalParticipants(initialData.totalParticipants);
   }
+  if (initialData.isLive !== undefined) {
+    usePresenterStore.getState().setLive(initialData.isLive);
+  }
 
   stateDocument.on('updated', (event: { data: any }) => {
     const data = event.data as PresentationStateDoc;
@@ -60,6 +63,9 @@ export async function initPresenterSync(): Promise<void> {
       store.goTo(data.currentStageIndex);
     }
     store.setTotalParticipants(data.totalParticipants);
+    if (data.isLive !== undefined) {
+      store.setLive(data.isLive);
+    }
   });
 
   // Subscribe to aggregate results
