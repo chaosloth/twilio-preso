@@ -1,4 +1,4 @@
-import { SyncClient, type SyncStream, type SyncDocument } from 'twilio-sync';
+import { SyncClient } from 'twilio-sync';
 import type { AudienceResponseEvent, PresentationStateDoc, StageAdvanceEvent, InteractionPromptEvent, InteractionConfig, AggregateResultsDoc } from '@twilio-preso/shared';
 import { usePresenterStore } from './store';
 
@@ -7,14 +7,16 @@ const EVENT_STREAM = 'event-stream';
 const PRESENTATION_STATE_DOC = 'presentation-state';
 const AGGREGATE_RESULTS_DOC = 'aggregate-results';
 
-let syncClient: InstanceType<typeof SyncClient> | null = null;
+let syncClient: SyncClient | null = null;
+let isController = false;
 
-export async function initPresenterSync(): Promise<void> {
+export async function initPresenterSync(controller = false): Promise<void> {
+  isController = controller;
   let res: Response;
   try {
-    res = await fetch(`${BACKEND_URL}/api/token?identity=presenter`);
+    res = await fetch(`${BACKEND_URL}/api/token?identity=presenter-${Date.now()}`);
   } catch {
-    return; // Backend not available — run in offline/preview mode
+    return;
   }
   const { token } = await res.json();
 
@@ -28,6 +30,12 @@ export async function initPresenterSync(): Promise<void> {
     } else if (data.type === 'participant-joined') {
       const store = usePresenterStore.getState();
       store.setTotalParticipants(store.totalParticipants + 1);
+    } else if (data.type === 'stage-advance') {
+      // All presenter windows follow stage-advance events
+      const store = usePresenterStore.getState();
+      if (store.currentStageIndex !== data.stageIndex) {
+        store.goTo(data.stageIndex);
+      }
     }
   });
 
@@ -41,20 +49,30 @@ export async function initPresenterSync(): Promise<void> {
   resultsDoc.on('updated', (event: { data: any }) => {
     usePresenterStore.getState().setAggregateResults(event.data as AggregateResultsDoc);
   });
+
+  usePresenterStore.getState().setLive(true);
 }
 
 export async function publishStageAdvance(stageIndex: number): Promise<void> {
   if (!syncClient) return;
-  const stream = await syncClient.stream(EVENT_STREAM);
-  const event: StageAdvanceEvent = { type: 'stage-advance', stageIndex, timestamp: Date.now() };
-  await stream.publishMessage({ data: event });
+  try {
+    const stream = await syncClient.stream(EVENT_STREAM);
+    const event: StageAdvanceEvent = { type: 'stage-advance', stageIndex, timestamp: Date.now() };
+    await stream.publishMessage({ data: event });
+  } catch (err) {
+    console.warn('Failed to publish stage advance:', err);
+  }
 }
 
 export async function publishInteractionPrompt(interaction: InteractionConfig): Promise<void> {
   if (!syncClient) return;
-  const stream = await syncClient.stream(EVENT_STREAM);
-  const event: InteractionPromptEvent = { type: 'interaction-prompt', interaction, timestamp: Date.now() };
-  await stream.publishMessage({ data: event });
+  try {
+    const stream = await syncClient.stream(EVENT_STREAM);
+    const event: InteractionPromptEvent = { type: 'interaction-prompt', interaction, timestamp: Date.now() };
+    await stream.publishMessage({ data: event });
+  } catch (err) {
+    console.warn('Failed to publish interaction:', err);
+  }
 }
 
 export async function triggerDemo(triggerId: string, targetParticipantId?: string): Promise<void> {
@@ -65,4 +83,8 @@ export async function triggerDemo(triggerId: string, targetParticipantId?: strin
       body: JSON.stringify({ triggerId, targetParticipantId }),
     });
   } catch {}
+}
+
+export function isSyncConnected(): boolean {
+  return syncClient !== null;
 }

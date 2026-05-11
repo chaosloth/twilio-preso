@@ -25,7 +25,7 @@ export function Trigger({ interaction, onSubmit }: TriggerProps) {
           I'm Ready
         </button>
       ) : (
-        <p className="text-gray-400">Something's coming to your phone...</p>
+        <p className="text-accent-2">Something's coming to your phone...</p>
       )}
     </div>
   );

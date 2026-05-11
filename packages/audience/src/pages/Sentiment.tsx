@@ -33,7 +33,7 @@ export function Sentiment({ interaction, onSubmit }: SentimentProps) {
           </button>
         ))}
       </div>
-      {selected && <p className="text-gray-400 mt-6">Thanks!</p>}
+      {selected && <p className="text-accent-2 mt-6">Thanks!</p>}
     </div>
   );
 }

@@ -98,7 +98,7 @@ export function Register({ onRegistered }: RegisterProps) {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold">Join the Experience</h1>
-          <p className="text-gray-400 mt-2">SIGNAL World Tour 2026</p>
+          <p className="text-accent-2 mt-2">Wonder — Twilio Live Demo</p>
         </div>
 
         {step === 'phone' && (
@@ -110,7 +110,7 @@ export function Register({ onRegistered }: RegisterProps) {
               onChange={(e) => setPhone(e.target.value)}
               required
               autoFocus
-              className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:border-twilio-red text-lg"
+              className="w-full px-4 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white placeholder-accent-2 focus:outline-none focus:border-twilio-red text-lg"
             />
             {error && <p className="text-twilio-red text-sm">{error}</p>}
             <button type="submit" disabled={loading} className="w-full py-3 rounded-lg bg-twilio-red text-white font-bold text-lg disabled:opacity-50">
@@ -121,7 +121,7 @@ export function Register({ onRegistered }: RegisterProps) {
 
         {step === 'otp' && (
           <form onSubmit={handleOtpSubmit} className="space-y-4">
-            <p className="text-gray-400 text-sm text-center">We sent a code to {phone}</p>
+            <p className="text-accent-2 text-sm text-center">We sent a code to {phone}</p>
             <input
               type="text"
               inputMode="numeric"
@@ -131,7 +131,7 @@ export function Register({ onRegistered }: RegisterProps) {
               required
               autoFocus
               maxLength={6}
-              className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:border-twilio-red text-center text-2xl tracking-widest"
+              className="w-full px-4 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white placeholder-accent-2 focus:outline-none focus:border-twilio-red text-center text-2xl tracking-widest"
             />
             {error && <p className="text-twilio-red text-sm">{error}</p>}
             <button type="submit" disabled={loading} className="w-full py-3 rounded-lg bg-twilio-red text-white font-bold text-lg disabled:opacity-50">
@@ -150,14 +150,14 @@ export function Register({ onRegistered }: RegisterProps) {
               onChange={(e) => setName(e.target.value)}
               required
               autoFocus
-              className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:border-twilio-red"
+              className="w-full px-4 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white placeholder-accent-2 focus:outline-none focus:border-twilio-red"
             />
             <input
               type="text"
               placeholder="Company (optional)"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:border-twilio-red"
+              className="w-full px-4 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white placeholder-accent-2 focus:outline-none focus:border-twilio-red"
             />
             {error && <p className="text-twilio-red text-sm">{error}</p>}
             <button type="submit" disabled={loading} className="w-full py-3 rounded-lg bg-twilio-red text-white font-bold text-lg disabled:opacity-50">

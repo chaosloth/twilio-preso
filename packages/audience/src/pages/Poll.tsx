@@ -29,8 +29,8 @@ export function Poll({ interaction, onSubmit }: PollProps) {
               selected === option
                 ? 'bg-twilio-red text-white scale-[1.02]'
                 : submitted
-                  ? 'bg-white/5 text-gray-500'
-                  : 'bg-white/10 text-white hover:bg-white/20'
+                  ? 'bg-white/5 text-accent-3'
+                  : 'bg-white/5 text-white hover:bg-white/10'
             }`}
           >
             {option}
@@ -38,7 +38,7 @@ export function Poll({ interaction, onSubmit }: PollProps) {
         ))}
       </div>
       {submitted && (
-        <p className="text-gray-400 mt-6 text-sm">Response recorded!</p>
+        <p className="text-accent-2 mt-6 text-sm">Response recorded!</p>
       )}
     </div>
   );

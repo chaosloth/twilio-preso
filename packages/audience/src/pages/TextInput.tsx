@@ -28,7 +28,7 @@ export function TextInput({ interaction, onSubmit }: TextInputProps) {
             onChange={(e) => setValue(e.target.value)}
             placeholder="Type your answer..."
             autoFocus
-            className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:border-twilio-red text-lg"
+            className="w-full px-4 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white placeholder-accent-2 focus:outline-none focus:border-twilio-red text-lg"
           />
           <button
             type="submit"
@@ -40,7 +40,7 @@ export function TextInput({ interaction, onSubmit }: TextInputProps) {
       ) : (
         <div className="text-center">
           <p className="text-2xl font-bold text-twilio-red">{value}</p>
-          <p className="text-gray-400 mt-2">Sent!</p>
+          <p className="text-accent-2 mt-2">Sent!</p>
         </div>
       )}
     </div>
