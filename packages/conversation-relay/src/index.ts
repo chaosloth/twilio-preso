@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './env.js';
 import { WebSocketServer } from 'ws';
 import { config } from './config.js';
 import { handleConnection } from './handler.js';

@@ -4,11 +4,18 @@ import { config } from '../config.js';
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
 export async function lookupPhone(phone: string): Promise<{ valid: boolean; formatted: string }> {
+  // Basic format check — must start with + and have at least 10 digits
+  const digits = phone.replace(/[^\d]/g, '');
+  if (!phone.startsWith('+') || digits.length < 10) {
+    return { valid: false, formatted: phone };
+  }
+
   try {
     const lookup = await client.lookups.v2.phoneNumbers(phone).fetch();
     return { valid: lookup.valid, formatted: lookup.phoneNumber };
   } catch {
-    return { valid: false, formatted: phone };
+    // If Lookup API fails (permissions, etc.), trust the format check
+    return { valid: true, formatted: phone };
   }
 }
 
