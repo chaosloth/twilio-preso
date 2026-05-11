@@ -7,6 +7,10 @@ const PRESENTATION_STATE_DOC = 'presentation-state';
 
 let syncClient: SyncClient | null = null;
 
+export function isSyncConnected(): boolean {
+  return syncClient !== null;
+}
+
 export async function initSync(participantId: string): Promise<SyncClient> {
   const res = await fetch(`${BACKEND_URL}/api/token?identity=${participantId}`);
   const { token } = await res.json();
@@ -63,18 +67,9 @@ export async function publishResponse(
   interactionType: string,
   value: string
 ): Promise<void> {
-  const client = getSyncClient();
-  const stream = await client.stream(EVENT_STREAM);
-
-  await stream.publishMessage({
-    data: {
-      type: 'audience-response',
-      participantId,
-      participantName,
-      stageIndex,
-      interactionType,
-      value,
-      timestamp: Date.now(),
-    },
+  await fetch(`${BACKEND_URL}/api/response`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ participantId, participantName, stageIndex, interactionType, value }),
   });
 }

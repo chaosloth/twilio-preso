@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { InteractionConfig } from '@twilio-preso/shared';
-import { initSync, subscribeToEvents, publishResponse } from './sync';
+import { initSync, subscribeToEvents, publishResponse, isSyncConnected } from './sync';
 import { Register } from './pages/Register';
 import { Waiting } from './pages/Waiting';
 import { Poll } from './pages/Poll';
@@ -31,25 +31,61 @@ function saveSession(participantId: string, name: string) {
   localStorage.setItem(SESSION_KEY, JSON.stringify({ participantId, name }));
 }
 
+function ConnectionBadge({ connected }: { connected: boolean }) {
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 12,
+      right: 12,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      padding: '4px 10px',
+      borderRadius: 20,
+      background: 'rgba(0,0,0,0.4)',
+      backdropFilter: 'blur(8px)',
+      fontSize: 11,
+      color: connected ? '#4ade80' : '#9ca3af',
+    }}>
+      <div style={{
+        width: 8,
+        height: 8,
+        borderRadius: '50%',
+        background: connected ? '#4ade80' : '#6b7280',
+        boxShadow: connected ? '0 0 6px #4ade80' : 'none',
+      }} />
+      {connected ? 'Connected' : 'Reconnecting...'}
+    </div>
+  );
+}
+
 export function App() {
   const saved = getSavedSession();
   const [state, setState] = useState<AppState>(saved ? 'waiting' : 'register');
   const [participantId, setParticipantId] = useState(saved?.participantId || '');
   const [name, setName] = useState(saved?.name || '');
   const [activeInteraction, setActiveInteraction] = useState<InteractionConfig | null>(null);
+  const [connected, setConnected] = useState(false);
 
   const connectSync = useCallback(async (id: string) => {
-    await initSync(id);
-    await subscribeToEvents(
-      (interaction) => {
-        setActiveInteraction(interaction);
-        setState('interaction');
-      },
-      () => {
-        setActiveInteraction(null);
-        setState('waiting');
-      }
-    );
+    try {
+      await initSync(id);
+      await subscribeToEvents(
+        (interaction) => {
+          setActiveInteraction(interaction);
+          setState('interaction');
+        },
+        () => {
+          setActiveInteraction(null);
+          setState('waiting');
+        }
+      );
+      setConnected(true);
+    } catch {
+      setConnected(false);
+      // Retry after 3 seconds
+      setTimeout(() => connectSync(id), 3000);
+    }
   }, []);
 
   // Reconnect on reload if session exists
@@ -58,6 +94,15 @@ export function App() {
       connectSync(saved.participantId);
     }
   }, []);
+
+  // Periodically check connection status
+  useEffect(() => {
+    if (state === 'register') return;
+    const interval = setInterval(() => {
+      setConnected(isSyncConnected());
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [state]);
 
   const handleRegistered = useCallback(async (id: string, participantName: string) => {
     setParticipantId(id);
@@ -82,20 +127,28 @@ export function App() {
     return <Register onRegistered={handleRegistered} />;
   }
 
-  if (state === 'waiting' || !activeInteraction) {
-    return <Waiting name={name} />;
-  }
-
-  switch (activeInteraction.type) {
-    case 'poll':
-      return <Poll interaction={activeInteraction} onSubmit={handleResponse} />;
-    case 'text':
-      return <TextInput interaction={activeInteraction} onSubmit={handleResponse} />;
-    case 'trigger':
-      return <Trigger interaction={activeInteraction} onSubmit={handleResponse} />;
-    case 'sentiment':
-      return <Sentiment interaction={activeInteraction} onSubmit={handleResponse} />;
-    default:
+  const content = (() => {
+    if (state === 'waiting' || !activeInteraction) {
       return <Waiting name={name} />;
-  }
+    }
+    switch (activeInteraction.type) {
+      case 'poll':
+        return <Poll interaction={activeInteraction} onSubmit={handleResponse} />;
+      case 'text':
+        return <TextInput interaction={activeInteraction} onSubmit={handleResponse} />;
+      case 'trigger':
+        return <Trigger interaction={activeInteraction} onSubmit={handleResponse} />;
+      case 'sentiment':
+        return <Sentiment interaction={activeInteraction} onSubmit={handleResponse} />;
+      default:
+        return <Waiting name={name} />;
+    }
+  })();
+
+  return (
+    <>
+      <ConnectionBadge connected={connected} />
+      {content}
+    </>
+  );
 }

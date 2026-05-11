@@ -9,6 +9,7 @@ import { verifyRoutes } from './routes/verify.js';
 import { registerRoutes } from './routes/register.js';
 import { triggerRoutes } from './routes/trigger.js';
 import { adminRoutes } from './routes/admin.js';
+import { responseRoutes } from './routes/response.js';
 
 const app = Fastify({ logger: true });
 
@@ -19,6 +20,7 @@ await app.register(verifyRoutes);
 await app.register(registerRoutes);
 await app.register(triggerRoutes);
 await app.register(adminRoutes);
+await app.register(responseRoutes);
 
 app.get('/health', async () => ({ status: 'ok' }));
 
