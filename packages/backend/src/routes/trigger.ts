@@ -20,7 +20,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
     switch (triggerId) {
       case 'sms-patience': {
         await sendSmsToAll(participants, () =>
-          `You've been on hold for 7 minutes. Still waiting...\n\nThis is what your customers feel every day. — Twilio SIGNAL Demo`
+          `You've been on hold for 7 minutes. Still waiting...\n\nThis is what your customers feel every day. — Wonder by Twilio`
         );
         return { sent: participants.length };
       }
@@ -79,7 +79,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
           const responses = Object.values(p.responses);
           const pollResponse = responses.find((r) => r.stageIndex === 15);
           const excited = pollResponse?.value || 'our platform';
-          return `Thanks for being part of the magic, ${p.name}! You showed interest in ${excited}. Let's keep this conversation going: twil.io/signal-apj\n\nletsGoMichelangeloMode(); — Twilio`;
+          return `Thanks for being part of the magic, ${p.name}! You showed interest in ${excited}. Let's keep this conversation going.\n\nletsGoMichelangeloMode(); — Wonder by Twilio`;
         });
         return { sent: participants.length };
       }

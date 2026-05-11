@@ -5,7 +5,6 @@ import { publishStageAdvance, publishInteractionPrompt, triggerDemo } from '../s
 
 let suppressNextPublish = false;
 
-// Call this when stage changes come from Sync (external source)
 export function suppressPublish() {
   suppressNextPublish = true;
 }
@@ -62,32 +61,30 @@ export function useNavigation() {
     if (currentStageIndex === prevStageIndex.current) return;
     prevStageIndex.current = currentStageIndex;
 
-    // If this change came from Sync, don't re-publish
-    if (suppressNextPublish) {
-      suppressNextPublish = false;
-      return;
-    }
-
     const stage = STAGES[currentStageIndex];
+    const shouldPublish = !suppressNextPublish;
+    suppressNextPublish = false;
 
-    // Publish to Sync (updates document, all windows follow)
-    publishStageAdvance(currentStageIndex);
+    if (shouldPublish) {
+      // Publish to Sync (updates document with stage + interaction, all windows + audience follow)
+      publishStageAdvance(currentStageIndex, stage.interaction);
 
-    // Broadcast to local notes window
-    const channel = new BroadcastChannel('presenter-sync');
-    channel.postMessage({ type: 'stage-change', stageIndex: currentStageIndex });
-    channel.close();
+      // Also publish interaction as stream event for real-time audience updates
+      if (stage.interaction) {
+        publishInteractionPrompt(stage.interaction);
+      }
 
-    // If stage has an interaction, publish the prompt to audience
-    if (stage.interaction) {
-      publishInteractionPrompt(stage.interaction);
-    }
+      // Broadcast to local notes window
+      const channel = new BroadcastChannel('presenter-sync');
+      channel.postMessage({ type: 'stage-change', stageIndex: currentStageIndex });
+      channel.close();
 
-    // If stage has a demo trigger AND demos are enabled, fire it
-    if (stage.demoTrigger && isLive) {
-      triggerDemo(stage.demoTrigger).catch((err) => {
-        console.error(`Demo trigger failed for ${stage.demoTrigger}:`, err);
-      });
+      // If stage has a demo trigger AND demos are enabled, fire it
+      if (stage.demoTrigger && isLive) {
+        triggerDemo(stage.demoTrigger).catch((err) => {
+          console.error(`Demo trigger failed for ${stage.demoTrigger}:`, err);
+        });
+      }
     }
   }, [currentStageIndex, isLive]);
 }

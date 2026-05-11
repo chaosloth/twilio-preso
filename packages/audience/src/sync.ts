@@ -3,6 +3,7 @@ import type { InteractionConfig } from '@twilio-preso/shared';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 const EVENT_STREAM = 'event-stream';
+const PRESENTATION_STATE_DOC = 'presentation-state';
 
 let syncClient: SyncClient | null = null;
 
@@ -24,14 +25,33 @@ export async function subscribeToEvents(
   onStageAdvance: (stageIndex: number) => void
 ): Promise<void> {
   const client = getSyncClient();
-  const stream = await client.stream(EVENT_STREAM);
 
-  stream.on('messagePublished', (event) => {
-    const data = event.message.data as any;
+  // Subscribe to stream for real-time events
+  const stream = await client.stream(EVENT_STREAM);
+  stream.on('messagePublished', (event: any) => {
+    const data = event.message.data;
     if (data.type === 'interaction-prompt') {
       onInteraction(data.interaction);
     } else if (data.type === 'stage-advance') {
       onStageAdvance(data.stageIndex);
+    }
+  });
+
+  // Also subscribe to the presentation state document (more reliable for interactions)
+  const stateDoc = await client.document(PRESENTATION_STATE_DOC);
+
+  // Check initial state — if there's an active interaction, show it
+  const initialData = stateDoc.data as any;
+  if (initialData?.activeInteraction) {
+    onInteraction(initialData.activeInteraction);
+  }
+
+  stateDoc.on('updated', (event: any) => {
+    const data = event.data;
+    if (data.activeInteraction) {
+      onInteraction(data.activeInteraction);
+    } else {
+      onStageAdvance(data.currentStageIndex);
     }
   });
 }

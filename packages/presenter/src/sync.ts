@@ -64,15 +64,15 @@ export async function initPresenterSync(): Promise<void> {
     usePresenterStore.getState().setAggregateResults(event.data as AggregateResultsDoc);
   });
 
-  usePresenterStore.getState().setLive(true);
 }
 
-export async function publishStageAdvance(stageIndex: number): Promise<void> {
-  // Update the Sync Document — all other windows will receive the update
+export async function publishStageAdvance(stageIndex: number, interaction?: InteractionConfig | null): Promise<void> {
+  // Update the Sync Document — all other windows AND audience will receive the update
   if (stateDocument) {
     try {
       await stateDocument.update({
         currentStageIndex: stageIndex,
+        activeInteraction: interaction || null,
       });
     } catch (err) {
       console.warn('Failed to update presentation state:', err);

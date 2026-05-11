@@ -8,7 +8,7 @@ export async function sendWelcomeSms(participant: Participant): Promise<void> {
   await client.messages.create({
     to: participant.phone,
     messagingServiceSid: config.twilio.messagingServiceSid,
-    body: `Welcome to SIGNAL, ${participant.name}! You're now part of the live demo. Keep your phone handy — we'll be in touch.`,
+    body: `Welcome to Wonder, ${participant.name}! You're now part of the live demo. Keep your phone handy — we'll be in touch.`,
   });
 }
 
