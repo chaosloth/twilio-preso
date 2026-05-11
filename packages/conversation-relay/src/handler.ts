@@ -62,7 +62,7 @@ async function handleEvent(
       state.exchangeCount++;
 
       if (state.exchangeCount >= 3) {
-        const farewell = `It was great chatting with you${state.participant?.name ? `, ${state.participant.name}` : ''}! Enjoy the rest of SIGNAL. Goodbye!`;
+        const farewell = `It was great chatting with you${state.participant?.name ? `, ${state.participant.name}` : ''}! We can't wait to see what you build with Twilio. Goodbye!`;
         state.conversationHistory.push({ role: 'user', content: userMessage });
         state.conversationHistory.push({ role: 'assistant', content: farewell });
         sendResponse(ws, farewell, true);

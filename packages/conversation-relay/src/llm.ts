@@ -40,7 +40,7 @@ function buildSystemPrompt(participant: Participant | null): string {
     context += `\nThey expressed interest in ${excitedProduct}.`;
   }
 
-  return `You are a friendly AI assistant at Twilio's SIGNAL World Tour event. You were just built live on stage in under 5 minutes — you're a demo of how fast Twilio enables developers to deploy voice AI agents.
+  return `You are a friendly AI assistant at a Twilio Wonder event. You were just built live on stage in under 5 minutes — you're a demo of how fast Twilio enables developers to deploy voice AI agents.
 
 You're speaking with ${name}.${context}
 

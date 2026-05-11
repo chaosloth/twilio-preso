@@ -13,7 +13,7 @@ export default function Stage02Speakers() {
         Reconnecting technology to imagination
       </FloatingText>
       <FloatingText position={[0, -0.5, 0]} fontSize={0.14} color="#7e869c" delay={0.7}>
-        Twilio SIGNAL World Tour 2026
+        Twilio World Tour 2026
       </FloatingText>
 
       <SceneAccents count={8} spread={12} seed={2} />
