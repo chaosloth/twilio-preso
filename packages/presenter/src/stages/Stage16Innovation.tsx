@@ -1,4 +1,4 @@
-import { GlowingPillar, FloatingText, ParticleField, SceneAccents } from '../objects';
+import { FloatingText, ParticleField, BarChart3D } from '../objects';
 import { usePresenterStore } from '../store';
 import { useMemo } from 'react';
 
@@ -8,48 +8,36 @@ export default function Stage16Innovation() {
   const pollData = useMemo(() => {
     const counts: Record<string, number> = {};
     recentResponses
-      .filter((r) => r.stageIndex === 15 && r.interactionType === 'poll')
+      .filter((r) => r.stageIndex === 17 && r.interactionType === 'poll')
       .forEach((r) => {
         counts[r.value] = (counts[r.value] || 0) + 1;
       });
     return counts;
   }, [recentResponses]);
 
-  const maxVotes = Math.max(...Object.values(pollData), 1);
+  const hasResponses = Object.keys(pollData).length > 0;
 
   return (
     <group>
-      <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
-        Which product are you most excited to explore?
+      <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={12}>
+        Where do you need this to run?
       </FloatingText>
 
-      <GlowingPillar
-        label="Orchestrator"
-        sublabel={`${pollData['Conversation Orchestrator'] || 0} votes`}
-        position={[-4, 0, 0]}
-        intensity={(pollData['Conversation Orchestrator'] || 0) / maxVotes * 2 + 0.3}
-      />
-      <GlowingPillar
-        label="Memory"
-        sublabel={`${pollData['Conversation Memory'] || 0} votes`}
-        position={[-1.3, 0, 0]}
-        intensity={(pollData['Conversation Memory'] || 0) / maxVotes * 2 + 0.3}
-      />
-      <GlowingPillar
-        label="Intelligence"
-        sublabel={`${pollData['Conversation Intelligence'] || 0} votes`}
-        position={[1.3, 0, 0]}
-        intensity={(pollData['Conversation Intelligence'] || 0) / maxVotes * 2 + 0.3}
-      />
-      <GlowingPillar
-        label="Agent Connect"
-        sublabel={`${pollData['Agent Connect'] || 0} votes`}
-        position={[4, 0, 0]}
-        intensity={(pollData['Agent Connect'] || 0) / maxVotes * 2 + 0.3}
-      />
+      {hasResponses ? (
+        <BarChart3D data={pollData} position={[0, -0.8, 0]} maxHeight={2.5} barWidth={1.5} />
+      ) : (
+        <group>
+          <FloatingText position={[0, 0, 0]} fontSize={0.22} color="#ef223a" delay={0.8}>
+            Check your phone to vote
+          </FloatingText>
+          <FloatingText position={[0, -0.6, 0]} fontSize={0.15} color="#7e869c" delay={1}>
+            Results will appear here in real-time
+          </FloatingText>
+        </group>
+      )}
 
-      <ParticleField count={150} spread={14} color="#ef223a" speed={0.1} size={0.015} />
-      <SceneAccents count={10} spread={12} seed={16} />
+      <ParticleField count={100} spread={14} color="#ef223a" speed={0.08} size={0.015} />
+      <pointLight position={[0, 2, 3]} color="#ef223a" intensity={1} distance={10} />
     </group>
   );
 }

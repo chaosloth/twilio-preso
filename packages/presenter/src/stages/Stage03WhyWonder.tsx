@@ -9,23 +9,22 @@ export default function Stage03WhyWonder() {
       <ParticleField count={400} spread={12} color="#ffffff" speed={0.05} size={0.012} />
       <ParticleField count={100} spread={8} color="#ef223a" speed={0.1} size={0.02} />
 
-      <FloatingText position={[0, 2.8, 0]} fontSize={0.8} color="#ffffff" bold delay={0.2} maxWidth={10}>
+      <FloatingText position={[0, 2.8, 0]} fontSize={0.5} color="#ffffff" bold delay={0.2} maxWidth={10}>
         Why Wonder?
       </FloatingText>
 
-      {/* Content box — only show Html when this stage is active */}
       {active && <Html position={[0, -0.3, 0]} center transform>
         <div style={{
           background: '#000d25',
-          borderRadius: 16,
-          padding: '32px 40px',
-          maxWidth: 580,
+          borderRadius: 12,
+          padding: '20px 28px',
+          maxWidth: 420,
           border: '2px solid rgba(239, 34, 58, 0.3)',
           boxShadow: '0 0 20px rgba(239, 34, 58, 0.1)',
         }}>
           <p style={{
             color: '#babecc',
-            fontSize: 18,
+            fontSize: 13,
             lineHeight: 1.7,
             margin: 0,
             fontFamily: "'Space Grotesk', sans-serif",
@@ -34,9 +33,9 @@ export default function Stage03WhyWonder() {
           </p>
           <p style={{
             color: '#ef223a',
-            fontSize: 16,
+            fontSize: 12,
             lineHeight: 1.6,
-            marginTop: 16,
+            marginTop: 12,
             marginBottom: 0,
             fontFamily: "'Space Grotesk', sans-serif",
             fontWeight: 500,

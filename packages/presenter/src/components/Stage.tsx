@@ -6,11 +6,13 @@ const STAGE_SPACING = 50;
 
 const stageComponents: Record<string, React.LazyExoticComponent<ComponentType>> = {
   opening: lazy(() => import('../stages/Stage01Opening')),
+  'patience-poll': lazy(() => import('../stages/Stage02PatiencePoll')),
   speakers: lazy(() => import('../stages/Stage02Speakers')),
   'why-wonder': lazy(() => import('../stages/Stage03WhyWonder')),
   'story-arc': lazy(() => import('../stages/Stage04StoryArc')),
   'customer-nerves': lazy(() => import('../stages/Stage05CustomerNerves')),
   'patience-deficit': lazy(() => import('../stages/Stage06PatienceDeficit')),
+  'impatient-customers': lazy(() => import('../stages/Stage07ImpatientCustomers')),
   'think-channels': lazy(() => import('../stages/Stage07ThinkChannels')),
   siloes: lazy(() => import('../stages/Stage08Siloes')),
   'customers-are': lazy(() => import('../stages/Stage09CustomersAre')),

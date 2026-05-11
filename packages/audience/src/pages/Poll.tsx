@@ -9,12 +9,20 @@ interface PollProps {
 export function Poll({ interaction, onSubmit }: PollProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [freeformValue, setFreeformValue] = useState('');
 
   function handleSelect(option: string) {
     if (submitted) return;
     setSelected(option);
     setSubmitted(true);
     onSubmit(option);
+  }
+
+  function handleFreeformSubmit() {
+    if (submitted || !freeformValue.trim()) return;
+    setSelected(freeformValue.trim());
+    setSubmitted(true);
+    onSubmit(freeformValue.trim());
   }
 
   return (
@@ -36,6 +44,29 @@ export function Poll({ interaction, onSubmit }: PollProps) {
             {option}
           </button>
         ))}
+        {interaction.allowFreeform && !submitted && (
+          <div className="flex gap-2 mt-2">
+            <input
+              type="text"
+              value={freeformValue}
+              onChange={(e) => setFreeformValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleFreeformSubmit()}
+              placeholder="Or type your answer..."
+              className="flex-1 py-3 px-4 rounded-lg bg-white/5 text-white placeholder-accent-3 border border-white/10 focus:border-twilio-red focus:outline-none"
+            />
+            <button
+              onClick={handleFreeformSubmit}
+              className="px-4 py-3 rounded-lg bg-twilio-red text-white font-medium"
+            >
+              Send
+            </button>
+          </div>
+        )}
+        {interaction.allowFreeform && submitted && selected && !interaction.options?.includes(selected) && (
+          <div className="w-full py-4 px-4 rounded-lg bg-twilio-red text-white font-medium">
+            {selected}
+          </div>
+        )}
       </div>
       {submitted && (
         <p className="text-accent-2 mt-6 text-sm">Response recorded!</p>

@@ -24,6 +24,7 @@ export interface InteractionConfig {
   type: InteractionType;
   prompt: string;
   options?: string[];
+  allowFreeform?: boolean;
 }
 
 // --- Sync Document Schemas ---

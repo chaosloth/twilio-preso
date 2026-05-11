@@ -14,11 +14,15 @@ const windowId = `presenter-${Math.random().toString(36).slice(2)}`;
 
 export async function initPresenterSync(): Promise<void> {
   let res: Response;
-  try {
-    res = await fetch(`${BACKEND_URL}/api/token?identity=${windowId}`);
-  } catch {
-    return;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      res = await fetch(`${BACKEND_URL}/api/token?identity=${windowId}`);
+      break;
+    } catch {
+      await new Promise((r) => setTimeout(r, 2000));
+    }
   }
+  if (!res!) return;
   const { token } = await res.json();
 
   syncClient = new SyncClient(token);

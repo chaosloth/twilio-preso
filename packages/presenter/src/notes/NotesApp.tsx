@@ -17,6 +17,7 @@ export function NotesApp() {
   const [demoEnabled, setDemoEnabled] = useState(true);
   const [participants, setParticipants] = useState<ParticipantInfo[]>([]);
   const [activeTab, setActiveTab] = useState<'notes' | 'participants' | 'controls'>('notes');
+  const [zoom, setZoom] = useState(100);
   const startTime = useRef(Date.now());
 
   useEffect(() => {
@@ -28,6 +29,22 @@ export function NotesApp() {
     };
     return () => channel.close();
   }, []);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        const next = Math.min(stageIndex + 1, STAGES.length - 1);
+        if (next !== stageIndex) handleGoTo(next);
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        const prev = Math.max(stageIndex - 1, 0);
+        if (prev !== stageIndex) handleGoTo(prev);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [stageIndex]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -95,7 +112,10 @@ export function NotesApp() {
           </span>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: '#7e869c' }}>{participants.length} joined</span>
+          <button onClick={() => setZoom((z) => Math.max(60, z - 10))} style={{ width: 22, height: 22, border: '1px solid #4d5777', background: 'transparent', color: '#fff', borderRadius: 3, cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>−</button>
+          <span style={{ fontSize: 11, color: '#7e869c', minWidth: 32, textAlign: 'center' }}>{zoom}%</span>
+          <button onClick={() => setZoom((z) => Math.min(200, z + 10))} style={{ width: 22, height: 22, border: '1px solid #4d5777', background: 'transparent', color: '#fff', borderRadius: 3, cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>+</button>
+          <span style={{ fontSize: 12, color: '#7e869c', marginLeft: 8 }}>{participants.length} joined</span>
           <button
             onClick={toggleDemo}
             style={{
@@ -142,14 +162,14 @@ export function NotesApp() {
       <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
         {activeTab === 'notes' && (
           <>
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 11, color: '#ef223a', marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' }}>
+            <div style={{ marginBottom: 24, fontSize: `${zoom}%` }}>
+              <div style={{ fontSize: '0.7em', color: '#ef223a', marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' }}>
                 Stage {stageIndex + 1} / {STAGES.length} — Act {currentStage?.act}
               </div>
-              <h2 style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 12, fontFamily: "'Tektur', sans-serif" }}>
+              <h2 style={{ fontSize: '1.5em', fontWeight: 'bold', marginBottom: 12, fontFamily: "'Tektur', sans-serif" }}>
                 {currentStage?.title}
               </h2>
-              <p style={{ fontSize: 15, lineHeight: 1.7, color: '#babecc' }}>
+              <p style={{ fontSize: '1em', lineHeight: 1.7, color: '#babecc' }}>
                 {currentStage?.notes}
               </p>
 

@@ -8,7 +8,7 @@ export default function Stage09CustomersAre() {
   const words = useMemo(() => {
     const wordMap: Record<string, number> = {};
     recentResponses
-      .filter((r) => r.stageIndex === 8 && r.interactionType === 'text')
+      .filter((r) => r.stageIndex === 10 && r.interactionType === 'text')
       .forEach((r) => {
         const word = r.value.toLowerCase();
         wordMap[word] = (wordMap[word] || 0) + 1;
@@ -20,8 +20,8 @@ export default function Stage09CustomersAre() {
     <group>
       <ParticleField count={100} spread={12} color="#ef223a" speed={0.1} size={0.015} />
 
-      <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
-        {'In one word, your biggest\nCX challenge?'}
+      <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={14}>
+        In one word, your biggest CX challenge?
       </FloatingText>
 
       {words.length > 0 ? (

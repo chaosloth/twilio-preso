@@ -34,7 +34,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
 
       case 'sms-memory': {
         await sendSmsToAll(participants, (p) => {
-          const challengeResponse = Object.values(p.responses).find((r) => r.stageIndex === 8);
+          const challengeResponse = Object.values(p.responses).find((r) => r.stageIndex === 10);
           const challenge = challengeResponse?.value || 'customer experience';
           return `Hey ${p.name}, you said "${challenge}" was your biggest challenge. We remembered — no database lookup, no asking again. That's Conversation Memory. — Twilio`;
         });
@@ -75,12 +75,9 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
       }
 
       case 'sms-closing': {
-        await sendSmsToAll(participants, (p) => {
-          const responses = Object.values(p.responses);
-          const pollResponse = responses.find((r) => r.stageIndex === 15);
-          const excited = pollResponse?.value || 'our platform';
-          return `Thanks for being part of the magic, ${p.name}! You showed interest in ${excited}. Let's keep this conversation going.\n\nletsGoMichelangeloMode(); — Wonder by Twilio`;
-        });
+        await sendSmsToAll(participants, (p) =>
+          `Thanks for joining us, ${p.name}! Want to explore the demo yourself? Check it out here: https://www.twilio.com/en-us/solutions/agent-productivity\n\nletsGoMichelangeloMode(); — Wonder by Twilio`
+        );
         return { sent: participants.length };
       }
 

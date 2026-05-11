@@ -1,51 +1,50 @@
-import { FloatingText, ParticleField, SceneAccents } from '../objects';
-import { useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
-import type { Mesh } from 'three';
+import { FloatingText } from '../objects';
+import { Html } from '@react-three/drei';
+import { useIsStageActive } from '../components/Stage';
+
+const concepts = [
+  { title: 'Conversation Intelligence', desc: 'Understand what customers mean, not just what they say' },
+  { title: 'Conversation Memory', desc: 'Retain full context across every touchpoint' },
+  { title: 'Conversation Orchestration', desc: 'Coordinate seamless journeys across channels' },
+  { title: 'Agent Connect', desc: 'Bridge AI and human agents seamlessly' },
+];
 
 export default function Stage12Orchestrator() {
-  const flowRef = useRef<Mesh>(null);
-
-  useFrame((state) => {
-    if (flowRef.current) {
-      flowRef.current.position.x = Math.sin(state.clock.elapsedTime * 0.5) * 3;
-    }
-  });
+  const active = useIsStageActive();
 
   return (
     <group>
-      <FloatingText position={[0, 2.8, 0]} fontSize={0.45} color="#ef223a" bold delay={0}>
-        Conversation Orchestrator
-      </FloatingText>
-      <FloatingText position={[0, 2.0, 0]} fontSize={0.13} color="#7e869c" delay={0.3}>
-        GA
+      <FloatingText position={[0, 3, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={12}>
+        Introducing Twilio Conversations
       </FloatingText>
 
-      <FloatingText position={[-3, 1.5, 0]} fontSize={0.2} color="#ffffff" delay={0.4} maxWidth={4}>
-        Unified Continuous Conversation
-      </FloatingText>
-      <FloatingText position={[-3, 0.5, 0]} fontSize={0.2} color="#ffffff" delay={0.6} maxWidth={4}>
-        Connected AI-Human Handoff
-      </FloatingText>
-      <FloatingText position={[-3, -0.5, 0]} fontSize={0.2} color="#ffffff" delay={0.8} maxWidth={4}>
-        Seamless Channel Expansion
-      </FloatingText>
+      {active && <Html center transform position={[0, 0, 0]}>
+        <div style={{ display: 'flex', gap: 10, fontFamily: "'Space Grotesk', sans-serif" }}>
+          {concepts.map((c, i) => (
+            <div key={i} style={{
+              width: 105,
+              background: '#000d25',
+              borderRadius: 10,
+              padding: '14px 10px',
+              border: '2px solid rgba(239, 34, 58, 0.4)',
+              boxShadow: '0 0 12px rgba(239, 34, 58, 0.2)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#ef223a', marginBottom: 6 }}>
+                {c.title}
+              </div>
+              <div style={{ fontSize: 7.5, color: '#babecc', lineHeight: 1.4 }}>
+                {c.desc}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Html>}
 
-      {/* Flowing message indicator */}
-      <mesh ref={flowRef} position={[0, -1.5, 0]}>
-        <sphereGeometry args={[0.15, 16, 16]} />
-        <meshStandardMaterial color="#ef223a" emissive="#ef223a" emissiveIntensity={2} />
-      </mesh>
-
-      {/* Channel line */}
-      <mesh position={[0, -1.5, 0]}>
-        <boxGeometry args={[8, 0.02, 0.02]} />
-        <meshStandardMaterial color="#ef223a" emissive="#ef223a" emissiveIntensity={0.5} />
-      </mesh>
-
-      <ParticleField count={150} spread={10} color="#ef223a" speed={0.1} size={0.015} />
-      <pointLight position={[0, 0, 3]} color="#ef223a" intensity={1.5} distance={8} />
-      <SceneAccents count={10} spread={12} seed={12} />
+      <pointLight position={[0, 2, 3]} color="#ef223a" intensity={0.8} distance={8} />
     </group>
   );
 }

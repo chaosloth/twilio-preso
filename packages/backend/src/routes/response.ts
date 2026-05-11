@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { publishEvent } from '../services/sync.js';
-import type { AudienceResponseEvent } from '@twilio-preso/shared';
+import type { AudienceResponseEvent, InteractionType } from '@twilio-preso/shared';
 
 interface ResponseBody {
   participantId: string;
   participantName: string;
   stageIndex: number;
-  interactionType: string;
+  interactionType: InteractionType;
   value: string;
 }
 

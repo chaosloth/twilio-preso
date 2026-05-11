@@ -1,57 +1,13 @@
-import { FloatingText, ParticleField, SceneAccents } from '../objects';
-import { useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
-import type { Group } from 'three';
+import { FloatingText, ParticleField } from '../objects';
 
 export default function Stage18MassCall() {
-  const ringRef = useRef<Group>(null);
-  const phonesRef = useRef<Group>(null);
-
-  useFrame((state) => {
-    if (ringRef.current) {
-      const scale = 1 + Math.sin(state.clock.elapsedTime * 2) * 0.3;
-      ringRef.current.scale.set(scale, scale, 1);
-    }
-    if (phonesRef.current) {
-      phonesRef.current.rotation.z = state.clock.elapsedTime * 0.1;
-    }
-  });
-
   return (
     <group>
-      <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
-        Every phone in the room...
+      <ParticleField count={150} spread={12} color="#ef223a" speed={0.15} size={0.02} />
+
+      <FloatingText position={[0, 0, 0]} fontSize={0.35} color="#ffffff" bold delay={0.2} maxWidth={12}>
+        Imagine being able to speak to all of your customers at once...
       </FloatingText>
-      <FloatingText position={[0, 2.0, 0]} fontSize={0.4} color="#ef223a" bold delay={0.5} maxWidth={10}>
-        rings simultaneously.
-      </FloatingText>
-
-      {/* Pulsing ring */}
-      <group ref={ringRef}>
-        <mesh>
-          <ringGeometry args={[2, 2.1, 64]} />
-          <meshStandardMaterial color="#ef223a" emissive="#ef223a" emissiveIntensity={2} />
-        </mesh>
-      </group>
-
-      {/* Phone icons radiating outward */}
-      <group ref={phonesRef}>
-        {Array.from({ length: 12 }).map((_, i) => {
-          const angle = (i / 12) * Math.PI * 2;
-          const radius = 3.5;
-          return (
-            <mesh key={i} position={[Math.cos(angle) * radius, Math.sin(angle) * radius, 0]}>
-              <boxGeometry args={[0.2, 0.35, 0.05]} />
-              <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.5} />
-            </mesh>
-          );
-        })}
-      </group>
-
-      {/* Center burst */}
-      <pointLight position={[0, 0, 2]} color="#ef223a" intensity={3} distance={8} />
-      <ParticleField count={150} spread={8} color="#ef223a" speed={0.8} size={0.03} />
-      <SceneAccents count={10} spread={12} seed={18} />
     </group>
   );
 }

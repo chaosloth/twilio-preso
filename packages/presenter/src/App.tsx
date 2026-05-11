@@ -6,7 +6,7 @@ import { PostProcessing } from './components/PostProcessing';
 import { useNavigation } from './hooks/useNavigation';
 import { initPresenterSync } from './sync';
 import { usePresenterStore } from './store';
-import { STAGES } from '@twilio-preso/shared';
+import { STAGES, TOTAL_STAGES } from '@twilio-preso/shared';
 
 function Scene() {
   useNavigation();
@@ -24,9 +24,12 @@ function HUD() {
   const participants = usePresenterStore((s) => s.totalParticipants);
   const stageIndex = usePresenterStore((s) => s.currentStageIndex);
   return (
-    <div style={{ position: 'fixed', bottom: 16, right: 16, color: 'white', fontFamily: 'monospace', opacity: 0.5, fontSize: 12 }}>
-      Stage {stageIndex + 1}/19 | {participants} connected
-    </div>
+    <>
+      <div style={{ position: 'fixed', bottom: 16, right: 16, color: 'white', fontFamily: 'monospace', opacity: 0.5, fontSize: 12 }}>
+        Stage {stageIndex + 1}/{TOTAL_STAGES} | {participants} connected
+      </div>
+      <img src="/images/twilio-logo-full.png" alt="Twilio" style={{ position: 'fixed', bottom: 16, left: 16, width: 72, height: 'auto', opacity: 0.4 }} />
+    </>
   );
 }
 

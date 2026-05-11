@@ -8,7 +8,7 @@ export default function Stage05CustomerNerves() {
   const pollData = useMemo(() => {
     const counts: Record<string, number> = {};
     recentResponses
-      .filter((r) => r.stageIndex === 4 && r.interactionType === 'poll')
+      .filter((r) => r.stageIndex === 5 && r.interactionType === 'poll')
       .forEach((r) => {
         counts[r.value] = (counts[r.value] || 0) + 1;
       });
@@ -22,7 +22,7 @@ export default function Stage05CustomerNerves() {
       <ParticleField count={60} color="#ef223a" speed={0.3} spread={14} size={0.015} />
 
       <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
-        {"Who's getting on their\ncustomers' nerves?"}
+        {"What's getting on YOUR\ncustomers nerves the most?"}
       </FloatingText>
 
       {hasResponses ? (
