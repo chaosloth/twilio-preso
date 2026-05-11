@@ -8,6 +8,7 @@ import { tokenRoutes } from './routes/token.js';
 import { verifyRoutes } from './routes/verify.js';
 import { registerRoutes } from './routes/register.js';
 import { triggerRoutes } from './routes/trigger.js';
+import { adminRoutes } from './routes/admin.js';
 
 const app = Fastify({ logger: true });
 
@@ -17,6 +18,7 @@ await app.register(tokenRoutes);
 await app.register(verifyRoutes);
 await app.register(registerRoutes);
 await app.register(triggerRoutes);
+await app.register(adminRoutes);
 
 app.get('/health', async () => ({ status: 'ok' }));
 
