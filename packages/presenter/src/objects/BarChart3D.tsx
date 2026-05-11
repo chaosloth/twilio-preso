@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { Text } from '@react-three/drei';
 import gsap from 'gsap';
-import type { Mesh } from 'three';
+import type { Group } from 'three';
 
 interface BarChart3DProps {
   data: Record<string, number>;
@@ -11,31 +11,45 @@ interface BarChart3DProps {
   color?: string;
 }
 
-function Bar({ height, x, label, value, color, barWidth }: { height: number; x: number; label: string; value: number; color: string; barWidth: number }) {
-  const meshRef = useRef<Mesh>(null);
+function Bar({ targetHeight, x, label, value, color, barWidth }: { targetHeight: number; x: number; label: string; value: number; color: string; barWidth: number }) {
+  const groupRef = useRef<Group>(null);
+  const scaleRef = useRef({ y: 0.01 });
 
   useEffect(() => {
-    if (!meshRef.current) return;
-    gsap.to(meshRef.current.scale, { y: Math.max(height, 0.01), duration: 0.6, ease: 'back.out(1.5)' });
-  }, [height]);
+    gsap.to(scaleRef.current, {
+      y: Math.max(targetHeight, 0.01),
+      duration: 0.8,
+      ease: 'back.out(1.5)',
+      onUpdate: () => {
+        if (groupRef.current) {
+          groupRef.current.scale.y = scaleRef.current.y;
+        }
+      },
+    });
+  }, [targetHeight]);
 
   return (
     <group position={[x, 0, 0]}>
-      {/* Bar grows upward from baseline */}
-      <mesh ref={meshRef} position={[0, 0, 0]} scale={[1, 0.01, 1]}>
-        <boxGeometry args={[barWidth, 1, 0.3]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
-      </mesh>
-      {/* Count always above the bar */}
+      {/* Label at bottom — always visible */}
+      <Text position={[0, -0.3, 0.1]} fontSize={0.18} color="#babecc" anchorX="center" anchorY="top" maxWidth={barWidth + 0.8}>
+        {label}
+      </Text>
+
+      {/* Bar container — scales Y from bottom (y=0 is the base) */}
+      <group ref={groupRef} position={[0, 0, 0]} scale={[1, 0.01, 1]}>
+        {/* Bar geometry offset so bottom is at y=0 */}
+        <mesh position={[0, 0.5, 0]}>
+          <boxGeometry args={[barWidth, 1, 0.3]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
+        </mesh>
+      </group>
+
+      {/* Count above the bar */}
       {value > 0 && (
-        <Text position={[0, height + 0.3, 0]} fontSize={0.25} color={color} anchorX="center" fontWeight={700}>
+        <Text position={[0, targetHeight + 0.2, 0.1]} fontSize={0.25} color={color} anchorX="center" fontWeight={700}>
           {String(value)}
         </Text>
       )}
-      {/* Label always below, fixed position */}
-      <Text position={[0, -0.6, 0]} fontSize={0.16} color="#babecc" anchorX="center" anchorY="top" maxWidth={barWidth + 0.5}>
-        {label}
-      </Text>
     </group>
   );
 }
@@ -55,9 +69,9 @@ export function BarChart3D({
   return (
     <group position={position}>
       {entries.map(([label, value], i) => {
-        const height = (value / maxValue) * maxHeight;
+        const targetHeight = (value / maxValue) * maxHeight;
         const x = i * (barWidth + gap) - totalWidth / 2 + (barWidth + gap) / 2;
-        return <Bar key={label} height={height} x={x} label={label} value={value} color={color} barWidth={barWidth} />;
+        return <Bar key={label} targetHeight={targetHeight} x={x} label={label} value={value} color={color} barWidth={barWidth} />;
       })}
     </group>
   );
