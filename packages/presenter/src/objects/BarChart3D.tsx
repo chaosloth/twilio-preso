@@ -21,18 +21,21 @@ function Bar({ height, x, label, value, color, barWidth }: { height: number; x: 
 
   return (
     <group position={[x, 0, 0]}>
-      <mesh ref={meshRef} position={[0, 0.5, 0]} scale={[1, 0.01, 1]}>
+      {/* Bar grows upward from baseline */}
+      <mesh ref={meshRef} position={[0, 0, 0]} scale={[1, 0.01, 1]}>
         <boxGeometry args={[barWidth, 1, 0.3]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
       </mesh>
-      <Text position={[0, -0.4, 0]} fontSize={0.12} color="#ffffff" anchorX="center" maxWidth={barWidth + 0.3}>
-        {label}
-      </Text>
+      {/* Count always above the bar */}
       {value > 0 && (
-        <Text position={[0, height + 0.3, 0]} fontSize={0.18} color={color} anchorX="center">
+        <Text position={[0, height + 0.3, 0]} fontSize={0.25} color={color} anchorX="center" fontWeight={700}>
           {String(value)}
         </Text>
       )}
+      {/* Label always below, fixed position */}
+      <Text position={[0, -0.6, 0]} fontSize={0.16} color="#babecc" anchorX="center" anchorY="top" maxWidth={barWidth + 0.5}>
+        {label}
+      </Text>
     </group>
   );
 }
@@ -46,13 +49,14 @@ export function BarChart3D({
 }: BarChart3DProps) {
   const entries = Object.entries(data);
   const maxValue = Math.max(...Object.values(data), 1);
-  const totalWidth = entries.length * (barWidth + 0.4);
+  const gap = 0.6;
+  const totalWidth = entries.length * (barWidth + gap);
 
   return (
     <group position={position}>
       {entries.map(([label, value], i) => {
         const height = (value / maxValue) * maxHeight;
-        const x = i * (barWidth + 0.4) - totalWidth / 2 + barWidth / 2;
+        const x = i * (barWidth + gap) - totalWidth / 2 + (barWidth + gap) / 2;
         return <Bar key={label} height={height} x={x} label={label} value={value} color={color} barWidth={barWidth} />;
       })}
     </group>
