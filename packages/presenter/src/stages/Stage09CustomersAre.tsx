@@ -3,24 +3,18 @@ import { usePresenterStore } from '../store';
 import { useMemo } from 'react';
 
 export default function Stage09CustomersAre() {
-  const results = usePresenterStore((s) => s.aggregateResults);
   const recentResponses = usePresenterStore((s) => s.recentResponses);
 
   const words = useMemo(() => {
-    // Build words from aggregate results for stage 8 (index 8)
-    if (results?.stageIndex === 8 && results.results) {
-      return Object.entries(results.results).map(([text, count]) => ({ text, count }));
-    }
-    // Fallback: build from recent responses
     const wordMap: Record<string, number> = {};
     recentResponses
-      .filter((r) => r.stageIndex === 8)
+      .filter((r) => r.stageIndex === 8 && r.interactionType === 'text')
       .forEach((r) => {
         const word = r.value.toLowerCase();
         wordMap[word] = (wordMap[word] || 0) + 1;
       });
     return Object.entries(wordMap).map(([text, count]) => ({ text, count }));
-  }, [results, recentResponses]);
+  }, [recentResponses]);
 
   return (
     <group>
@@ -30,9 +24,20 @@ export default function Stage09CustomersAre() {
         {'In one word, your biggest\nCX challenge?'}
       </FloatingText>
 
-      <WordCloud3D words={words} spread={5} position={[0, 0, 0]} />
+      {words.length > 0 ? (
+        <WordCloud3D words={words} spread={5} position={[0, 0, 0]} />
+      ) : (
+        <group>
+          <FloatingText position={[0, 0, 0]} fontSize={0.2} color="#ef223a" delay={0.8}>
+            Check your phone to respond
+          </FloatingText>
+          <FloatingText position={[0, -0.5, 0]} fontSize={0.14} color="#7e869c" delay={1}>
+            Words will appear here as they come in
+          </FloatingText>
+        </group>
+      )}
 
-      <FloatingText position={[0, -3.5, 0]} fontSize={0.18} color="#7e869c" delay={0.5}>
+      <FloatingText position={[0, -2.8, 0]} fontSize={0.18} color="#7e869c" delay={0.5}>
         {`${words.length} responses`}
       </FloatingText>
 

@@ -1,9 +1,19 @@
-import { GlowingPillar, FloatingText, ParticleField, BarChart3D, SceneAccents } from '../objects';
+import { GlowingPillar, FloatingText, ParticleField, SceneAccents } from '../objects';
 import { usePresenterStore } from '../store';
+import { useMemo } from 'react';
 
 export default function Stage16Innovation() {
-  const results = usePresenterStore((s) => s.aggregateResults);
-  const pollData = results?.stageIndex === 15 ? results.results : {};
+  const recentResponses = usePresenterStore((s) => s.recentResponses);
+
+  const pollData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    recentResponses
+      .filter((r) => r.stageIndex === 15 && r.interactionType === 'poll')
+      .forEach((r) => {
+        counts[r.value] = (counts[r.value] || 0) + 1;
+      });
+    return counts;
+  }, [recentResponses]);
 
   const maxVotes = Math.max(...Object.values(pollData), 1);
 
