@@ -1,4 +1,4 @@
-import { Suspense, lazy, type ComponentType } from 'react';
+import { Suspense, lazy, type ComponentType, createContext, useContext } from 'react';
 import { STAGES } from '@twilio-preso/shared';
 import { usePresenterStore } from '../store';
 
@@ -28,21 +28,26 @@ const stageComponents: Record<string, React.LazyExoticComponent<ComponentType>> 
 
 export { STAGE_SPACING };
 
+export const StageActiveContext = createContext(false);
+export function useIsStageActive() { return useContext(StageActiveContext); }
+
 export function StageContainer() {
   const currentStageIndex = usePresenterStore((s) => s.currentStageIndex);
 
   return (
     <group>
       {STAGES.map((stage, i) => {
-        // Only render the current stage (Html elements bleed if we render neighbors)
-        if (i !== currentStageIndex) return null;
+        if (Math.abs(i - currentStageIndex) > 1) return null;
 
         const StageComponent = stageComponents[stage.id];
+        const isActive = i === currentStageIndex;
         return (
           <group key={stage.id} position={[0, 0, -i * STAGE_SPACING]}>
-            <Suspense fallback={null}>
-              {StageComponent && <StageComponent />}
-            </Suspense>
+            <StageActiveContext.Provider value={isActive}>
+              <Suspense fallback={null}>
+                {StageComponent && <StageComponent />}
+              </Suspense>
+            </StageActiveContext.Provider>
           </group>
         );
       })}

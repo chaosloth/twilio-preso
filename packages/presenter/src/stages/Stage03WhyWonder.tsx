@@ -1,7 +1,9 @@
 import { ParticleField, FloatingText, SceneAccents } from '../objects';
 import { Html } from '@react-three/drei';
+import { useIsStageActive } from '../components/Stage';
 
 export default function Stage03WhyWonder() {
+  const active = useIsStageActive();
   return (
     <group>
       <ParticleField count={400} spread={12} color="#ffffff" speed={0.05} size={0.012} />
@@ -11,8 +13,8 @@ export default function Stage03WhyWonder() {
         Why Wonder?
       </FloatingText>
 
-      {/* Content box */}
-      <Html position={[0, -0.3, 0]} center transform>
+      {/* Content box — only show Html when this stage is active */}
+      {active && <Html position={[0, -0.3, 0]} center transform>
         <div style={{
           background: '#000d25',
           borderRadius: 16,
@@ -42,7 +44,7 @@ export default function Stage03WhyWonder() {
             Behind every experience that feels like magic is someone who built it.
           </p>
         </div>
-      </Html>
+      </Html>}
 
       <SceneAccents count={8} spread={12} seed={3} />
       <pointLight position={[0, 3, 3]} intensity={0.8} color="#ef223a" />

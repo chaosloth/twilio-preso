@@ -1,5 +1,6 @@
 import { FloatingText, ParticleField, SceneAccents } from '../objects';
 import { Html } from '@react-three/drei';
+import { useIsStageActive } from '../components/Stage';
 import { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import gsap from 'gsap';
@@ -12,7 +13,7 @@ const cards = [
   { time: '+8 min', label: 'Travel compensation' },
 ];
 
-function TimeCard({ time, label, targetX, targetY, index }: { time: string; label: string; targetX: number; targetY: number; index: number }) {
+function TimeCard({ time, label, targetX, targetY, index, active }: { time: string; label: string; targetX: number; targetY: number; index: number; active: boolean }) {
   const ref = useRef<Group>(null);
 
   useEffect(() => {
@@ -43,7 +44,7 @@ function TimeCard({ time, label, targetX, targetY, index }: { time: string; labe
   return (
     <group ref={ref} position={[0, 0, 0]}>
       <pointLight position={[0, 0, -0.2]} color="#ef223a" intensity={0.3} distance={1.5} />
-      <Html center transform>
+      {active && <Html center transform>
         <div style={{
           width: 110,
           height: 80,
@@ -82,12 +83,13 @@ function TimeCard({ time, label, targetX, targetY, index }: { time: string; labe
             50% { border-color: rgba(239, 34, 58, 0.7); box-shadow: 0 0 20px rgba(239, 34, 58, 0.4); }
           }
         `}</style>
-      </Html>
+      </Html>}
     </group>
   );
 }
 
 export default function Stage06PatienceDeficit() {
+  const active = useIsStageActive();
   const clockRef = useRef<Group>(null);
 
   useFrame((state) => {
@@ -117,10 +119,10 @@ export default function Stage06PatienceDeficit() {
       </group>
 
       {/* Time cards in 2x2 grid - right two thirds */}
-      <TimeCard time={cards[0].time} label={cards[0].label} targetX={0.8} targetY={0.8} index={0} />
-      <TimeCard time={cards[1].time} label={cards[1].label} targetX={3.8} targetY={0.8} index={1} />
-      <TimeCard time={cards[2].time} label={cards[2].label} targetX={0.8} targetY={-1.5} index={2} />
-      <TimeCard time={cards[3].time} label={cards[3].label} targetX={3.8} targetY={-1.5} index={3} />
+      <TimeCard time={cards[0].time} label={cards[0].label} targetX={0.8} targetY={0.8} index={0} active={active} />
+      <TimeCard time={cards[1].time} label={cards[1].label} targetX={3.8} targetY={0.8} index={1} active={active} />
+      <TimeCard time={cards[2].time} label={cards[2].label} targetX={0.8} targetY={-1.5} index={2} active={active} />
+      <TimeCard time={cards[3].time} label={cards[3].label} targetX={3.8} targetY={-1.5} index={3} active={active} />
 
       <FloatingText position={[0, -2.8, 0]} fontSize={0.1} color="#4d5777" delay={1.5}>
         Source: Decoding Digital Patience Report, Twilio

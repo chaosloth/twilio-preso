@@ -1,5 +1,6 @@
 import { FloatingText, ParticleField, SceneAccents } from '../objects';
 import { Html } from '@react-three/drei';
+import { useIsStageActive } from '../components/Stage';
 import { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import gsap from 'gsap';
@@ -14,7 +15,7 @@ const chapters = [
   { title: 'Building for\nwonder' },
 ];
 
-function ChapterCard({ index, title, targetX }: { index: number; title: string; targetX: number }) {
+function ChapterCard({ index, title, targetX, active }: { index: number; title: string; targetX: number; active: boolean }) {
   const ref = useRef<Group>(null);
 
   useEffect(() => {
@@ -99,6 +100,7 @@ function ChapterCard({ index, title, targetX }: { index: number; title: string; 
 }
 
 export default function Stage04StoryArc() {
+  const active = useIsStageActive();
   const gap = 2;
   const totalWidth = (chapters.length - 1) * gap;
   const startX = -totalWidth / 2;
@@ -117,6 +119,7 @@ export default function Stage04StoryArc() {
           index={i}
           title={chapter.title}
           targetX={startX + i * gap}
+          active={active}
         />
       ))}
 
