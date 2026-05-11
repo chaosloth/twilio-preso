@@ -30,14 +30,22 @@ export { STAGE_SPACING };
 
 export function StageContainer() {
   const currentStageIndex = usePresenterStore((s) => s.currentStageIndex);
-  const stage = STAGES[currentStageIndex];
-  const StageComponent = stage ? stageComponents[stage.id] : null;
 
   return (
     <group>
-      <Suspense fallback={null}>
-        {StageComponent && <StageComponent />}
-      </Suspense>
+      {STAGES.map((stage, i) => {
+        // Only render the current stage (Html elements bleed if we render neighbors)
+        if (i !== currentStageIndex) return null;
+
+        const StageComponent = stageComponents[stage.id];
+        return (
+          <group key={stage.id} position={[0, 0, -i * STAGE_SPACING]}>
+            <Suspense fallback={null}>
+              {StageComponent && <StageComponent />}
+            </Suspense>
+          </group>
+        );
+      })}
     </group>
   );
 }
