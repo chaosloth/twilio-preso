@@ -1,6 +1,7 @@
 import { SyncClient } from 'twilio-sync';
 import type { AudienceResponseEvent, PresentationStateDoc, StageAdvanceEvent, InteractionPromptEvent, InteractionConfig, AggregateResultsDoc } from '@twilio-preso/shared';
 import { usePresenterStore } from './store';
+import { suppressPublish } from './hooks/useNavigation';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 const EVENT_STREAM = 'event-stream';
@@ -8,13 +9,13 @@ const PRESENTATION_STATE_DOC = 'presentation-state';
 const AGGREGATE_RESULTS_DOC = 'aggregate-results';
 
 let syncClient: SyncClient | null = null;
-let isController = false;
+let stateDocument: any = null;
+const windowId = `presenter-${Math.random().toString(36).slice(2)}`;
 
-export async function initPresenterSync(controller = false): Promise<void> {
-  isController = controller;
+export async function initPresenterSync(): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(`${BACKEND_URL}/api/token?identity=presenter-${Date.now()}`);
+    res = await fetch(`${BACKEND_URL}/api/token?identity=${windowId}`);
   } catch {
     return;
   }
@@ -22,6 +23,7 @@ export async function initPresenterSync(controller = false): Promise<void> {
 
   syncClient = new SyncClient(token);
 
+  // Subscribe to event stream
   const stream = await syncClient.stream(EVENT_STREAM);
   stream.on('messagePublished', (event: { message: { data: any } }) => {
     const data = event.message.data;
@@ -30,21 +32,33 @@ export async function initPresenterSync(controller = false): Promise<void> {
     } else if (data.type === 'participant-joined') {
       const store = usePresenterStore.getState();
       store.setTotalParticipants(store.totalParticipants + 1);
-    } else if (data.type === 'stage-advance') {
-      // All presenter windows follow stage-advance events
-      const store = usePresenterStore.getState();
-      if (store.currentStageIndex !== data.stageIndex) {
-        store.goTo(data.stageIndex);
-      }
     }
   });
 
-  const stateDoc = await syncClient.document(PRESENTATION_STATE_DOC);
-  stateDoc.on('updated', (event: { data: any }) => {
+  // Subscribe to presentation state document — this is the PRIMARY sync mechanism
+  // All windows watch this document. When any window advances, it updates the doc.
+  stateDocument = await syncClient.document(PRESENTATION_STATE_DOC);
+  const initialData = stateDocument.data as PresentationStateDoc;
+  if (initialData.currentStageIndex !== undefined && initialData.currentStageIndex !== 0) {
+    suppressPublish();
+    usePresenterStore.getState().goTo(initialData.currentStageIndex);
+  }
+  if (initialData.totalParticipants) {
+    usePresenterStore.getState().setTotalParticipants(initialData.totalParticipants);
+  }
+
+  stateDocument.on('updated', (event: { data: any }) => {
     const data = event.data as PresentationStateDoc;
-    usePresenterStore.getState().setTotalParticipants(data.totalParticipants);
+    const store = usePresenterStore.getState();
+    // Sync stage from document — this fires for ALL clients including cross-laptop
+    if (data.currentStageIndex !== undefined && data.currentStageIndex !== store.currentStageIndex) {
+      suppressPublish();
+      store.goTo(data.currentStageIndex);
+    }
+    store.setTotalParticipants(data.totalParticipants);
   });
 
+  // Subscribe to aggregate results
   const resultsDoc = await syncClient.document(AGGREGATE_RESULTS_DOC);
   resultsDoc.on('updated', (event: { data: any }) => {
     usePresenterStore.getState().setAggregateResults(event.data as AggregateResultsDoc);
@@ -54,6 +68,18 @@ export async function initPresenterSync(controller = false): Promise<void> {
 }
 
 export async function publishStageAdvance(stageIndex: number): Promise<void> {
+  // Update the Sync Document — all other windows will receive the update
+  if (stateDocument) {
+    try {
+      await stateDocument.update({
+        currentStageIndex: stageIndex,
+      });
+    } catch (err) {
+      console.warn('Failed to update presentation state:', err);
+    }
+  }
+
+  // Also publish to stream for audience apps
   if (!syncClient) return;
   try {
     const stream = await syncClient.stream(EVENT_STREAM);

@@ -1,14 +1,21 @@
 import { useEffect, useRef } from 'react';
 import { usePresenterStore } from '../store';
 import { STAGES } from '@twilio-preso/shared';
-import { publishStageAdvance, publishInteractionPrompt, triggerDemo, isSyncConnected } from '../sync';
+import { publishStageAdvance, publishInteractionPrompt, triggerDemo } from '../sync';
+
+let suppressNextPublish = false;
+
+// Call this when stage changes come from Sync (external source)
+export function suppressPublish() {
+  suppressNextPublish = true;
+}
 
 export function useNavigation() {
   const advance = usePresenterStore((s) => s.advance);
   const back = usePresenterStore((s) => s.back);
   const currentStageIndex = usePresenterStore((s) => s.currentStageIndex);
-  const lastPublishedIndex = useRef(-1);
-  const demoEnabled = usePresenterStore((s) => s.isLive);
+  const isLive = usePresenterStore((s) => s.isLive);
+  const prevStageIndex = useRef(currentStageIndex);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -50,15 +57,20 @@ export function useNavigation() {
     return () => channel.close();
   }, []);
 
-  // When stage changes locally (from keyboard), publish to Sync so all windows follow
+  // When stage changes, publish to Sync and trigger demos
   useEffect(() => {
-    // Prevent re-publishing if we just received this from Sync
-    if (currentStageIndex === lastPublishedIndex.current) return;
-    lastPublishedIndex.current = currentStageIndex;
+    if (currentStageIndex === prevStageIndex.current) return;
+    prevStageIndex.current = currentStageIndex;
+
+    // If this change came from Sync, don't re-publish
+    if (suppressNextPublish) {
+      suppressNextPublish = false;
+      return;
+    }
 
     const stage = STAGES[currentStageIndex];
 
-    // Publish to Sync (all presenter windows + audience apps receive this)
+    // Publish to Sync (updates document, all windows follow)
     publishStageAdvance(currentStageIndex);
 
     // Broadcast to local notes window
@@ -66,16 +78,16 @@ export function useNavigation() {
     channel.postMessage({ type: 'stage-change', stageIndex: currentStageIndex });
     channel.close();
 
-    // If stage has an interaction, publish the prompt
+    // If stage has an interaction, publish the prompt to audience
     if (stage.interaction) {
       publishInteractionPrompt(stage.interaction);
     }
 
     // If stage has a demo trigger AND demos are enabled, fire it
-    if (stage.demoTrigger && demoEnabled) {
+    if (stage.demoTrigger && isLive) {
       triggerDemo(stage.demoTrigger).catch((err) => {
         console.error(`Demo trigger failed for ${stage.demoTrigger}:`, err);
       });
     }
-  }, [currentStageIndex, demoEnabled]);
+  }, [currentStageIndex, isLive]);
 }
