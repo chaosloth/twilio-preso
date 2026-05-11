@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect } from 'react';
 import { Camera } from './components/Camera';
 import { StageContainer } from './components/Stage';
 import { PostProcessing } from './components/PostProcessing';
@@ -109,33 +109,6 @@ function ResponseStream() {
   );
 }
 
-function TransitionOverlay() {
-  const stageIndex = usePresenterStore((s) => s.currentStageIndex);
-  const [opacity, setOpacity] = useState(0);
-  const prevStage = useRef(stageIndex);
-
-  useEffect(() => {
-    if (stageIndex !== prevStage.current) {
-      prevStage.current = stageIndex;
-      setOpacity(1);
-      const timer = setTimeout(() => setOpacity(0), 400);
-      return () => clearTimeout(timer);
-    }
-  }, [stageIndex]);
-
-  return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: '#000d25',
-      opacity,
-      transition: 'opacity 0.3s ease-in-out',
-      pointerEvents: 'none',
-      zIndex: 10,
-    }} />
-  );
-}
-
 export function App() {
   useEffect(() => {
     initPresenterSync().catch(() => {});
@@ -152,7 +125,6 @@ export function App() {
         <fog attach="fog" args={['#000d25', 15, 40]} />
         <Scene />
       </Canvas>
-      <TransitionOverlay />
       <InteractionIndicator />
       <ResponseStream />
       <HUD />

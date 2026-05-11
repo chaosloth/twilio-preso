@@ -13,10 +13,9 @@ function getCameraMove(fromIndex: number, toIndex: number): CameraMove {
   const fromStage = STAGES[fromIndex];
   if (!toStage || !fromStage) return 'dolly';
 
-  // Act transitions get dramatic moves
+  // Act transitions — smooth dolly (rise/dive was too jarring with Html cards)
   if (toStage.act !== fromStage.act) {
-    if (toStage.act > fromStage.act) return 'rise';
-    return 'dive';
+    return 'dolly';
   }
 
   // Product deep-dives (stages 12-15) alternate arcs

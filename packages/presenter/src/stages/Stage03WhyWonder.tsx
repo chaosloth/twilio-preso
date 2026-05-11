@@ -1,4 +1,5 @@
 import { ParticleField, FloatingText, SceneAccents } from '../objects';
+import { Html } from '@react-three/drei';
 
 export default function Stage03WhyWonder() {
   return (
@@ -10,25 +11,38 @@ export default function Stage03WhyWonder() {
         Why Wonder?
       </FloatingText>
 
-      {/* Content box as 3D mesh — won't bleed into other stages */}
-      <group position={[0, -0.2, 0]}>
-        <mesh position={[0, 0, -0.05]}>
-          <planeGeometry args={[9, 3.5]} />
-          <meshStandardMaterial color="#000d25" transparent opacity={0.9} />
-        </mesh>
-        {/* Border effect */}
-        <mesh position={[0, 0, -0.04]}>
-          <planeGeometry args={[9.05, 3.55]} />
-          <meshStandardMaterial color="#1e3a5f" transparent opacity={0.3} />
-        </mesh>
-
-        <FloatingText position={[0, 0.5, 0]} fontSize={0.22} color="#babecc" delay={0.6} maxWidth={7.5}>
-          Technology once inspired awe. Today, speed and automation risk flattening experiences into something invisible. Wonder connects technology to imagination.
-        </FloatingText>
-        <FloatingText position={[0, -1, 0]} fontSize={0.2} color="#ef223a" delay={1} maxWidth={7.5}>
-          Behind every experience that feels like magic is someone who built it.
-        </FloatingText>
-      </group>
+      {/* Content box */}
+      <Html position={[0, -0.3, 0]} center transform>
+        <div style={{
+          background: '#000d25',
+          borderRadius: 16,
+          padding: '32px 40px',
+          maxWidth: 580,
+          border: '2px solid rgba(239, 34, 58, 0.3)',
+          boxShadow: '0 0 20px rgba(239, 34, 58, 0.1)',
+        }}>
+          <p style={{
+            color: '#babecc',
+            fontSize: 18,
+            lineHeight: 1.7,
+            margin: 0,
+            fontFamily: "'Space Grotesk', sans-serif",
+          }}>
+            Technology once inspired awe. Today, speed and automation risk flattening experiences into something invisible. Wonder connects technology to imagination.
+          </p>
+          <p style={{
+            color: '#ef223a',
+            fontSize: 16,
+            lineHeight: 1.6,
+            marginTop: 16,
+            marginBottom: 0,
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontWeight: 500,
+          }}>
+            Behind every experience that feels like magic is someone who built it.
+          </p>
+        </div>
+      </Html>
 
       <SceneAccents count={8} spread={12} seed={3} />
       <pointLight position={[0, 3, 3]} intensity={0.8} color="#ef223a" />
