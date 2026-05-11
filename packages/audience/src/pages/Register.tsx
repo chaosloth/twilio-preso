@@ -174,6 +174,8 @@ export function Register({ onRegistered }: RegisterProps) {
               onChange={(e) => setName(e.target.value)}
               required
               autoFocus
+              autoComplete="name"
+              name="name"
               className="w-full px-4 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white placeholder-accent-2 focus:outline-none focus:border-twilio-red"
             />
             <input
