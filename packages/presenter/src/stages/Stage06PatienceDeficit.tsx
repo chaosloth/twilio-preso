@@ -1,7 +1,57 @@
 import { FloatingText, ParticleField, SceneAccents } from '../objects';
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
+import gsap from 'gsap';
 import type { Group } from 'three';
+
+const cards = [
+  { time: '+1 min', label: 'Financial disputes', x: -2.5, y: 0.5 },
+  { time: '+7 min', label: 'Troubleshooting', x: 2.5, y: 0.5 },
+  { time: '+2 min', label: 'Loan/policy', x: -2.5, y: -1.5 },
+  { time: '+8 min', label: 'Travel compensation', x: 2.5, y: -1.5 },
+];
+
+function TimeCard({ time, label, x, y, index }: { time: string; label: string; x: number; y: number; index: number }) {
+  const ref = useRef<Group>(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.scale.set(0, 0, 0);
+    gsap.to(ref.current.scale, {
+      x: 1, y: 1, z: 1,
+      duration: 0.5,
+      delay: 0.4 + index * 0.2,
+      ease: 'back.out(1.5)',
+    });
+  }, [index]);
+
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.position.y = y + Math.sin(state.clock.elapsedTime * 0.6 + index * 1.5) * 0.04;
+    }
+  });
+
+  return (
+    <group ref={ref} position={[x, y, 0]}>
+      {/* Card background */}
+      <mesh position={[0, 0, -0.02]}>
+        <planeGeometry args={[2.2, 1.2]} />
+        <meshStandardMaterial color="#000d25" transparent opacity={0.95} />
+      </mesh>
+      {/* Border */}
+      <mesh position={[0, 0, -0.03]}>
+        <planeGeometry args={[2.25, 1.25]} />
+        <meshStandardMaterial color="#ef223a" transparent opacity={0.3} />
+      </mesh>
+      <FloatingText position={[0, 0.2, 0]} fontSize={0.3} color="#ef223a" bold delay={0.5 + index * 0.2}>
+        {time}
+      </FloatingText>
+      <FloatingText position={[0, -0.25, 0]} fontSize={0.12} color="#7e869c" delay={0.6 + index * 0.2}>
+        {label}
+      </FloatingText>
+    </group>
+  );
+}
 
 export default function Stage06PatienceDeficit() {
   const clockRef = useRef<Group>(null);
@@ -14,59 +64,35 @@ export default function Stage06PatienceDeficit() {
 
   return (
     <group>
-      <ParticleField count={100} color="#ef223a" speed={0.05} spread={12} size={0.012} />
+      <ParticleField count={80} color="#ef223a" speed={0.05} spread={12} size={0.012} />
 
-      <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2}>
+      <FloatingText position={[0, 2.8, 0]} fontSize={0.45} color="#ffffff" bold delay={0.2}>
         The Patience Deficit
       </FloatingText>
 
-      {/* Clock face - smaller, positioned left */}
-      <group ref={clockRef} position={[-3.5, 0.5, 0]}>
+      {/* Clock face */}
+      <group ref={clockRef} position={[0, -0.5, -0.5]}>
         <mesh>
-          <ringGeometry args={[0.9, 1.05, 64]} />
-          <meshStandardMaterial color="#ef223a" emissive="#ef223a" emissiveIntensity={0.5} />
+          <ringGeometry args={[1.8, 2, 64]} />
+          <meshStandardMaterial color="#ef223a" emissive="#ef223a" emissiveIntensity={0.15} transparent opacity={0.2} />
         </mesh>
-        <mesh position={[0, 0.3, 0.1]}>
-          <boxGeometry args={[0.03, 0.6, 0.02]} />
-          <meshStandardMaterial color="#ffffff" />
+        <mesh position={[0, 0.5, 0.1]}>
+          <boxGeometry args={[0.03, 1, 0.02]} />
+          <meshStandardMaterial color="#ef223a" transparent opacity={0.3} />
         </mesh>
       </group>
 
-      {/* Wait time cards - 2x2 grid */}
-      <FloatingText position={[-0.5, 0.8, 0]} fontSize={0.35} color="#ef223a" bold delay={0.5}>
-        +1 min
-      </FloatingText>
-      <FloatingText position={[-0.5, 0.35, 0]} fontSize={0.12} color="#7e869c" delay={0.6}>
-        Financial disputes
-      </FloatingText>
+      {/* Time cards in 2x2 grid */}
+      {cards.map((card, i) => (
+        <TimeCard key={i} index={i} time={card.time} label={card.label} x={card.x} y={card.y} />
+      ))}
 
-      <FloatingText position={[3, 0.8, 0]} fontSize={0.35} color="#ef223a" bold delay={0.7}>
-        +7 min
-      </FloatingText>
-      <FloatingText position={[3, 0.35, 0]} fontSize={0.12} color="#7e869c" delay={0.8}>
-        Troubleshooting
-      </FloatingText>
-
-      <FloatingText position={[-0.5, -0.8, 0]} fontSize={0.35} color="#ef223a" bold delay={0.9}>
-        +2 min
-      </FloatingText>
-      <FloatingText position={[-0.5, -1.25, 0]} fontSize={0.12} color="#7e869c" delay={1}>
-        Loan/policy
-      </FloatingText>
-
-      <FloatingText position={[3, -0.8, 0]} fontSize={0.35} color="#ef223a" bold delay={1.1}>
-        +8 min
-      </FloatingText>
-      <FloatingText position={[3, -1.25, 0]} fontSize={0.12} color="#7e869c" delay={1.2}>
-        Travel compensation
-      </FloatingText>
-
-      <FloatingText position={[0, -2.5, 0]} fontSize={0.1} color="#4d5777" delay={1.5}>
+      <FloatingText position={[0, -2.8, 0]} fontSize={0.1} color="#4d5777" delay={1.5}>
         Source: Decoding Digital Patience Report, Twilio
       </FloatingText>
 
-      <SceneAccents count={8} spread={10} seed={6} />
-      <pointLight position={[0, 2, 3]} color="#ef223a" intensity={1.5} distance={8} />
+      <SceneAccents count={6} spread={10} seed={6} />
+      <pointLight position={[0, 2, 3]} color="#ef223a" intensity={1} distance={8} />
     </group>
   );
 }

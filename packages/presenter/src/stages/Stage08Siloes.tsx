@@ -1,26 +1,67 @@
 import { FloatingText, ParticleField, SceneAccents } from '../objects';
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
+import gsap from 'gsap';
 import type { Group } from 'three';
 
-export default function Stage08Siloes() {
-  const islandsRef = useRef<Group>(null);
+const islands = [
+  { label: 'SMS' },
+  { label: 'Voice' },
+  { label: 'Email' },
+  { label: 'Chat' },
+  { label: 'Social' },
+];
+
+function SiloCard({ label, targetX, index }: { label: string; targetX: number; index: number }) {
+  const ref = useRef<Group>(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.position.x = 0;
+    ref.current.scale.set(0, 0, 0);
+    gsap.to(ref.current.position, {
+      x: targetX,
+      duration: 0.7,
+      delay: 0.3 + index * 0.12,
+      ease: 'back.out(1.2)',
+    });
+    gsap.to(ref.current.scale, {
+      x: 1, y: 1, z: 1,
+      duration: 0.5,
+      delay: 0.3 + index * 0.12,
+      ease: 'back.out(1.5)',
+    });
+  }, [index, targetX]);
 
   useFrame((state) => {
-    if (islandsRef.current) {
-      islandsRef.current.children.forEach((child, i) => {
-        child.position.y += Math.sin(state.clock.elapsedTime * 0.3 + i * 2) * 0.001;
-      });
+    if (ref.current) {
+      ref.current.position.y = -0.5 + Math.sin(state.clock.elapsedTime * 0.5 + index * 1.3) * 0.06;
     }
   });
 
-  const islands = [
-    { label: 'SMS', x: -3.5, y: 1.5 },
-    { label: 'Voice', x: 3, y: 0.5 },
-    { label: 'Email', x: -1, y: -2 },
-    { label: 'Chat', x: 3.5, y: -1.5 },
-    { label: 'Social', x: -3, y: -1 },
-  ];
+  return (
+    <group ref={ref} position={[0, -0.5, 0]}>
+      {/* Card background */}
+      <mesh position={[0, 0, -0.02]}>
+        <planeGeometry args={[1.4, 1]} />
+        <meshStandardMaterial color="#000d25" transparent opacity={0.95} />
+      </mesh>
+      {/* Border */}
+      <mesh position={[0, 0, -0.03]}>
+        <planeGeometry args={[1.45, 1.05]} />
+        <meshStandardMaterial color="#ef223a" transparent opacity={0.3} />
+      </mesh>
+      <FloatingText position={[0, 0, 0]} fontSize={0.2} color="#ef223a" delay={0.4 + index * 0.12}>
+        {label}
+      </FloatingText>
+    </group>
+  );
+}
+
+export default function Stage08Siloes() {
+  const gap = 1.8;
+  const totalWidth = (islands.length - 1) * gap;
+  const startX = -totalWidth / 2;
 
   return (
     <group>
@@ -28,27 +69,19 @@ export default function Stage08Siloes() {
         {'The result for employees\nand customers is siloes.'}
       </FloatingText>
 
-      <group ref={islandsRef}>
-        {islands.map((island, i) => (
-          <group key={island.label} position={[island.x, island.y, 0]}>
-            <mesh>
-              <boxGeometry args={[1.8, 1, 0.3]} />
-              <meshStandardMaterial
-                color="#06102a"
-                emissive="#ef223a"
-                emissiveIntensity={0.05}
-              />
-            </mesh>
-            <FloatingText position={[0, 0, 0.2]} fontSize={0.18} color="#ef223a" delay={0.3 + i * 0.15}>
-              {island.label}
-            </FloatingText>
-          </group>
-        ))}
-      </group>
+      {islands.map((island, i) => (
+        <SiloCard
+          key={island.label}
+          label={island.label}
+          targetX={startX + i * gap}
+          index={i}
+        />
+      ))}
 
-      {/* Broken connections - red dashed lines that don't connect */}
-      <ParticleField count={150} spread={10} color="#ef223a" speed={0.02} size={0.015} />
-      <SceneAccents count={10} spread={12} seed={8} />
+      {/* Broken connections */}
+      <ParticleField count={80} spread={10} color="#ef223a" speed={0.02} size={0.012} />
+      <SceneAccents count={6} spread={12} seed={8} />
+      <pointLight position={[0, 0, 3]} color="#ef223a" intensity={0.8} distance={8} />
     </group>
   );
 }
