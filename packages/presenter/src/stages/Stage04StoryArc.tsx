@@ -1,6 +1,7 @@
 import { FloatingText, ParticleField, SceneAccents } from '../objects';
 import { Html } from '@react-three/drei';
 import { useRef, useEffect } from 'react';
+import { useFrame } from '@react-three/fiber';
 import gsap from 'gsap';
 import type { Group } from 'three';
 
@@ -34,10 +35,25 @@ function ChapterCard({ index, title, targetX }: { index: number; title: string; 
     });
   }, [index, targetX]);
 
+  // Ongoing gentle float animation
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.position.y = Math.sin(state.clock.elapsedTime * 0.8 + index * 1.2) * 0.08;
+      ref.current.rotation.z = Math.sin(state.clock.elapsedTime * 0.5 + index * 0.9) * 0.02;
+    }
+  });
+
   return (
     <group ref={ref} position={[0, 0, 0]}>
+      {/* Sparkle glow behind card */}
+      <pointLight
+        position={[0, 0, -0.2]}
+        color="#ef223a"
+        intensity={0.4 + Math.sin(index * 2) * 0.2}
+        distance={1.5}
+      />
       <Html center transform>
-        <div style={{
+        <div className={`chapter-card card-${index}`} style={{
           width: 70,
           height: 100,
           background: '#000d25',
@@ -46,7 +62,9 @@ function ChapterCard({ index, title, targetX }: { index: number; title: string; 
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          border: '1px solid rgba(239, 34, 58, 0.15)',
+          border: '2px solid rgba(239, 34, 58, 0.4)',
+          boxShadow: '0 0 12px rgba(239, 34, 58, 0.2), inset 0 0 8px rgba(239, 34, 58, 0.05)',
+          animation: `shimmer 3s ease-in-out ${index * 0.5}s infinite`,
         }}>
           <div style={{
             fontSize: 20,
@@ -69,6 +87,12 @@ function ChapterCard({ index, title, targetX }: { index: number; title: string; 
             {title}
           </div>
         </div>
+        <style>{`
+          @keyframes shimmer {
+            0%, 100% { border-color: rgba(239, 34, 58, 0.4); box-shadow: 0 0 12px rgba(239, 34, 58, 0.2), inset 0 0 8px rgba(239, 34, 58, 0.05); }
+            50% { border-color: rgba(239, 34, 58, 0.7); box-shadow: 0 0 20px rgba(239, 34, 58, 0.4), inset 0 0 12px rgba(239, 34, 58, 0.1); }
+          }
+        `}</style>
       </Html>
     </group>
   );
