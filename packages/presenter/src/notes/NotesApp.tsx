@@ -53,6 +53,19 @@ export function NotesApp() {
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch current mode on load
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/admin/mode`);
+        if (res.ok) {
+          const data = await res.json();
+          setDemoEnabled(data.isLive);
+        }
+      } catch {}
+    })();
+  }, []);
+
   // Poll participants every 5 seconds
   useEffect(() => {
     const fetchParticipants = async () => {
@@ -92,13 +105,19 @@ export function NotesApp() {
     setParticipants([]);
   }
 
-  function toggleDemo() {
+  async function toggleDemo() {
     const newState = !demoEnabled;
     setDemoEnabled(newState);
-    // Broadcast to presenter windows
     const channel = new BroadcastChannel('presenter-sync');
     channel.postMessage({ type: 'demo-toggle', enabled: newState });
     channel.close();
+    try {
+      await fetch(`${BACKEND_URL}/api/admin/mode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isLive: newState }),
+      });
+    } catch {}
   }
 
   return (

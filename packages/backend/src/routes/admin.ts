@@ -24,6 +24,26 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // Get presentation mode (live/rehearsal)
+  app.get('/api/admin/mode', async () => {
+    try {
+      const doc = await syncService.documents('presentation-state').fetch();
+      return { isLive: doc.data.isLive ?? true };
+    } catch {
+      return { isLive: true };
+    }
+  });
+
+  // Toggle presentation mode
+  app.post('/api/admin/mode', async (request) => {
+    const { isLive } = request.body as { isLive: boolean };
+    const doc = await syncService.documents('presentation-state').fetch();
+    await syncService.documents('presentation-state').update({
+      data: { ...doc.data, isLive },
+    });
+    return { isLive };
+  });
+
   // Reset all participants
   app.post('/api/admin/reset', async () => {
     try {
