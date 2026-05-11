@@ -17,16 +17,16 @@ export default function Stage02Speakers() {
       <group position={[0, -1.4, 0]}>
         <mesh>
           <planeGeometry args={[3.5, 0.55]} />
-          <meshStandardMaterial color="#1a2540" transparent opacity={0.9} />
+          <meshStandardMaterial color="#1e3a5f" transparent opacity={0.9} />
         </mesh>
         {/* Rounded edges via smaller planes on sides */}
         <mesh position={[-1.65, 0, 0]}>
           <circleGeometry args={[0.275, 32]} />
-          <meshStandardMaterial color="#1a2540" transparent opacity={0.9} />
+          <meshStandardMaterial color="#1e3a5f" transparent opacity={0.9} />
         </mesh>
         <mesh position={[1.65, 0, 0]}>
           <circleGeometry args={[0.275, 32]} />
-          <meshStandardMaterial color="#1a2540" transparent opacity={0.9} />
+          <meshStandardMaterial color="#1e3a5f" transparent opacity={0.9} />
         </mesh>
         <FloatingText position={[0, 0, 0.05]} fontSize={0.18} color="#babecc" delay={0.7}>
           Twilio World Tour 2026
