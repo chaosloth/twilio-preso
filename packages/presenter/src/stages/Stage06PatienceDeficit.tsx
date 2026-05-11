@@ -126,7 +126,6 @@ export default function Stage06PatienceDeficit() {
         Source: Decoding Digital Patience Report, Twilio
       </FloatingText>
 
-      <SceneAccents count={6} spread={10} seed={6} />
       <pointLight position={[0, 2, 3]} color="#ef223a" intensity={1} distance={8} />
     </group>
   );
