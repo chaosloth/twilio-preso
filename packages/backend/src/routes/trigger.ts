@@ -108,7 +108,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
     const voice = process.env.TWILIO_VOICE || 'Google.en-AU-Neural2-B';
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="${voice}">Hey there! You just experienced a mass outbound call from an AI agent that was built live, on stage, in under 5 minutes. That's the power of Twilio. Every phone in the room just rang simultaneously. Whether you're reaching 1 customer or 1000, Twilio scales with you. Thanks for being part of the magic today. See you at the next SIGNAL!</Say>
+  <Say voice="${voice}">Hey there! You just experienced a mass outbound call from an AI agent that was built live, on stage, in under 5 minutes. That's the power of Twilio. Every phone in the room just rang simultaneously. Whether you're reaching 1 customer or 1000, Twilio scales with you. Thanks for being part of the magic today. We can't wait to see what you build with Twilio.</Say>
   <Pause length="1"/>
   <Hangup/>
 </Response>`;
