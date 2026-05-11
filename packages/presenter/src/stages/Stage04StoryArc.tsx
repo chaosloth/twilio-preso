@@ -38,30 +38,30 @@ function ChapterCard({ index, title, targetX }: { index: number; title: string; 
     <group ref={ref} position={[0, 0, 0]}>
       <Html center transform>
         <div style={{
-          width: 160,
-          height: 200,
-          background: '#0a1e3d',
-          borderRadius: 16,
-          padding: '20px 16px',
+          width: 120,
+          height: 150,
+          background: '#000d25',
+          borderRadius: 12,
+          padding: '14px 12px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           border: '1px solid rgba(239, 34, 58, 0.15)',
         }}>
           <div style={{
-            fontSize: 42,
+            fontSize: 28,
             fontWeight: 700,
             color: '#ef223a',
-            fontFamily: "'Tektur', sans-serif",
-            marginBottom: 12,
+            fontFamily: "'Space Grotesk', sans-serif",
+            marginBottom: 8,
           }}>
             {index + 1}
           </div>
           <div style={{
-            fontSize: 15,
+            fontSize: 11,
             color: '#ffffff',
             fontFamily: "'Space Grotesk', sans-serif",
-            fontWeight: 600,
+            fontWeight: 500,
             textAlign: 'center',
             lineHeight: 1.4,
             whiteSpace: 'pre-line',
@@ -75,7 +75,7 @@ function ChapterCard({ index, title, targetX }: { index: number; title: string; 
 }
 
 export default function Stage04StoryArc() {
-  const gap = 2.3;
+  const gap = 1.8;
   const totalWidth = (chapters.length - 1) * gap;
   const startX = -totalWidth / 2;
 
