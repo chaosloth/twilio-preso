@@ -22,6 +22,12 @@ export function useNavigation() {
           e.preventDefault();
           back();
           break;
+        case 'n':
+        case 'N':
+          if (!e.repeat) {
+            window.open('/notes', 'presenter-notes', 'width=500,height=700,menubar=no,toolbar=no');
+          }
+          break;
       }
     }
 
