@@ -1,5 +1,5 @@
 import { SyncClient } from 'twilio-sync';
-import type { AudienceResponseEvent, PresentationStateDoc, StageAdvanceEvent, InteractionPromptEvent, InteractionConfig, AggregateResultsDoc } from '@twilio-preso/shared';
+import type { AudienceResponseEvent, PresentationStateDoc, StageAdvanceEvent, InteractionPromptEvent, InteractionConfig, AggregateResultsDoc, AiPromptPendingEvent, AiPromptResponseEvent } from '@twilio-preso/shared';
 import { usePresenterStore } from './store';
 import { suppressPublish } from './hooks/useNavigation';
 
@@ -33,6 +33,10 @@ export async function initPresenterSync(): Promise<void> {
     const data = event.message.data;
     if (data.type === 'audience-response') {
       usePresenterStore.getState().addResponse(data as AudienceResponseEvent);
+    } else if (data.type === 'ai-prompt-pending') {
+      usePresenterStore.getState().addPendingAiPrompt(data as AiPromptPendingEvent);
+    } else if (data.type === 'ai-prompt-response') {
+      usePresenterStore.getState().addAiPromptResponse(data as AiPromptResponseEvent);
     } else if (data.type === 'participant-joined') {
       const store = usePresenterStore.getState();
       store.setTotalParticipants(store.totalParticipants + 1);

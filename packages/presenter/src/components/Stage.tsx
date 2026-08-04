@@ -22,6 +22,8 @@ const stageComponents: Record<string, React.LazyExoticComponent<ComponentType>> 
   memory: lazy(() => import('../stages/Stage13Memory')),
   intelligence: lazy(() => import('../stages/Stage14Intelligence')),
   'agent-connect': lazy(() => import('../stages/Stage15AgentConnect')),
+  'mcp-server': lazy(() => import('../stages/Stage16MCPServer')),
+  'ai-playground': lazy(() => import('../stages/Stage16AIPlayground')),
   innovation: lazy(() => import('../stages/Stage16Innovation')),
   'never-easier': lazy(() => import('../stages/Stage17NeverEasier')),
   'mass-call': lazy(() => import('../stages/Stage18MassCall')),

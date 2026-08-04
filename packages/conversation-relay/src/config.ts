@@ -11,7 +11,6 @@ export const config = {
     authToken: requireEnv('TWILIO_AUTH_TOKEN'),
     syncServiceSid: requireEnv('TWILIO_SYNC_SERVICE_SID'),
   },
-  anthropic: {
-    apiKey: requireEnv('ANTHROPIC_API_KEY'),
-  },
+  // LLM provider/model/key come from LLM_* env vars, validated by
+  // @twilio-preso/llm (llmConfigFromEnv) rather than duplicated here.
 } as const;

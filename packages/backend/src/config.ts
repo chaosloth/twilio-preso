@@ -16,4 +16,12 @@ export const config = {
     messagingServiceSid: requireEnv('TWILIO_MESSAGING_SERVICE_SID'),
     phoneNumber: requireEnv('TWILIO_PHONE_NUMBER'),
   },
+  // LLM provider/model/key come from LLM_* env vars, validated by
+  // @twilio-preso/llm (llmConfigFromEnv) rather than duplicated here.
+  dev: {
+    // When true, skip Twilio Verify entirely: no SMS is sent and the code
+    // below is accepted. For local development only.
+    bypassVerify: process.env.DEV_BYPASS_VERIFY === 'true',
+    bypassCode: process.env.DEV_BYPASS_CODE || '123456',
+  },
 } as const;

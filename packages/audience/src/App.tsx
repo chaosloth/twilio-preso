@@ -7,6 +7,7 @@ import { Poll } from './pages/Poll';
 import { TextInput } from './pages/TextInput';
 import { Trigger } from './pages/Trigger';
 import { Sentiment } from './pages/Sentiment';
+import { AIPrompt } from './pages/AIPrompt';
 
 type AppState = 'register' | 'waiting' | 'interaction';
 
@@ -140,6 +141,8 @@ export function App() {
         return <Trigger interaction={activeInteraction} onSubmit={handleResponse} />;
       case 'sentiment':
         return <Sentiment interaction={activeInteraction} onSubmit={handleResponse} />;
+      case 'llm-prompt':
+        return <AIPrompt interaction={activeInteraction} participantId={participantId} name={name} />;
       default:
         return <Waiting name={name} />;
     }
