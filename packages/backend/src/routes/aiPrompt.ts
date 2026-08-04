@@ -54,6 +54,11 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
       Connection: 'keep-alive',
       // Vite's dev proxy and most CDNs buffer without this.
       'X-Accel-Buffering': 'no',
+      // We write straight to the raw socket, so @fastify/cors' reply hooks
+      // never run — mirror its `origin: true` behaviour by reflecting the
+      // request origin here, or the browser blocks the streamed response.
+      'Access-Control-Allow-Origin': request.headers.origin || '*',
+      Vary: 'Origin',
     });
 
     const send = (data: unknown) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
