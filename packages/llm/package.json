@@ -1,0 +1,20 @@
+{
+  "name": "@twilio-preso/llm",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build --force",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "typescript": "^5.7.0"
+  }
+}

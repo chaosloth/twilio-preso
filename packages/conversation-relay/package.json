@@ -12,9 +12,9 @@
   "dependencies": {
     "ws": "^8.18.0",
     "twilio": "^5.0.0",
-    "@anthropic-ai/sdk": "^0.39.0",
     "dotenv": "^16.4.0",
-    "@twilio-preso/shared": "workspace:*"
+    "@twilio-preso/shared": "workspace:*",
+    "@twilio-preso/llm": "workspace:*"
   },
   "devDependencies": {
     "@types/ws": "^8.5.0",

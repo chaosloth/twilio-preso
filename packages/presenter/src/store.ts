@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PresentationStateDoc, AggregateResultsDoc, AudienceResponseEvent } from '@twilio-preso/shared';
+import type { PresentationStateDoc, AggregateResultsDoc, AudienceResponseEvent, AiPromptPendingEvent, AiPromptResponseEvent } from '@twilio-preso/shared';
 import { TOTAL_STAGES } from '@twilio-preso/shared';
 
 interface PresenterStore {
@@ -8,6 +8,9 @@ interface PresenterStore {
   activeInteraction: PresentationStateDoc['activeInteraction'];
   aggregateResults: AggregateResultsDoc | null;
   recentResponses: AudienceResponseEvent[];
+  aiPromptResponses: AiPromptResponseEvent[];
+  /** Questions submitted but not yet answered — shown with a thinking animation. */
+  pendingAiPrompts: AiPromptPendingEvent[];
   isLive: boolean;
 
   advance: () => void;
@@ -17,6 +20,8 @@ interface PresenterStore {
   setActiveInteraction: (interaction: PresentationStateDoc['activeInteraction']) => void;
   setAggregateResults: (results: AggregateResultsDoc | null) => void;
   addResponse: (response: AudienceResponseEvent) => void;
+  addAiPromptResponse: (response: AiPromptResponseEvent) => void;
+  addPendingAiPrompt: (pending: AiPromptPendingEvent) => void;
   setLive: (live: boolean) => void;
 }
 
@@ -26,6 +31,8 @@ export const usePresenterStore = create<PresenterStore>((set) => ({
   activeInteraction: null,
   aggregateResults: null,
   recentResponses: [],
+  aiPromptResponses: [],
+  pendingAiPrompts: [],
   isLive: false,
 
   advance: () => set((s) => ({ currentStageIndex: Math.min(s.currentStageIndex + 1, TOTAL_STAGES - 1) })),
@@ -35,5 +42,18 @@ export const usePresenterStore = create<PresenterStore>((set) => ({
   setActiveInteraction: (interaction) => set({ activeInteraction: interaction }),
   setAggregateResults: (results) => set({ aggregateResults: results }),
   addResponse: (response) => set((s) => ({ recentResponses: [...s.recentResponses.slice(-50), response] })),
+  addAiPromptResponse: (response) =>
+    set((s) => ({
+      aiPromptResponses: [...s.aiPromptResponses.slice(-30), response],
+      // The answer supersedes that person's pending question.
+      pendingAiPrompts: s.pendingAiPrompts.filter((p) => p.participantId !== response.participantId),
+    })),
+  addPendingAiPrompt: (pending) =>
+    set((s) => ({
+      pendingAiPrompts: [
+        ...s.pendingAiPrompts.filter((p) => p.participantId !== pending.participantId),
+        pending,
+      ],
+    })),
   setLive: (live) => set({ isLive: live }),
 }));

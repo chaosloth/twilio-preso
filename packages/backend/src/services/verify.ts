@@ -20,12 +20,19 @@ export async function lookupPhone(phone: string): Promise<{ valid: boolean; form
 }
 
 export async function startVerification(phone: string): Promise<void> {
+  if (config.dev.bypassVerify) {
+    console.log(`[dev] Verify bypass enabled — skipping SMS to ${phone}. Use code "${config.dev.bypassCode}".`);
+    return;
+  }
   await client.verify.v2
     .services(config.twilio.verifyServiceSid)
     .verifications.create({ to: phone, channel: 'sms' });
 }
 
 export async function checkVerification(phone: string, code: string): Promise<boolean> {
+  if (config.dev.bypassVerify) {
+    return code === config.dev.bypassCode;
+  }
   const check = await client.verify.v2
     .services(config.twilio.verifyServiceSid)
     .verificationChecks.create({ to: phone, code });

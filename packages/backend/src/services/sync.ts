@@ -1,6 +1,6 @@
 import Twilio from 'twilio';
 import { config } from '../config.js';
-import type { PresentationStateDoc, AggregateResultsDoc, SyncStreamEvent, Participant } from '@twilio-preso/shared';
+import type { PresentationStateDoc, AggregateResultsDoc, SyncStreamEvent, Participant, ParticipantResponse } from '@twilio-preso/shared';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 const syncService = client.sync.v1.services(config.twilio.syncServiceSid);
@@ -79,6 +79,25 @@ export async function updateParticipant(id: string, updates: Partial<Participant
   const item = await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems(id).fetch();
   await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems(id).update({
     data: { ...item.data, ...updates },
+  });
+}
+
+/**
+ * Records an answer against the participant, keyed by stage index so a re-answer
+ * replaces the old one. This is what makes later stages personal: the memory SMS
+ * trigger, the voice agent, and the AI-prompt agent all read `responses`.
+ */
+export async function recordParticipantResponse(
+  id: string,
+  response: ParticipantResponse
+): Promise<void> {
+  const item = await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems(id).fetch();
+  const participant = item.data as Participant;
+  await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems(id).update({
+    data: {
+      ...participant,
+      responses: { ...(participant.responses || {}), [response.stageIndex]: response },
+    },
   });
 }
 

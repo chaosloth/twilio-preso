@@ -73,3 +73,59 @@ export async function publishResponse(
     body: JSON.stringify({ participantId, participantName, stageIndex, interactionType, value }),
   });
 }
+
+/**
+ * Sends the prompt and consumes the backend's SSE stream, invoking `onDelta`
+ * for each chunk of text as it arrives. Resolves with the full answer.
+ */
+export async function submitAiPrompt(
+  participantId: string,
+  participantName: string,
+  stageIndex: number,
+  prompt: string,
+  onDelta?: (text: string) => void
+): Promise<string> {
+  const res = await fetch(`${BACKEND_URL}/api/ai-prompt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ participantId, participantName, stageIndex, prompt }),
+  });
+  if (!res.ok || !res.body) throw new Error('ai-prompt request failed');
+
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+  let full = '';
+  let done = '';
+
+  for (;;) {
+    const { value, done: finished } = await reader.read();
+    if (finished) break;
+    buffer += value;
+
+    // SSE frames are separated by a blank line.
+    let split: number;
+    while ((split = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, split);
+      buffer = buffer.slice(split + 2);
+
+      const line = frame.split('\n').find((l) => l.startsWith('data:'));
+      if (!line) continue;
+
+      const event = JSON.parse(line.slice(5).trim()) as
+        | { type: 'delta'; text: string }
+        | { type: 'done'; response: string }
+        | { type: 'error' };
+
+      if (event.type === 'delta') {
+        full += event.text;
+        onDelta?.(event.text);
+      } else if (event.type === 'done') {
+        done = event.response;
+      } else {
+        throw new Error('ai-prompt stream errored');
+      }
+    }
+  }
+
+  return done || full;
+}

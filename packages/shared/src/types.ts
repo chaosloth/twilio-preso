@@ -17,7 +17,7 @@ export interface ParticipantResponse {
 }
 
 // --- Interactions ---
-export type InteractionType = 'poll' | 'text' | 'trigger' | 'sentiment';
+export type InteractionType = 'poll' | 'text' | 'trigger' | 'sentiment' | 'llm-prompt';
 
 export interface InteractionConfig {
   stageIndex: number;
@@ -25,6 +25,8 @@ export interface InteractionConfig {
   prompt: string;
   options?: string[];
   allowFreeform?: boolean;
+  /** Example prompt shown to the audience for `llm-prompt` interactions. */
+  example?: string;
 }
 
 // --- Sync Document Schemas ---
@@ -72,11 +74,37 @@ export interface ParticipantJoinedEvent {
   timestamp: number;
 }
 
+/**
+ * Emitted the moment an audience member submits a prompt, before the model has
+ * answered — lets the presenter screen show their question with a thinking
+ * animation. Superseded by the matching AiPromptResponseEvent.
+ */
+export interface AiPromptPendingEvent {
+  type: 'ai-prompt-pending';
+  participantId: string;
+  participantName: string;
+  stageIndex: number;
+  prompt: string;
+  timestamp: number;
+}
+
+export interface AiPromptResponseEvent {
+  type: 'ai-prompt-response';
+  participantId: string;
+  participantName: string;
+  stageIndex: number;
+  prompt: string;
+  response: string;
+  timestamp: number;
+}
+
 export type SyncStreamEvent =
   | StageAdvanceEvent
   | InteractionPromptEvent
   | AudienceResponseEvent
-  | ParticipantJoinedEvent;
+  | ParticipantJoinedEvent
+  | AiPromptPendingEvent
+  | AiPromptResponseEvent;
 
 // --- Twilio Demo Triggers ---
 export interface SmsTrigger {

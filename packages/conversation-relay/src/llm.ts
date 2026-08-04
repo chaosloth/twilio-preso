@@ -1,8 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { config } from './config.js';
+import { createLlmClientFromEnv } from '@twilio-preso/llm';
 import type { Participant } from '@twilio-preso/shared';
 
-const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
+// VOICE_-prefixed env vars override the shared LLM_* config, so the voice agent
+// can run on a lower-latency model than the on-screen agent if you want.
+const llm = createLlmClientFromEnv(process.env, 'VOICE_');
 
 export async function generateResponse(
   participant: Participant | null,
@@ -11,20 +12,13 @@ export async function generateResponse(
 ): Promise<string> {
   const systemPrompt = buildSystemPrompt(participant);
 
-  const messages = [
-    ...conversationHistory,
-    { role: 'user' as const, content: userMessage },
-  ];
-
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 150,
+  const text = await llm.complete({
     system: systemPrompt,
-    messages,
+    maxTokens: 150,
+    messages: [...conversationHistory, { role: 'user' as const, content: userMessage }],
   });
 
-  const textBlock = response.content.find((block) => block.type === 'text');
-  return textBlock?.text || "I'm sorry, I didn't catch that. Could you say that again?";
+  return text || "I'm sorry, I didn't catch that. Could you say that again?";
 }
 
 function buildSystemPrompt(participant: Participant | null): string {
