@@ -114,7 +114,32 @@ GET  /api/auth/me                       → { phone, name }
 
 `/api/auth/verify` calls `verificationChecks.create`. On `approved`, signs an HS256 JWT: `{ sub: phone, name, iat, exp }`, 12-hour expiry, secret from a new required env var `PRESENTER_JWT_SECRET` validated at boot by the existing `requireEnv` in `config.ts`.
 
-`requirePresenter` is a Fastify `preHandler` decorating `request.presenter`. Applied to session CRUD, deck editing, allowlist editing, `/api/trigger`, and `/api/admin/*`. Note `/api/trigger` is **currently unauthenticated and fires real calls to every registered phone** (`trigger.ts:16`); this closes that.
+`requirePresenter` is a Fastify `preHandler` decorating `request.presenter`. It validates the bearer JWT (signature, expiry) and confirms `sub` is still present in `presenter-allowlist` — so removing someone from the allowlist revokes their access immediately rather than at token expiry.
+
+Every route falls into exactly one of two buckets. The audience is unauthenticated by necessity — attendees have no credential — so the boundary must be explicit in both directions:
+
+| Route | Auth | Note |
+|---|---|---|
+| `POST /api/trigger` | **Presenter JWT** | Currently unauthenticated and fires real voice calls to every registered phone (`trigger.ts:16`) |
+| `GET/POST /api/admin/mode` | **Presenter JWT** | Toggles `isLive` — gates all outbound Twilio traffic |
+| `GET /api/admin/participants` | **Presenter JWT** | Exposes names and phone numbers |
+| `DELETE /api/admin/participants/:id` | **Presenter JWT** | |
+| `POST /api/admin/reset` | **Presenter JWT** | Destructive |
+| `POST /api/admin/gc` | **Presenter JWT** | Destructive |
+| `GET/POST/DELETE /api/presenters` | **Presenter JWT** | Allowlist editing |
+| `* /api/sessions*` | **Presenter JWT** | Create, edit deck, end, export |
+| `POST /api/auth/start` \| `verify` | Public | Rate-limited; allowlist-gated internally |
+| `GET /api/auth/me` | **Presenter JWT** | Token validation probe |
+| `GET /api/session/:code` | Public | Rate-limited. Returns only `{ sessionId, title, status }` |
+| `POST /api/register` | Public | Audience join |
+| `POST /api/response` | Public | Audience answer |
+| `POST /api/ai-prompt` | Public | Audience prompt |
+| `GET /api/token` | Public | Mints a Sync token; validates the identity belongs to the session |
+| `POST /api/voice/*` | Twilio | TwiML webhooks — see below |
+
+Any allowlisted presenter may drive any session; there is no per-session ownership check. This is deliberate — the co-presenting case (two people sharing one deck from two laptops) is a primary use, and `ownerPhone` on the session record is provenance, not permission.
+
+**Twilio webhooks** (`/api/voice/conversation-relay`, `/api/voice/demo-bot`) cannot carry a presenter JWT, since Twilio calls them. They should be validated with Twilio's request signature (`twilio.validateRequest` against the `X-Twilio-Signature` header) rather than left open — they are currently unauthenticated, and an open TwiML endpoint is an abuse vector. This is a small addition and I have included it in the implementation order.
 
 **Bootstrap.** An empty allowlist is an unrecoverable lockout. `config.ts` reads `PRESENTER_BOOTSTRAP_PHONES` (comma-separated) and seeds missing entries at boot. Idempotent, so it self-heals after an accidental deletion.
 
@@ -296,7 +321,7 @@ Each step leaves the repo type-clean and runnable.
 1. `shared`: capture `stages.fixture.json` from the current `STAGES`, then add `stageLibrary.ts`, deck types, `resolveDeck`, `validateDeck`, `syncNames`, `DEFAULT_DECK`, and Vitest. Delete `STAGES` once the fixture test passes.
 2. Response re-keying by stage id across `shared`, `trigger.ts`, `aiPrompt.ts`.
 3. Backend control plane: `services/sessions.ts`, allowlist, join codes, phone pool.
-4. Backend auth: `routes/auth.ts`, `requirePresenter`, bootstrap seeding.
+4. Backend auth: `routes/auth.ts`, `requirePresenter`, bootstrap seeding, and application of the route/auth matrix above — including Twilio signature validation on the TwiML webhooks.
 5. Backend data plane: thread `sessionId` through `services/sync.ts` and all routes.
 6. Audience: `/j/:code`, code entry, namespaced storage and sync.
 7. Presenter: login gate, session picker, store changes, QR deep link.
