@@ -5,6 +5,7 @@ import type {
   Deck,
   PhonePoolClaim,
   PhonePoolUsage,
+  Presenter,
   PresenterRecord,
   SessionRecord,
   SessionStatus,
@@ -48,9 +49,7 @@ export async function initControlPlane(): Promise<void> {
 // Allowlist
 // ---------------------------------------------------------------------------
 
-export interface Presenter extends PresenterRecord {
-  phone: string;
-}
+export type { Presenter };
 
 export async function listPresenters(): Promise<Presenter[]> {
   const items = await syncService.syncMaps(PRESENTER_ALLOWLIST).syncMapItems.list({ limit: 200 });

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { usePresenterStore } from '../store';
 import { publishStageAdvance, publishInteractionPrompt, triggerDemo } from '../sync';
+import { fetchSession, stagesFor } from '../sessions';
 
 let suppressNextPublish = false;
 
@@ -33,7 +34,13 @@ export function useNavigation() {
         case 'n':
         case 'N':
           if (!e.repeat) {
-            window.open('/notes', 'presenter-notes', 'width=500,height=700,menubar=no,toolbar=no');
+            // Session in the URL and in the window name: two presenter windows
+            // for different sessions must not share a HUD or drive each other.
+            window.open(
+              `/notes?sessionId=${encodeURIComponent(sessionId)}`,
+              `presenter-notes-${sessionId}`,
+              'width=500,height=700,menubar=no,toolbar=no'
+            );
           }
           break;
       }
@@ -51,6 +58,12 @@ export function useNavigation() {
         usePresenterStore.getState().goTo(event.data.stageIndex);
       } else if (event.data.type === 'demo-toggle') {
         usePresenterStore.getState().setLive(event.data.enabled);
+      } else if (event.data.type === 'deck-change') {
+        // The HUD saved a new running order. Re-read the record rather than
+        // trusting the message: the backend is what actually stored it.
+        fetchSession(sessionId)
+          .then(({ session }) => usePresenterStore.getState().setStages(stagesFor(session)))
+          .catch(() => {});
       }
     };
     return () => channel.close();

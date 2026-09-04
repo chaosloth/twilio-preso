@@ -47,6 +47,11 @@ export interface PresenterRecord {
   addedAt: number;
 }
 
+/** An allowlist entry with its map key folded in — the shape `GET /api/presenters` returns. */
+export interface Presenter extends PresenterRecord {
+  phone: string;
+}
+
 export interface PhonePoolClaim {
   sessionId: string;
   claimedAt: number;

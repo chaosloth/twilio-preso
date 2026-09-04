@@ -1,67 +1,59 @@
 import { useState, useEffect, useRef } from 'react';
-import type { ResolvedStage } from '@twilio-preso/shared';
-import { presenterFetch } from '../auth';
-import { fetchSession, stagesFor } from '../sessions';
+import { useAdminApi } from './useAdminApi';
+import { AllowlistTab } from './tabs/AllowlistTab';
+import { ControlsTab } from './tabs/ControlsTab';
+import { DeckTab } from './tabs/DeckTab';
+import { NotesTab } from './tabs/NotesTab';
+import { ParticipantsTab } from './tabs/ParticipantsTab';
 
-interface ParticipantInfo {
-  id: string;
-  name: string;
-  phone: string;
-  company?: string;
-  registeredAt: number;
-}
+const TABS = ['notes', 'participants', 'controls', 'deck', 'presenters'] as const;
+type Tab = (typeof TABS)[number];
 
 interface NotesAppProps {
   /** Passed in the window URL by `useNavigation`. */
   sessionId: string;
 }
 
+/**
+ * The presenter HUD: a separate browser window over the same session.
+ *
+ * This component is the chrome only — header, tabs, and the BroadcastChannel
+ * link back to the presentation window. Everything that talks to the backend
+ * lives in `useAdminApi`, and each tab renders one slice of it.
+ */
 export function NotesApp({ sessionId }: NotesAppProps) {
-  // The deck is fetched rather than imported: this window has its own React
-  // root and store, and what it shows must be the session's own running order.
-  const [stages, setStages] = useState<ResolvedStage[]>([]);
-  const [sessionTitle, setSessionTitle] = useState('');
-  const [joinCode, setJoinCode] = useState('');
+  const api = useAdminApi(sessionId);
+  const { session, stages, participants, demoEnabled, setDemoMode } = api;
+
   const [stageIndex, setStageIndex] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [demoEnabled, setDemoEnabled] = useState(false);
-  const [participants, setParticipants] = useState<ParticipantInfo[]>([]);
-  const [activeTab, setActiveTab] = useState<'notes' | 'participants' | 'controls'>('notes');
+  const [activeTab, setActiveTab] = useState<Tab>('notes');
   const [zoom, setZoom] = useState(100);
   const startTime = useRef(Date.now());
 
   useEffect(() => {
-    if (!sessionId) return;
-    (async () => {
-      try {
-        const { session } = await fetchSession(sessionId);
-        setStages(stagesFor(session));
-        setSessionTitle(session.title);
-        setJoinCode(session.joinCode);
-      } catch {}
-    })();
-  }, [sessionId]);
-
-  useEffect(() => {
     const channel = new BroadcastChannel(`presenter-sync:${sessionId}`);
     channel.onmessage = (event) => {
-      if (event.data.type === 'stage-change') {
-        setStageIndex(event.data.stageIndex);
-      }
+      if (event.data.type === 'stage-change') setStageIndex(event.data.stageIndex);
     };
     return () => channel.close();
   }, [sessionId]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // The deck editor and allowlist have text inputs; arrow keys belong to
+      // them, not to slide navigation, while one is focused.
+      const target = e.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+
       if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
         e.preventDefault();
         const next = Math.min(stageIndex + 1, stages.length - 1);
-        if (next !== stageIndex) handleGoTo(next);
+        if (next !== stageIndex) goTo(next);
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
         const prev = Math.max(stageIndex - 1, 0);
-        if (prev !== stageIndex) handleGoTo(prev);
+        if (prev !== stageIndex) goTo(prev);
       }
     }
     window.addEventListener('keydown', handleKeyDown);
@@ -75,93 +67,58 @@ export function NotesApp({ sessionId }: NotesAppProps) {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch current mode on load
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await presenterFetch(`/api/admin/mode?sessionId=${sessionId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setDemoEnabled(data.isLive);
-        }
-      } catch {}
-    })();
-  }, [sessionId]);
-
-  // Poll participants every 5 seconds
-  useEffect(() => {
-    const fetchParticipants = async () => {
-      try {
-        const res = await presenterFetch(`/api/admin/participants?sessionId=${sessionId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setParticipants(data.participants);
-        }
-      } catch {}
-    };
-    fetchParticipants();
-    const interval = setInterval(fetchParticipants, 5000);
-    return () => clearInterval(interval);
-  }, [sessionId]);
-
-  const currentStage = stages[stageIndex];
-  const nextStage = stages[stageIndex + 1];
   const minutes = Math.floor(elapsedTime / 60);
   const seconds = elapsedTime % 60;
 
-  function handleGoTo(index: number) {
+  function goTo(index: number) {
     const channel = new BroadcastChannel(`presenter-sync:${sessionId}`);
     channel.postMessage({ type: 'go-to-stage', stageIndex: index });
     channel.close();
     setStageIndex(index);
   }
 
-  async function handleRemoveParticipant(id: string) {
-    await presenterFetch(`/api/admin/participants/${id}?sessionId=${sessionId}`, {
-      method: 'DELETE',
-    });
-    setParticipants((p) => p.filter((x) => x.id !== id));
-  }
-
-  async function handleReset() {
-    if (!confirm('Reset all participants and demo state?')) return;
-    await presenterFetch('/api/admin/reset', {
-      method: 'POST',
-      body: JSON.stringify({ sessionId }),
-    });
-    setParticipants([]);
-  }
-
-  async function toggleDemo() {
-    const newState = !demoEnabled;
-    setDemoEnabled(newState);
+  function toggleDemo() {
+    const next = !demoEnabled;
+    // The presentation window keeps its own copy of the flag, so the toggle is
+    // broadcast as well as written to the backend.
     const channel = new BroadcastChannel(`presenter-sync:${sessionId}`);
-    channel.postMessage({ type: 'demo-toggle', enabled: newState });
+    channel.postMessage({ type: 'demo-toggle', enabled: next });
     channel.close();
-    try {
-      await presenterFetch('/api/admin/mode', {
-        method: 'POST',
-        body: JSON.stringify({ sessionId, isLive: newState }),
-      });
-    } catch {}
+    void setDemoMode(next);
   }
+
+  const iconButton = {
+    width: 22,
+    height: 22,
+    border: '1px solid #4d5777',
+    background: 'transparent',
+    color: '#fff',
+    borderRadius: 3,
+    cursor: 'pointer',
+    fontSize: 13,
+    lineHeight: 1,
+  } as const;
 
   return (
     <div style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif", background: '#000d25', color: 'white', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
       <div style={{ padding: '16px 24px', borderBottom: '1px solid #1a2540', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <span style={{ fontSize: 13, opacity: 0.5, letterSpacing: 2, textTransform: 'uppercase' }}>
-            {sessionTitle || 'Wonder'}{joinCode && ` · ${joinCode}`}
+            {session?.title || 'Wonder'}
+            {session?.joinCode && ` · ${session.joinCode}`}
           </span>
           <span style={{ color: '#ef223a', fontWeight: 'bold', fontFamily: 'monospace', fontSize: 14 }}>
             {minutes}:{seconds.toString().padStart(2, '0')}
           </span>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={() => setZoom((z) => Math.max(60, z - 10))} style={{ width: 22, height: 22, border: '1px solid #4d5777', background: 'transparent', color: '#fff', borderRadius: 3, cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>−</button>
+          <button onClick={() => setZoom((z) => Math.max(60, z - 10))} style={iconButton}>
+            −
+          </button>
           <span style={{ fontSize: 11, color: '#7e869c', minWidth: 32, textAlign: 'center' }}>{zoom}%</span>
-          <button onClick={() => setZoom((z) => Math.min(200, z + 10))} style={{ width: 22, height: 22, border: '1px solid #4d5777', background: 'transparent', color: '#fff', borderRadius: 3, cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>+</button>
+          <button onClick={() => setZoom((z) => Math.min(200, z + 10))} style={iconButton}>
+            +
+          </button>
           <span style={{ fontSize: 12, color: '#7e869c', marginLeft: 8 }}>{participants.length} joined</span>
           <button
             onClick={toggleDemo}
@@ -174,6 +131,7 @@ export function NotesApp({ sessionId }: NotesAppProps) {
               cursor: 'pointer',
               background: demoEnabled ? '#ef223a' : '#4d5777',
               color: 'white',
+              fontFamily: "'Space Grotesk', system-ui, sans-serif",
             }}
           >
             {demoEnabled ? 'LIVE' : 'REHEARSAL'}
@@ -181,9 +139,8 @@ export function NotesApp({ sessionId }: NotesAppProps) {
         </div>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid #1a2540' }}>
-        {(['notes', 'participants', 'controls'] as const).map((tab) => (
+        {TABS.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -197,6 +154,7 @@ export function NotesApp({ sessionId }: NotesAppProps) {
               fontSize: 12,
               textTransform: 'uppercase',
               letterSpacing: 1,
+              fontFamily: "'Space Grotesk', system-ui, sans-serif",
               borderBottom: activeTab === tab ? '2px solid #ef223a' : '2px solid transparent',
             }}
           >
@@ -205,168 +163,22 @@ export function NotesApp({ sessionId }: NotesAppProps) {
         ))}
       </div>
 
-      {/* Content */}
       <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
         {activeTab === 'notes' && (
-          <>
-            <div style={{ marginBottom: 24, fontSize: `${zoom}%` }}>
-              <div style={{ fontSize: '0.7em', color: '#ef223a', marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' }}>
-                Stage {stageIndex + 1} / {stages.length} — Act {currentStage?.act}
-              </div>
-              <h2 style={{ fontSize: '1.5em', fontWeight: 'bold', marginBottom: 12, fontFamily: "'Tektur', sans-serif" }}>
-                {currentStage?.title}
-              </h2>
-              <p style={{ fontSize: '1em', lineHeight: 1.7, color: '#babecc' }}>
-                {currentStage?.notes}
-              </p>
-
-              {currentStage?.interaction && (
-                <div style={{ marginTop: 14, padding: 12, background: 'rgba(239,34,58,0.08)', borderRadius: 8, border: '1px solid rgba(239,34,58,0.25)' }}>
-                  <div style={{ fontSize: 11, color: '#ef223a', marginBottom: 4, letterSpacing: 1, textTransform: 'uppercase' }}>
-                    Interaction: {currentStage.interaction.type}
-                  </div>
-                  <div style={{ fontSize: 13, color: '#babecc' }}>{currentStage.interaction.prompt}</div>
-                </div>
-              )}
-
-              {currentStage?.demoTrigger && (
-                <div style={{ marginTop: 10, padding: 12, background: 'rgba(100,149,237,0.08)', borderRadius: 8, border: '1px solid rgba(100,149,237,0.25)' }}>
-                  <div style={{ fontSize: 11, color: 'cornflowerblue', letterSpacing: 1, textTransform: 'uppercase' }}>
-                    Demo: {currentStage.demoTrigger} {!demoEnabled && '(SKIPPED - rehearsal mode)'}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {nextStage && (
-              <div style={{ marginBottom: 24, opacity: 0.5 }}>
-                <div style={{ fontSize: 11, marginBottom: 4, letterSpacing: 1, textTransform: 'uppercase' }}>Next</div>
-                <div style={{ fontSize: 16 }}>{nextStage.title}</div>
-              </div>
-            )}
-
-            {/* Stage jump grid */}
-            <div style={{ borderTop: '1px solid #1a2540', paddingTop: 14 }}>
-              <div style={{ fontSize: 11, marginBottom: 8, opacity: 0.5, letterSpacing: 1, textTransform: 'uppercase' }}>Jump to Stage</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {stages.map((s, i) => (
-                  <button
-                    key={s.id}
-                    onClick={() => handleGoTo(i)}
-                    style={{
-                      width: 28,
-                      height: 28,
-                      border: i === stageIndex ? '2px solid #ef223a' : '1px solid #1a2540',
-                      background: i === stageIndex ? 'rgba(239,34,58,0.15)' : 'transparent',
-                      color: 'white',
-                      borderRadius: 4,
-                      cursor: 'pointer',
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                    }}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </>
+          <NotesTab
+            stages={stages}
+            stageIndex={stageIndex}
+            demoEnabled={demoEnabled}
+            zoom={zoom}
+            onGoTo={goTo}
+          />
         )}
-
-        {activeTab === 'participants' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 'bold' }}>Participants ({participants.length})</h3>
-              <button
-                onClick={handleReset}
-                style={{ padding: '6px 12px', borderRadius: 4, border: '1px solid #ef223a', background: 'transparent', color: '#ef223a', cursor: 'pointer', fontSize: 11 }}
-              >
-                Reset All
-              </button>
-            </div>
-            {participants.length === 0 ? (
-              <p style={{ color: '#7e869c', fontSize: 14 }}>No participants yet. Share the QR code to get started.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {participants.map((p) => (
-                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#0a1535', borderRadius: 6 }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 500 }}>{p.name}</div>
-                      <div style={{ fontSize: 11, color: '#7e869c' }}>{p.phone} {p.company && `· ${p.company}`}</div>
-                    </div>
-                    <button
-                      onClick={() => handleRemoveParticipant(p.id)}
-                      style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid #4d5777', background: 'transparent', color: '#7e869c', cursor: 'pointer', fontSize: 11 }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
+        {activeTab === 'participants' && <ParticipantsTab api={api} />}
         {activeTab === 'controls' && (
-          <div>
-            <h3 style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 16 }}>Demo Controls</h3>
-
-            <div style={{ marginBottom: 24, padding: 16, background: '#0a1535', borderRadius: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 500 }}>Demo Mode</div>
-                  <div style={{ fontSize: 12, color: '#7e869c' }}>
-                    {demoEnabled ? 'SMS and calls will fire on demo stages' : 'All SMS and calls are suppressed'}
-                  </div>
-                </div>
-                <button
-                  onClick={toggleDemo}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: 6,
-                    border: 'none',
-                    fontSize: 13,
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                    background: demoEnabled ? '#ef223a' : '#4d5777',
-                    color: 'white',
-                  }}
-                >
-                  {demoEnabled ? 'LIVE' : 'REHEARSAL'}
-                </button>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 24, padding: 16, background: '#0a1535', borderRadius: 8 }}>
-              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Manual Triggers</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {['sms-patience', 'sms-orchestrator', 'sms-memory', 'voice-mass-outbound', 'sms-closing'].map((trigger) => (
-                  <button
-                    key={trigger}
-                    onClick={async () => {
-                      if (confirm(`Fire ${trigger}?`)) {
-                        await presenterFetch('/api/trigger', {
-                          method: 'POST',
-                          body: JSON.stringify({ sessionId, triggerId: trigger }),
-                        });
-                      }
-                    }}
-                    style={{ padding: '6px 10px', borderRadius: 4, border: '1px solid #4d5777', background: 'transparent', color: '#babecc', cursor: 'pointer', fontSize: 11 }}
-                  >
-                    {trigger}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ padding: 16, background: '#0a1535', borderRadius: 8 }}>
-              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Audience URL</div>
-              <div style={{ fontSize: 12, color: '#7e869c', wordBreak: 'break-all' }}>
-                Join code {joinCode || '—'} · set VITE_AUDIENCE_URL to change the QR host
-              </div>
-            </div>
-          </div>
+          <ControlsTab api={api} joinCode={session?.joinCode ?? ''} onToggleDemo={toggleDemo} />
         )}
+        {activeTab === 'deck' && <DeckTab api={api} />}
+        {activeTab === 'presenters' && <AllowlistTab />}
       </div>
     </div>
   );

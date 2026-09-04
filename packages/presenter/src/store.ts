@@ -20,6 +20,9 @@ interface PresenterStore {
   isLive: boolean;
 
   setSession: (session: { sessionId: string; joinCode: string; stages: ResolvedStage[] }) => void;
+  /** Adopt a deck edited in the HUD without jumping the presenter off the slide
+   *  they are on — only clamped if the deck got shorter. */
+  setStages: (stages: ResolvedStage[]) => void;
   advance: () => void;
   back: () => void;
   goTo: (index: number) => void;
@@ -49,6 +52,11 @@ export const usePresenterStore = create<PresenterStore>((set) => ({
   // sessions in one browser can have different running orders.
   setSession: ({ sessionId, joinCode, stages }) =>
     set({ sessionId, joinCode, stages, currentStageIndex: 0 }),
+  setStages: (stages) =>
+    set((s) => ({
+      stages,
+      currentStageIndex: Math.min(s.currentStageIndex, Math.max(0, stages.length - 1)),
+    })),
   advance: () => set((s) => ({ currentStageIndex: Math.min(s.currentStageIndex + 1, s.stages.length - 1) })),
   back: () => set((s) => ({ currentStageIndex: Math.max(s.currentStageIndex - 1, 0) })),
   goTo: (index) => set((s) => ({ currentStageIndex: Math.max(0, Math.min(index, s.stages.length - 1)) })),

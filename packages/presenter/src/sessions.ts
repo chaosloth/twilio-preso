@@ -1,5 +1,12 @@
 import { resolveDeck } from '@twilio-preso/shared';
-import type { DeckWarning, PhonePoolUsage, ResolvedStage, SessionRecord } from '@twilio-preso/shared';
+import type {
+  Deck,
+  DeckWarning,
+  PhonePoolUsage,
+  Presenter,
+  ResolvedStage,
+  SessionRecord,
+} from '@twilio-preso/shared';
 import { presenterFetch } from './auth';
 
 export interface SessionWithWarnings {
@@ -45,6 +52,42 @@ export async function setStatus(id: string, status: 'draft' | 'live'): Promise<S
     })
   );
   return session as SessionRecord;
+}
+
+/**
+ * Save a reordered/edited deck. The warnings come back with the saved record
+ * rather than blocking the write — a deck whose dependency order is off is the
+ * presenter's call to make, surfaced in the HUD.
+ */
+export async function saveDeck(id: string, deck: Deck): Promise<SessionWithWarnings> {
+  return json(
+    await presenterFetch(`/api/sessions/${id}/deck`, {
+      method: 'PUT',
+      body: JSON.stringify({ deck }),
+    })
+  );
+}
+
+export async function listPresenters(): Promise<Presenter[]> {
+  const { presenters } = await json(await presenterFetch('/api/presenters'));
+  return presenters as Presenter[];
+}
+
+export async function addPresenter(phone: string, name: string): Promise<Presenter> {
+  const { presenter } = await json(
+    await presenterFetch('/api/presenters', {
+      method: 'POST',
+      body: JSON.stringify({ phone, name }),
+    })
+  );
+  return presenter as Presenter;
+}
+
+/** The backend refuses to remove the caller's own entry, so a lockout is unreachable. */
+export async function removePresenter(phone: string): Promise<void> {
+  await json(
+    await presenterFetch(`/api/presenters/${encodeURIComponent(phone)}`, { method: 'DELETE' })
+  );
 }
 
 /** Ends the session and returns the snapshot — teardown is irreversible, so the
