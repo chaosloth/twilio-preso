@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
 import { config } from './config.js';
 import { initSync } from './services/sync.js';
+import { initControlPlane } from './services/sessions.js';
 import { tokenRoutes } from './routes/token.js';
 import { verifyRoutes } from './routes/verify.js';
 import { registerRoutes } from './routes/register.js';
@@ -27,5 +28,8 @@ await app.register(aiPromptRoutes);
 app.get('/health', async () => ({ status: 'ok' }));
 
 await initSync();
+// Control-plane maps + allowlist bootstrap. Must precede listen: an empty
+// allowlist means nobody can sign in.
+await initControlPlane();
 await app.listen({ port: config.port, host: '0.0.0.0' });
 console.log(`Backend running on http://localhost:${config.port}`);

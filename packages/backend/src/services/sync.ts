@@ -1,6 +1,7 @@
 import Twilio from 'twilio';
 import { config } from '../config.js';
-import type { PresentationStateDoc, AggregateResultsDoc, SyncStreamEvent, Participant, ParticipantResponse } from '@twilio-preso/shared';
+import { syncNames } from '@twilio-preso/shared';
+import type { PresentationStateDoc, AggregateResultsDoc, SyncStreamEvent, Participant, ParticipantResponse, SyncObjectNames } from '@twilio-preso/shared';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 const syncService = client.sync.v1.services(config.twilio.syncServiceSid);
@@ -10,36 +11,86 @@ const AGGREGATE_RESULTS_DOC = 'aggregate-results';
 const EVENT_STREAM = 'event-stream';
 const PARTICIPANTS_MAP = 'participants';
 
-export async function initSync(): Promise<void> {
-  try {
-    await syncService.documents.create({
-      uniqueName: PRESENTATION_STATE_DOC,
-      data: { currentStageIndex: 0, activeInteraction: null, totalParticipants: 0, isLive: true } satisfies PresentationStateDoc,
-    });
-  } catch (e: any) {
-    if (e.code !== 54301) throw e;
-  }
+/** Sync's "unique name already exists". Creation is idempotent by design. */
+const ALREADY_EXISTS = 54301;
 
+/** Sync's "not found" — a delete of something already gone is a success. */
+const NOT_FOUND = 54100;
+
+async function ignoring<T>(code: number, fn: () => Promise<T>): Promise<T | null> {
   try {
-    await syncService.documents.create({
-      uniqueName: AGGREGATE_RESULTS_DOC,
+    return await fn();
+  } catch (e: any) {
+    if (e.code !== code) throw e;
+    return null;
+  }
+}
+
+/**
+ * Creates the four data-plane objects under the given names. Idempotent, so
+ * re-running it on an existing set is a no-op rather than an error.
+ */
+async function createDataPlane(names: SyncObjectNames, isLive: boolean): Promise<void> {
+  await ignoring(ALREADY_EXISTS, () =>
+    syncService.documents.create({
+      uniqueName: names.state,
+      data: { currentStageIndex: 0, activeInteraction: null, totalParticipants: 0, isLive } satisfies PresentationStateDoc,
+    })
+  );
+
+  await ignoring(ALREADY_EXISTS, () =>
+    syncService.documents.create({
+      uniqueName: names.aggregate,
       data: { stageId: '', stageIndex: 0, type: 'poll', results: {}, totalResponses: 0 } satisfies AggregateResultsDoc,
-    });
-  } catch (e: any) {
-    if (e.code !== 54301) throw e;
-  }
+    })
+  );
 
-  try {
-    await syncService.syncStreams.create({ uniqueName: EVENT_STREAM });
-  } catch (e: any) {
-    if (e.code !== 54301) throw e;
-  }
+  await ignoring(ALREADY_EXISTS, () => syncService.syncStreams.create({ uniqueName: names.events }));
+  await ignoring(ALREADY_EXISTS, () => syncService.syncMaps.create({ uniqueName: names.participants }));
+}
 
-  try {
-    await syncService.syncMaps.create({ uniqueName: PARTICIPANTS_MAP });
-  } catch (e: any) {
-    if (e.code !== 54301) throw e;
-  }
+/**
+ * The legacy single-presentation objects, still what every read/write function
+ * below uses. Step 5 of the multi-tenant spec threads `sessionId` through those
+ * and this goes away.
+ *
+ * `isLive: true` preserves the existing behaviour, and only applies on first
+ * creation — an existing doc is never touched, so a restart cannot flip live
+ * outbound traffic on or off under an operator.
+ */
+export async function initSync(): Promise<void> {
+  await createDataPlane(
+    {
+      state: PRESENTATION_STATE_DOC,
+      aggregate: AGGREGATE_RESULTS_DOC,
+      events: EVENT_STREAM,
+      participants: PARTICIPANTS_MAP,
+    },
+    true
+  );
+}
+
+/**
+ * Creates one session's four objects. A new session starts **not live**: the
+ * presenter can walk the deck to rehearse without a demo-trigger stage texting
+ * or calling real phones.
+ */
+export async function initSessionSync(sessionId: string): Promise<void> {
+  await createDataPlane(syncNames(sessionId), false);
+}
+
+/**
+ * Deletes one session's four objects. Without this a single Sync service
+ * accumulates four objects per event forever and eventually hits service
+ * limits. Tolerates missing objects so a partially-created session can still be
+ * cleaned up.
+ */
+export async function teardownSessionSync(sessionId: string): Promise<void> {
+  const names = syncNames(sessionId);
+  await ignoring(NOT_FOUND, () => syncService.documents(names.state).remove());
+  await ignoring(NOT_FOUND, () => syncService.documents(names.aggregate).remove());
+  await ignoring(NOT_FOUND, () => syncService.syncStreams(names.events).remove());
+  await ignoring(NOT_FOUND, () => syncService.syncMaps(names.participants).remove());
 }
 
 export async function publishEvent(event: SyncStreamEvent): Promise<void> {

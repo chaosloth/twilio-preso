@@ -4,3 +4,5 @@ export * from './deck.js';
 export * from './validateDeck.js';
 export * from './syncNames.js';
 export * from './participants.js';
+export * from './joinCode.js';
+export * from './session.js';
