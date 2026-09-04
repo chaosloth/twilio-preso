@@ -6,7 +6,7 @@ import { PostProcessing } from './components/PostProcessing';
 import { useNavigation } from './hooks/useNavigation';
 import { initPresenterSync } from './sync';
 import { usePresenterStore } from './store';
-import { STAGES, TOTAL_STAGES } from '@twilio-preso/shared';
+import { STAGES, TOTAL_STAGES } from './deck';
 
 function Scene() {
   useNavigation();

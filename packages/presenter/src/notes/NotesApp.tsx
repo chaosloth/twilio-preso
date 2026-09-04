@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { STAGES } from '@twilio-preso/shared';
+import { STAGES } from '../deck';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 

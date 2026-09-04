@@ -1,6 +1,6 @@
 import { createLlmClientFromEnv } from '@twilio-preso/llm';
-import { STAGES } from '@twilio-preso/shared';
 import type { Participant } from '@twilio-preso/shared';
+import { STAGES } from '../deck.js';
 
 const llm = createLlmClientFromEnv();
 
@@ -12,11 +12,6 @@ Keep responses SHORT — 2-3 sentences, big-screen friendly. Be warm and a littl
 
 const FALLBACK = "Hmm, I didn't quite catch that — try asking again!";
 
-/**
- * Turns the participant's earlier poll/text answers into a system-prompt block,
- * pairing each stored response with the question it answered. Derived from
- * STAGES rather than hardcoded indices so inserting a slide can't stale it.
- */
 function buildParticipantContext(participant: Participant | null): string {
   if (!participant) return '';
 
@@ -24,13 +19,14 @@ function buildParticipantContext(participant: Participant | null): string {
   if (participant.company) lines.push(`They work at ${participant.company}.`);
   if (participant.role) lines.push(`Their role is ${participant.role}.`);
 
-  const answers = Object.values(participant.responses ?? {})
+  const responses = Object.values(participant.responses || {})
     .filter((r) => r.value && r.type !== 'llm-prompt')
-    .sort((a, b) => a.stageIndex - b.stageIndex)
-    .map((r) => {
-      const question = STAGES[r.stageIndex]?.interaction?.prompt;
-      return question ? `- "${question}" → ${r.value}` : `- ${r.value}`;
-    });
+    .sort((a, b) => a.stageIndex - b.stageIndex);
+
+  const answers = responses.map((r) => {
+    const prompt = STAGES[r.stageIndex]?.interaction?.prompt;
+    return prompt ? `- "${prompt}" → ${r.value}` : `- ${r.value}`;
+  });
 
   if (answers.length) {
     lines.push(

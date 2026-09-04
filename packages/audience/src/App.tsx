@@ -66,14 +66,16 @@ export function App() {
   const [participantId, setParticipantId] = useState(saved?.participantId || '');
   const [name, setName] = useState(saved?.name || '');
   const [activeInteraction, setActiveInteraction] = useState<InteractionConfig | null>(null);
+  const [activeStageIndex, setActiveStageIndex] = useState(0);
   const [connected, setConnected] = useState(false);
 
   const connectSync = useCallback(async (id: string) => {
     try {
       await initSync(id);
       await subscribeToEvents(
-        (interaction) => {
+        (interaction, stageIndex) => {
           setActiveInteraction(interaction);
+          setActiveStageIndex(stageIndex);
           setState('interaction');
         },
         () => {
@@ -118,11 +120,11 @@ export function App() {
     publishResponse(
       participantId,
       name,
-      activeInteraction.stageIndex,
+      activeStageIndex,
       activeInteraction.type,
       value
     );
-  }, [participantId, name, activeInteraction]);
+  }, [participantId, name, activeInteraction, activeStageIndex]);
 
   if (state === 'register') {
     return <Register onRegistered={handleRegistered} />;
@@ -142,7 +144,7 @@ export function App() {
       case 'sentiment':
         return <Sentiment interaction={activeInteraction} onSubmit={handleResponse} />;
       case 'llm-prompt':
-        return <AIPrompt interaction={activeInteraction} participantId={participantId} name={name} />;
+        return <AIPrompt interaction={activeInteraction} stageIndex={activeStageIndex} participantId={participantId} name={name} />;
       default:
         return <Waiting name={name} />;
     }

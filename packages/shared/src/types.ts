@@ -20,7 +20,8 @@ export interface ParticipantResponse {
 export type InteractionType = 'poll' | 'text' | 'trigger' | 'sentiment' | 'llm-prompt';
 
 export interface InteractionConfig {
-  stageIndex: number;
+  /** Id of the stage this interaction belongs to. Stable across reordering. */
+  stageId: string;
   type: InteractionType;
   prompt: string;
   options?: string[];

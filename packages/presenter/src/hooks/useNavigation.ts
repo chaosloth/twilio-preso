@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { usePresenterStore } from '../store';
-import { STAGES } from '@twilio-preso/shared';
+import { STAGES } from '../deck';
 import { publishStageAdvance, publishInteractionPrompt, triggerDemo } from '../sync';
 
 let suppressNextPublish = false;

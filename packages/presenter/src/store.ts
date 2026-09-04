@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { PresentationStateDoc, AggregateResultsDoc, AudienceResponseEvent, AiPromptPendingEvent, AiPromptResponseEvent } from '@twilio-preso/shared';
-import { TOTAL_STAGES } from '@twilio-preso/shared';
+import { TOTAL_STAGES } from './deck';
 
 interface PresenterStore {
   currentStageIndex: number;

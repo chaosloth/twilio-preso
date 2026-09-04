@@ -9,6 +9,7 @@
     "dev:relay": "pnpm --filter @twilio-preso/conversation-relay dev",
     "dev": "pnpm --filter @twilio-preso/backend dev & pnpm --filter @twilio-preso/presenter dev & pnpm --filter @twilio-preso/audience dev & pnpm --filter @twilio-preso/conversation-relay dev & wait",
     "build": "pnpm --filter @twilio-preso/shared build && pnpm --filter @twilio-preso/llm build && pnpm --filter @twilio-preso/presenter build && pnpm --filter @twilio-preso/audience build && pnpm --filter @twilio-preso/backend build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
   }
 }

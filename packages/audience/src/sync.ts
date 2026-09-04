@@ -25,7 +25,12 @@ export function getSyncClient(): SyncClient {
 }
 
 export async function subscribeToEvents(
-  onInteraction: (interaction: InteractionConfig) => void,
+  /**
+   * `stageIndex` is the deck position the interaction was prompted from. It
+   * comes from the event rather than the interaction itself — interactions are
+   * keyed by stage id now, since a stage's position varies between decks.
+   */
+  onInteraction: (interaction: InteractionConfig, stageIndex: number) => void,
   onStageAdvance: (stageIndex: number) => void
 ): Promise<void> {
   const client = getSyncClient();
@@ -35,7 +40,7 @@ export async function subscribeToEvents(
   stream.on('messagePublished', (event: any) => {
     const data = event.message.data;
     if (data.type === 'interaction-prompt') {
-      onInteraction(data.interaction);
+      onInteraction(data.interaction, data.stageIndex);
     } else if (data.type === 'stage-advance') {
       onStageAdvance(data.stageIndex);
     }
@@ -47,13 +52,13 @@ export async function subscribeToEvents(
   // Check initial state — if there's an active interaction, show it
   const initialData = stateDoc.data as any;
   if (initialData?.activeInteraction) {
-    onInteraction(initialData.activeInteraction);
+    onInteraction(initialData.activeInteraction, initialData.currentStageIndex ?? 0);
   }
 
   stateDoc.on('updated', (event: any) => {
     const data = event.data;
     if (data.activeInteraction) {
-      onInteraction(data.activeInteraction);
+      onInteraction(data.activeInteraction, data.currentStageIndex ?? 0);
     } else {
       onStageAdvance(data.currentStageIndex);
     }
@@ -70,7 +75,13 @@ export async function publishResponse(
   await fetch(`${BACKEND_URL}/api/response`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ participantId, participantName, stageIndex, interactionType, value }),
+    body: JSON.stringify({
+      participantId,
+      participantName,
+      stageIndex,
+      interactionType,
+      value,
+    }),
   });
 }
 

@@ -1,5 +1,5 @@
 import { Suspense, lazy, type ComponentType, createContext, useContext } from 'react';
-import { STAGES } from '@twilio-preso/shared';
+import { STAGES } from '../deck';
 import { usePresenterStore } from '../store';
 
 const STAGE_SPACING = 50;
