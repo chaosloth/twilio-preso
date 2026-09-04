@@ -1,22 +1,36 @@
 import { SyncClient } from 'twilio-sync';
+import { syncNames } from '@twilio-preso/shared';
 import type { InteractionConfig } from '@twilio-preso/shared';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
-const EVENT_STREAM = 'event-stream';
-const PRESENTATION_STATE_DOC = 'presentation-state';
 
 let syncClient: SyncClient | null = null;
+/**
+ * The session this client is connected to. Held here so `subscribeToEvents` and
+ * the POST helpers cannot be called against a different session than the token
+ * was issued for — every object name below is derived from it.
+ */
+let currentSessionId: string | null = null;
 
 export function isSyncConnected(): boolean {
   return syncClient !== null;
 }
 
-export async function initSync(participantId: string): Promise<SyncClient> {
-  const res = await fetch(`${BACKEND_URL}/api/token?identity=${participantId}`);
+export async function initSync(sessionId: string, participantId: string): Promise<SyncClient> {
+  const res = await fetch(
+    `${BACKEND_URL}/api/token?identity=${encodeURIComponent(participantId)}&sessionId=${encodeURIComponent(sessionId)}`
+  );
+  if (!res.ok) throw new Error(`token request failed: ${res.status}`);
   const { token } = await res.json();
 
   syncClient = new SyncClient(token);
+  currentSessionId = sessionId;
   return syncClient;
+}
+
+function sessionNames() {
+  if (!currentSessionId) throw new Error('Sync client not initialized');
+  return syncNames(currentSessionId);
 }
 
 export function getSyncClient(): SyncClient {
@@ -34,9 +48,10 @@ export async function subscribeToEvents(
   onStageAdvance: (stageIndex: number) => void
 ): Promise<void> {
   const client = getSyncClient();
+  const names = sessionNames();
 
   // Subscribe to stream for real-time events
-  const stream = await client.stream(EVENT_STREAM);
+  const stream = await client.stream(names.events);
   stream.on('messagePublished', (event: any) => {
     const data = event.message.data;
     if (data.type === 'interaction-prompt') {
@@ -47,7 +62,7 @@ export async function subscribeToEvents(
   });
 
   // Also subscribe to the presentation state document (more reliable for interactions)
-  const stateDoc = await client.document(PRESENTATION_STATE_DOC);
+  const stateDoc = await client.document(names.state);
 
   // Check initial state — if there's an active interaction, show it
   const initialData = stateDoc.data as any;
@@ -66,6 +81,7 @@ export async function subscribeToEvents(
 }
 
 export async function publishResponse(
+  sessionId: string,
   participantId: string,
   participantName: string,
   stageId: string,
@@ -77,6 +93,7 @@ export async function publishResponse(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      sessionId,
       participantId,
       participantName,
       stageId,
@@ -92,6 +109,7 @@ export async function publishResponse(
  * for each chunk of text as it arrives. Resolves with the full answer.
  */
 export async function submitAiPrompt(
+  sessionId: string,
   participantId: string,
   participantName: string,
   stageId: string,
@@ -102,7 +120,7 @@ export async function submitAiPrompt(
   const res = await fetch(`${BACKEND_URL}/api/ai-prompt`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ participantId, participantName, stageId, stageIndex, prompt }),
+    body: JSON.stringify({ sessionId, participantId, participantName, stageId, stageIndex, prompt }),
   });
   if (!res.ok || !res.body) throw new Error('ai-prompt request failed');
 

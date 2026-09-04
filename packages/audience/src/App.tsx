@@ -1,6 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { InteractionConfig } from '@twilio-preso/shared';
 import { initSync, subscribeToEvents, publishResponse, isSyncConnected } from './sync';
+import { Join } from './pages/Join';
+import {
+  joinCodeFromPath,
+  loadSession,
+  saveSession,
+  type JoinedSession,
+} from './session';
 import { Register } from './pages/Register';
 import { Waiting } from './pages/Waiting';
 import { Poll } from './pages/Poll';
@@ -9,28 +16,7 @@ import { Trigger } from './pages/Trigger';
 import { Sentiment } from './pages/Sentiment';
 import { AIPrompt } from './pages/AIPrompt';
 
-type AppState = 'register' | 'waiting' | 'interaction';
-
-const SESSION_KEY = 'wonder-session';
-
-interface SavedSession {
-  participantId: string;
-  name: string;
-}
-
-function getSavedSession(): SavedSession | null {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function saveSession(participantId: string, name: string) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ participantId, name }));
-}
+type AppState = 'join' | 'register' | 'waiting' | 'interaction';
 
 function ConnectionBadge({ connected }: { connected: boolean }) {
   return (
@@ -61,17 +47,18 @@ function ConnectionBadge({ connected }: { connected: boolean }) {
 }
 
 export function App() {
-  const saved = getSavedSession();
-  const [state, setState] = useState<AppState>(saved ? 'waiting' : 'register');
-  const [participantId, setParticipantId] = useState(saved?.participantId || '');
-  const [name, setName] = useState(saved?.name || '');
+  /** Resolved by the join screen — nothing below it can run without one. */
+  const [session, setSession] = useState<JoinedSession | null>(null);
+  const [state, setState] = useState<AppState>('join');
+  const [participantId, setParticipantId] = useState('');
+  const [name, setName] = useState('');
   const [activeInteraction, setActiveInteraction] = useState<InteractionConfig | null>(null);
   const [activeStageIndex, setActiveStageIndex] = useState(0);
   const [connected, setConnected] = useState(false);
 
-  const connectSync = useCallback(async (id: string) => {
+  const connectSync = useCallback(async (sessionId: string, id: string) => {
     try {
-      await initSync(id);
+      await initSync(sessionId, id);
       await subscribeToEvents(
         (interaction, stageIndex) => {
           setActiveInteraction(interaction);
@@ -87,20 +74,34 @@ export function App() {
     } catch {
       setConnected(false);
       // Retry after 3 seconds
-      setTimeout(() => connectSync(id), 3000);
+      setTimeout(() => connectSync(sessionId, id), 3000);
     }
   }, []);
 
-  // Reconnect on reload if session exists
-  useEffect(() => {
-    if (saved) {
-      connectSync(saved.participantId);
-    }
-  }, []);
+  /**
+   * A session resolved by the join screen. If this device already registered for
+   * *this* session, resume straight into it — storage is namespaced per session,
+   * so a participant id from another event can never be reused here.
+   */
+  const handleJoined = useCallback(
+    (joined: JoinedSession) => {
+      setSession(joined);
+      const stored = loadSession(joined.sessionId);
+      if (!stored) {
+        setState('register');
+        return;
+      }
+      setParticipantId(stored.participantId);
+      setName(stored.name);
+      setState('waiting');
+      void connectSync(joined.sessionId, stored.participantId);
+    },
+    [connectSync]
+  );
 
   // Periodically check connection status
   useEffect(() => {
-    if (state === 'register') return;
+    if (state === 'join' || state === 'register') return;
     const interval = setInterval(() => {
       setConnected(isSyncConnected());
     }, 5000);
@@ -108,16 +109,18 @@ export function App() {
   }, [state]);
 
   const handleRegistered = useCallback(async (id: string, participantName: string) => {
+    if (!session) return;
     setParticipantId(id);
     setName(participantName);
     setState('waiting');
-    saveSession(id, participantName);
-    await connectSync(id);
-  }, [connectSync]);
+    saveSession({ ...session, participantId: id, name: participantName });
+    await connectSync(session.sessionId, id);
+  }, [connectSync, session]);
 
   const handleResponse = useCallback((value: string) => {
-    if (!activeInteraction) return;
+    if (!activeInteraction || !session) return;
     publishResponse(
+      session.sessionId,
       participantId,
       name,
       activeInteraction.stageId,
@@ -125,10 +128,14 @@ export function App() {
       activeInteraction.type,
       value
     );
-  }, [participantId, name, activeInteraction, activeStageIndex]);
+  }, [session, participantId, name, activeInteraction, activeStageIndex]);
+
+  if (state === 'join' || !session) {
+    return <Join initialCode={joinCodeFromPath(window.location.pathname)} onJoined={handleJoined} />;
+  }
 
   if (state === 'register') {
-    return <Register onRegistered={handleRegistered} />;
+    return <Register sessionId={session.sessionId} onRegistered={handleRegistered} />;
   }
 
   const content = (() => {
@@ -145,7 +152,7 @@ export function App() {
       case 'sentiment':
         return <Sentiment interaction={activeInteraction} onSubmit={handleResponse} />;
       case 'llm-prompt':
-        return <AIPrompt interaction={activeInteraction} stageIndex={activeStageIndex} participantId={participantId} name={name} />;
+        return <AIPrompt interaction={activeInteraction} stageIndex={activeStageIndex} sessionId={session.sessionId} participantId={participantId} name={name} />;
       default:
         return <Waiting name={name} />;
     }

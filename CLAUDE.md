@@ -95,7 +95,15 @@ Outbound traffic is sent **from the session's own claimed pool number**, not `TW
 
 Sync reports "already exists" and "not found" with **different codes for objects vs map items** (and a plain `20404` for a REST delete of a missing item). `services/syncErrors.ts` centralizes those families — matching a single code silently turned a re-added presenter and a lost race for a pool number into 500s.
 
-Join codes (`packages/shared/src/joinCode.ts`) are Crockford base32: I/L/O/U are never emitted, and `normalizeJoinCode` folds them onto the characters they resemble on input. **Always normalize before a lookup** — the map is keyed by canonical codes only.
+Join codes (`packages/shared/src/joinCode.ts`) are Crockford base32: I/L/O/U are never emitted, and `normalizeJoinCode` folds them onto the characters they resemble on input. **Always normalize before a lookup** — the map is keyed by canonical codes only. The audience never normalizes locally — `resolveJoinCode` in `packages/audience/src/session.ts` posts whatever was typed to `GET /api/session/:code` and lets the backend fold it, so there is one implementation rather than two that can drift.
+
+### Audience join flow
+
+There is no router: `packages/audience/src/session.ts` parses `/j/:code` off `location.pathname` directly (`joinCodeFromPath`), and `pages/Join.tsx` is the gate in front of everything else — it resolves the code, shows "this has finished" for `ended`, and holds on "not started yet" for `draft`, re-checking every 5s so a phone flips to the registration form by itself when the presenter goes live. Bare `/` shows code entry plus a rejoin list.
+
+Saved state is namespaced: **`wonder-session:{sessionId}`**, one entry per event, holding `{sessionId, joinCode, title, participantId, name}`. A single shared key would let a phone that attended two events resume the wrong one and publish responses under another session's participant id. `sync.ts` holds the connected `sessionId` in a module variable and derives every object name from `syncNames(sessionId)` — there are no unprefixed literals left — and `publishResponse`/`submitAiPrompt`/`POST /api/register` all carry `sessionId`.
+
+Because the deep link is a real path, static hosting needs a fallback: `packages/audience/vercel.json` rewrites `/j/:code` to `/index.html`.
 
 ## Config & deployment
 
