@@ -158,6 +158,23 @@ export async function getAllParticipants(): Promise<Participant[]> {
   return items.map((item) => item.data as Participant);
 }
 
+/**
+ * Participants of one session, read from its prefixed map. Separate from
+ * `getAllParticipants` above only until step 5 threads `sessionId` through every
+ * read/write here; then the unprefixed version goes away.
+ */
+export async function getSessionParticipants(sessionId: string): Promise<Participant[]> {
+  const names = syncNames(sessionId);
+  try {
+    const items = await syncService.syncMaps(names.participants).syncMapItems.list({ limit: 1000 });
+    return items.map((item) => item.data as Participant);
+  } catch (e: any) {
+    // A torn-down session has no map. An empty roster is the truthful answer.
+    if (e.code === NOT_FOUND) return [];
+    throw e;
+  }
+}
+
 export function generateSyncToken(identity: string): string {
   const AccessToken = Twilio.jwt.AccessToken;
   const SyncGrant = AccessToken.SyncGrant;

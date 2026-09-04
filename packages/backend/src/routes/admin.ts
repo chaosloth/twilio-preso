@@ -2,11 +2,17 @@ import type { FastifyInstance } from 'fastify';
 import { getAllParticipants } from '../services/sync.js';
 import Twilio from 'twilio';
 import { config } from '../config.js';
+import { requirePresenter } from '../services/auth.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 const syncService = client.sync.v1.services(config.twilio.syncServiceSid);
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
+  // Every route here is presenter-only: they expose attendee names and phone
+  // numbers, toggle the isLive gate on all outbound Twilio traffic, and destroy
+  // participant data.
+  app.addHook('preHandler', requirePresenter);
+
   // List all participants
   app.get('/api/admin/participants', async () => {
     const participants = await getAllParticipants();

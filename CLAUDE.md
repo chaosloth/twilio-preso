@@ -73,9 +73,26 @@ When the presenter reaches a stage with a `demoTrigger` **and `isLive` is true**
 
 `packages/conversation-relay` is a standalone WebSocket server that Twilio ConversationRelay connects to. On `setup` it looks up the caller by phone number in the participants map and greets them by name; `prompt` events are answered by Claude (`llm.ts`) with running conversation history. TwiML that points calls at it is served from the backend (`/api/voice/conversation-relay`).
 
+### Control plane, sessions, and auth
+
+Multi-tenancy is landing incrementally against `docs/superpowers/specs/2026-08-05-multi-tenant-presentations-design.md`. Three **unprefixed** control-plane SyncMaps sit alongside the (still unprefixed) data plane:
+
+- `presenter-allowlist` — keyed by E.164 phone. The only thing that decides who may present. `PRESENTER_BOOTSTRAP_PHONES` is re-seeded at every boot, so an emptied allowlist can never become a lockout; `DELETE /api/presenters/:phone` refuses to remove your own entry for the same reason.
+- `sessions` — keyed by **join code**, so an audience join is one map read. Holds a `SessionRecord` whose `deck` is a self-contained snapshot, not a reference.
+- `phone-pool-claims` — keyed by phone number. One `TWILIO_PHONE_POOL` number per concurrent session; claimed at creation, released at end. The claim doubles as the reverse lookup ConversationRelay needs, since it only knows the number that was called.
+
+`packages/backend/src/services/sessions.ts` owns all of it. Two invariants worth preserving: **session creation writes the `sessions` entry last** (it is the only thing an audience can reach, so a partial failure must leave an unreachable session, not a joinable one with no Sync objects), and **`endSession` marks the record `ended` before destroying anything** — the record itself is kept so a re-entered code says "this has finished" rather than "unknown code".
+
+Presenter auth is a 12-hour HS256 JWT (`PRESENTER_JWT_SECRET`, required at boot). `requirePresenter` in `services/auth.ts` checks the signature **and** that `sub` is still in the allowlist, so removing someone revokes access immediately rather than at token expiry — hence bad signature → 401, de-listed presenter → 403. `POST /api/auth/start` returns `{ sent: true }` whether or not the number is allowlisted; anything else turns it into an oracle for which colleagues can present.
+
+Route auth is the explicit matrix in the spec, and the boundary runs in both directions — the audience has no credential, so `register`/`response`/`ai-prompt`/`token` and `GET /api/session/:code` must stay public. Everything that exposes attendee phone numbers, toggles `isLive`, or destroys data is presenter-only. TwiML webhooks can't carry a JWT, so `/api/voice/*` validates `X-Twilio-Signature` (`services/twilioSignature.ts`) — this needs `PUBLIC_BASE_URL` to match the URL Twilio signed, since behind Fly's proxy the request reports `http`.
+
+Join codes (`packages/shared/src/joinCode.ts`) are Crockford base32: I/L/O/U are never emitted, and `normalizeJoinCode` folds them onto the characters they resemble on input. **Always normalize before a lookup** — the map is keyed by canonical codes only.
+
 ## Config & deployment
 
 - Backend env is validated at boot in `packages/backend/src/config.ts` (`requireEnv` throws on missing vars). See `.env.example` for the full list. `.env.regional` holds an alternate regional Twilio config.
+- `PRESENTER_JWT_SECRET` is required — the backend refuses to boot without it. Set it on Fly with `fly secrets set` before the next deploy.
 - Backend deploys to Fly.io in `syd` (`fly.toml`, `packages/backend/Dockerfile`). Presenter runs locally on the stage machine; audience is built to static files.
 - Presenter reads `VITE_BACKEND_URL` (defaults to `http://localhost:3001`).
 

@@ -13,6 +13,16 @@ function envList(name: string): string[] {
 
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
+  /**
+   * The externally-reachable origin, as Twilio sees it. Used to rebuild the URL
+   * a webhook signature was computed over — behind Fly's proxy the request
+   * itself reports http, so deriving this from the request would reject every
+   * legitimate webhook.
+   */
+  publicBaseUrl:
+    process.env.PUBLIC_BASE_URL ||
+    process.env.BACKEND_URL ||
+    `http://localhost:${process.env.PORT || '3001'}`,
   twilio: {
     accountSid: requireEnv('TWILIO_ACCOUNT_SID'),
     authToken: requireEnv('TWILIO_AUTH_TOKEN'),
@@ -38,6 +48,9 @@ export const config = {
    * self-heals after an accidental deletion.
    */
   presenterBootstrapPhones: envList('PRESENTER_BOOTSTRAP_PHONES'),
+  /** Signs presenter session tokens. Required — no default, since a guessable
+   *  secret is the same as no auth at all on routes that call real phones. */
+  presenterJwtSecret: requireEnv('PRESENTER_JWT_SECRET'),
   // LLM provider/model/key come from LLM_* env vars, validated by
   // @twilio-preso/llm (llmConfigFromEnv) rather than duplicated here.
   dev: {

@@ -5,6 +5,8 @@ import { getAllParticipants, getParticipant } from '../services/sync.js';
 import { sendSmsToAll, sendSmsToParticipant } from '../services/messaging.js';
 import { initiateAgentCall } from '../services/voice.js';
 import { responseFor } from '@twilio-preso/shared';
+import { requirePresenter } from '../services/auth.js';
+import { requireTwilioSignature } from '../services/twilioSignature.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -14,7 +16,9 @@ interface TriggerBody {
 }
 
 export async function triggerRoutes(app: FastifyInstance): Promise<void> {
-  app.post<{ Body: TriggerBody }>('/api/trigger', async (request, reply) => {
+  // Presenter-only: this fires real SMS and places real voice calls to every
+  // registered phone. It was previously unauthenticated.
+  app.post<{ Body: TriggerBody }>('/api/trigger', { preHandler: requirePresenter }, async (request, reply) => {
     const { triggerId, targetParticipantId } = request.body;
     const participants = await getAllParticipants();
 
@@ -91,7 +95,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // TwiML endpoint for ConversationRelay mode
-  app.post('/api/voice/conversation-relay', async (request, reply) => {
+  app.post('/api/voice/conversation-relay', { preHandler: requireTwilioSignature }, async (request, reply) => {
     const conversationRelayUrl = process.env.CONVERSATION_RELAY_URL || 'wss://localhost:3003';
     const voice = process.env.TWILIO_VOICE || 'Google.en-AU-Neural2-B';
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -105,7 +109,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // TwiML endpoint for static fallback bot
-  app.post('/api/voice/demo-bot', async (request, reply) => {
+  app.post('/api/voice/demo-bot', { preHandler: requireTwilioSignature }, async (request, reply) => {
     const voice = process.env.TWILIO_VOICE || 'Google.en-AU-Neural2-B';
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
