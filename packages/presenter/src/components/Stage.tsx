@@ -1,5 +1,4 @@
 import { Suspense, lazy, type ComponentType, createContext, useContext } from 'react';
-import { STAGES } from '../deck';
 import { usePresenterStore } from '../store';
 
 const STAGE_SPACING = 50;
@@ -37,10 +36,11 @@ export function useIsStageActive() { return useContext(StageActiveContext); }
 
 export function StageContainer() {
   const currentStageIndex = usePresenterStore((s) => s.currentStageIndex);
+  const stages = usePresenterStore((s) => s.stages);
 
   return (
     <group>
-      {STAGES.map((stage, i) => {
+      {stages.map((stage, i) => {
         if (Math.abs(i - currentStageIndex) > 1) return null;
 
         const StageComponent = stageComponents[stage.id];

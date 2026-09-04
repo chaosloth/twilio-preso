@@ -43,7 +43,7 @@ What stages *exist* is separate from what a given presentation *shows*.
 - **`packages/shared/src/deck.ts`** — a `Deck` is an ordered list of `DeckStage`s, each a `stageId` plus optional overrides. `resolveDeck(deck)` merges template with overrides and stamps the runtime `index`, returning the `ResolvedStage[]` that presenter, audience, and backend consume. **Override rule: `undefined` inherits from the template, explicit `null` disables** — so a presenter can suppress the mass-outbound call without deleting the slide. `DEFAULT_DECK` is every library stage in library order.
 - **`packages/shared/src/validateDeck.ts`** — `validateDeck` returns `DeckWarning[]` for a reordered deck: a trigger whose `dependsOn` stage is absent or sequenced after it, an unknown stage id, an `llm-prompt` stage with no model configured. These are **warnings surfaced in the HUD, never hard errors** — nothing here blocks a presentation.
 
-The backend no longer has a module-level deck: it resolves `session.deck` per request (`stagesFor` in `services/sessionContext.ts`). `packages/presenter/src/deck.ts` still resolves `DEFAULT_DECK` at module level, standing in for the deck the session picker will supply; call sites already read a resolved array, so only that file changes.
+Neither backend nor presenter has a module-level deck any more. The backend resolves `session.deck` per request (`stagesFor` in `services/sessionContext.ts`); the presenter holds `stages: ResolvedStage[]` in its Zustand store, set by the session picker from the record, and `advance`/`goTo` clamp on `stages.length`. `packages/presenter/src/deck.ts` is gone.
 
 To add or change presentation content, edit `STAGE_LIBRARY` first, then add the matching presenter stage component in `packages/presenter/src/stages/StageNN*.tsx` and, if there's a new `demoTrigger`, a case in the backend trigger route.
 
@@ -63,7 +63,15 @@ Every one of these objects is per-session and name-prefixed (`s_<id>_*`, via `sy
 
 Presenter navigation lives in `packages/presenter/src/hooks/useNavigation.ts`. Arrow/space keys advance the local Zustand store (`store.ts`); a store change publishes to the Sync document. Because every client *also listens* to that document, there's a loop risk: `suppressPublish()` sets a one-shot flag so a stage change that arrived *from* Sync doesn't get re-published. When editing navigation or sync code, preserve this suppress-on-inbound pattern or you'll create infinite update loops.
 
-The presenter notes window (opened with `n`) is a separate browser window in the same browser; it coordinates via `BroadcastChannel('presenter-sync')`, not Sync.
+The presenter notes window (opened with `n`) is a separate browser window in the same browser; it coordinates via `` BroadcastChannel(`presenter-sync:${sessionId}`) ``, not Sync. The channel name and window name are both session-suffixed, and the session id is passed in the window URL (`/notes?sessionId=`) rather than a shared localStorage key — otherwise two presenter windows for different sessions in one browser drive each other's slides. Because the notes window is its own React root with its own store, it fetches the deck from `GET /api/sessions/:id` instead of importing it.
+
+### Presenter boot gate
+
+`App.tsx` is a three-state gate in front of the canvas: no valid token → `pages/Login.tsx` (phone → OTP), token but no session → `pages/SessionPicker.tsx`, session selected → the 3D presentation. A stored token (`wonder-presenter-token`) is only trusted once `GET /api/auth/me` confirms it, so a de-listed presenter is stopped at boot rather than at token expiry. `auth.ts` owns the token and `presenterFetch`; `sessions.ts` owns the session API and `stagesFor`.
+
+Picking a `draft` session flips it to `live` first — phones cannot register against a draft — but the `isLive` outbound-Twilio gate stays **off** until it is armed in the HUD. That split is the whole point of rehearsal mode: `status: 'live'` means joinable, `isLive` means real SMS and calls. "End & export" downloads the JSON and CSV from the same response that destroys the data, since teardown is irreversible.
+
+`Stage01Opening` encodes `${AUDIENCE_URL}/j/${joinCode}` in the QR and shows the code beneath it in Space Grotesk (it is a value, not a headline).
 
 ### Demo triggers fire real Twilio actions
 

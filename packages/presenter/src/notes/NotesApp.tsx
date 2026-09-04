@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { STAGES } from '../deck';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+import type { ResolvedStage } from '@twilio-preso/shared';
+import { presenterFetch } from '../auth';
+import { fetchSession, stagesFor } from '../sessions';
 
 interface ParticipantInfo {
   id: string;
@@ -11,30 +11,52 @@ interface ParticipantInfo {
   registeredAt: number;
 }
 
-export function NotesApp() {
+interface NotesAppProps {
+  /** Passed in the window URL by `useNavigation`. */
+  sessionId: string;
+}
+
+export function NotesApp({ sessionId }: NotesAppProps) {
+  // The deck is fetched rather than imported: this window has its own React
+  // root and store, and what it shows must be the session's own running order.
+  const [stages, setStages] = useState<ResolvedStage[]>([]);
+  const [sessionTitle, setSessionTitle] = useState('');
+  const [joinCode, setJoinCode] = useState('');
   const [stageIndex, setStageIndex] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [demoEnabled, setDemoEnabled] = useState(true);
+  const [demoEnabled, setDemoEnabled] = useState(false);
   const [participants, setParticipants] = useState<ParticipantInfo[]>([]);
   const [activeTab, setActiveTab] = useState<'notes' | 'participants' | 'controls'>('notes');
   const [zoom, setZoom] = useState(100);
   const startTime = useRef(Date.now());
 
   useEffect(() => {
-    const channel = new BroadcastChannel('presenter-sync');
+    if (!sessionId) return;
+    (async () => {
+      try {
+        const { session } = await fetchSession(sessionId);
+        setStages(stagesFor(session));
+        setSessionTitle(session.title);
+        setJoinCode(session.joinCode);
+      } catch {}
+    })();
+  }, [sessionId]);
+
+  useEffect(() => {
+    const channel = new BroadcastChannel(`presenter-sync:${sessionId}`);
     channel.onmessage = (event) => {
       if (event.data.type === 'stage-change') {
         setStageIndex(event.data.stageIndex);
       }
     };
     return () => channel.close();
-  }, []);
+  }, [sessionId]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
         e.preventDefault();
-        const next = Math.min(stageIndex + 1, STAGES.length - 1);
+        const next = Math.min(stageIndex + 1, stages.length - 1);
         if (next !== stageIndex) handleGoTo(next);
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
@@ -44,7 +66,7 @@ export function NotesApp() {
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [stageIndex]);
+  }, [stageIndex, stages.length]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -57,20 +79,20 @@ export function NotesApp() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/admin/mode`);
+        const res = await presenterFetch(`/api/admin/mode?sessionId=${sessionId}`);
         if (res.ok) {
           const data = await res.json();
           setDemoEnabled(data.isLive);
         }
       } catch {}
     })();
-  }, []);
+  }, [sessionId]);
 
   // Poll participants every 5 seconds
   useEffect(() => {
     const fetchParticipants = async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/admin/participants`);
+        const res = await presenterFetch(`/api/admin/participants?sessionId=${sessionId}`);
         if (res.ok) {
           const data = await res.json();
           setParticipants(data.participants);
@@ -80,42 +102,46 @@ export function NotesApp() {
     fetchParticipants();
     const interval = setInterval(fetchParticipants, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [sessionId]);
 
-  const currentStage = STAGES[stageIndex];
-  const nextStage = STAGES[stageIndex + 1];
+  const currentStage = stages[stageIndex];
+  const nextStage = stages[stageIndex + 1];
   const minutes = Math.floor(elapsedTime / 60);
   const seconds = elapsedTime % 60;
 
   function handleGoTo(index: number) {
-    const channel = new BroadcastChannel('presenter-sync');
+    const channel = new BroadcastChannel(`presenter-sync:${sessionId}`);
     channel.postMessage({ type: 'go-to-stage', stageIndex: index });
     channel.close();
     setStageIndex(index);
   }
 
   async function handleRemoveParticipant(id: string) {
-    await fetch(`${BACKEND_URL}/api/admin/participants/${id}`, { method: 'DELETE' });
+    await presenterFetch(`/api/admin/participants/${id}?sessionId=${sessionId}`, {
+      method: 'DELETE',
+    });
     setParticipants((p) => p.filter((x) => x.id !== id));
   }
 
   async function handleReset() {
     if (!confirm('Reset all participants and demo state?')) return;
-    await fetch(`${BACKEND_URL}/api/admin/reset`, { method: 'POST' });
+    await presenterFetch('/api/admin/reset', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId }),
+    });
     setParticipants([]);
   }
 
   async function toggleDemo() {
     const newState = !demoEnabled;
     setDemoEnabled(newState);
-    const channel = new BroadcastChannel('presenter-sync');
+    const channel = new BroadcastChannel(`presenter-sync:${sessionId}`);
     channel.postMessage({ type: 'demo-toggle', enabled: newState });
     channel.close();
     try {
-      await fetch(`${BACKEND_URL}/api/admin/mode`, {
+      await presenterFetch('/api/admin/mode', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isLive: newState }),
+        body: JSON.stringify({ sessionId, isLive: newState }),
       });
     } catch {}
   }
@@ -125,7 +151,9 @@ export function NotesApp() {
       {/* Header */}
       <div style={{ padding: '16px 24px', borderBottom: '1px solid #1a2540', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <span style={{ fontSize: 13, opacity: 0.5, letterSpacing: 2, textTransform: 'uppercase' }}>Wonder</span>
+          <span style={{ fontSize: 13, opacity: 0.5, letterSpacing: 2, textTransform: 'uppercase' }}>
+            {sessionTitle || 'Wonder'}{joinCode && ` · ${joinCode}`}
+          </span>
           <span style={{ color: '#ef223a', fontWeight: 'bold', fontFamily: 'monospace', fontSize: 14 }}>
             {minutes}:{seconds.toString().padStart(2, '0')}
           </span>
@@ -183,7 +211,7 @@ export function NotesApp() {
           <>
             <div style={{ marginBottom: 24, fontSize: `${zoom}%` }}>
               <div style={{ fontSize: '0.7em', color: '#ef223a', marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' }}>
-                Stage {stageIndex + 1} / {STAGES.length} — Act {currentStage?.act}
+                Stage {stageIndex + 1} / {stages.length} — Act {currentStage?.act}
               </div>
               <h2 style={{ fontSize: '1.5em', fontWeight: 'bold', marginBottom: 12, fontFamily: "'Tektur', sans-serif" }}>
                 {currentStage?.title}
@@ -221,7 +249,7 @@ export function NotesApp() {
             <div style={{ borderTop: '1px solid #1a2540', paddingTop: 14 }}>
               <div style={{ fontSize: 11, marginBottom: 8, opacity: 0.5, letterSpacing: 1, textTransform: 'uppercase' }}>Jump to Stage</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {STAGES.map((s, i) => (
+                {stages.map((s, i) => (
                   <button
                     key={s.id}
                     onClick={() => handleGoTo(i)}
@@ -317,10 +345,9 @@ export function NotesApp() {
                     key={trigger}
                     onClick={async () => {
                       if (confirm(`Fire ${trigger}?`)) {
-                        await fetch(`${BACKEND_URL}/api/trigger`, {
+                        await presenterFetch('/api/trigger', {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ triggerId: trigger }),
+                          body: JSON.stringify({ sessionId, triggerId: trigger }),
                         });
                       }
                     }}
@@ -335,7 +362,7 @@ export function NotesApp() {
             <div style={{ padding: 16, background: '#0a1535', borderRadius: 8 }}>
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Audience URL</div>
               <div style={{ fontSize: 12, color: '#7e869c', wordBreak: 'break-all' }}>
-                Set VITE_AUDIENCE_URL to update the QR code on stage 1
+                Join code {joinCode || '—'} · set VITE_AUDIENCE_URL to change the QR host
               </div>
             </div>
           </div>
