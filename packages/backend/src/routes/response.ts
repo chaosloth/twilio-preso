@@ -5,19 +5,28 @@ import type { AudienceResponseEvent, InteractionType } from '@twilio-preso/share
 interface ResponseBody {
   participantId: string;
   participantName: string;
+  /** Stage the answer belongs to. The key it is stored under. */
+  stageId: string;
+  /** Deck position it was answered at. Display ordering only. */
   stageIndex: number;
   interactionType: InteractionType;
   value: string;
 }
 
 export async function responseRoutes(app: FastifyInstance): Promise<void> {
-  app.post<{ Body: ResponseBody }>('/api/response', async (request) => {
-    const { participantId, participantName, stageIndex, interactionType, value } = request.body;
+  app.post<{ Body: ResponseBody }>('/api/response', async (request, reply) => {
+    const { participantId, participantName, stageId, stageIndex, interactionType, value } =
+      request.body;
+
+    if (!stageId) {
+      return reply.status(400).send({ error: 'stageId required' });
+    }
 
     const event: AudienceResponseEvent = {
       type: 'audience-response',
       participantId,
       participantName,
+      stageId,
       stageIndex,
       interactionType,
       value,
@@ -29,13 +38,14 @@ export async function responseRoutes(app: FastifyInstance): Promise<void> {
     // must not lose the live tally.
     try {
       await recordParticipantResponse(participantId, {
+        stageId,
         stageIndex,
         type: interactionType,
         value,
         timestamp: event.timestamp,
       });
     } catch (err) {
-      app.log.warn({ err, participantId, stageIndex }, 'failed to persist participant response');
+      app.log.warn({ err, participantId, stageId }, 'failed to persist participant response');
     }
 
     await publishEvent(event);

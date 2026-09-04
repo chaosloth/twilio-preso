@@ -61,7 +61,7 @@ export function AIPrompt({ interaction, stageIndex, participantId, name }: AIPro
     shownLenRef.current = 0;
 
     try {
-      await submitAiPrompt(participantId, name, stageIndex, prompt, (delta) => {
+      await submitAiPrompt(participantId, name, interaction.stageId, stageIndex, prompt, (delta) => {
         receivedRef.current += delta;
         // Flip to the answer view on the first token so streaming is visible.
         setPhase('answered');

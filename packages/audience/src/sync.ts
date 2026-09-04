@@ -68,6 +68,7 @@ export async function subscribeToEvents(
 export async function publishResponse(
   participantId: string,
   participantName: string,
+  stageId: string,
   stageIndex: number,
   interactionType: string,
   value: string
@@ -78,6 +79,7 @@ export async function publishResponse(
     body: JSON.stringify({
       participantId,
       participantName,
+      stageId,
       stageIndex,
       interactionType,
       value,
@@ -92,6 +94,7 @@ export async function publishResponse(
 export async function submitAiPrompt(
   participantId: string,
   participantName: string,
+  stageId: string,
   stageIndex: number,
   prompt: string,
   onDelta?: (text: string) => void
@@ -99,7 +102,7 @@ export async function submitAiPrompt(
   const res = await fetch(`${BACKEND_URL}/api/ai-prompt`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ participantId, participantName, stageIndex, prompt }),
+    body: JSON.stringify({ participantId, participantName, stageId, stageIndex, prompt }),
   });
   if (!res.ok || !res.body) throw new Error('ai-prompt request failed');
 

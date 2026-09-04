@@ -6,6 +6,7 @@ import type { AiPromptPendingEvent, AiPromptResponseEvent } from '@twilio-preso/
 interface AiPromptBody {
   participantId: string;
   participantName: string;
+  stageId: string;
   stageIndex: number;
   prompt: string;
 }
@@ -19,7 +20,7 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
    * event, published once the full text is assembled.
    */
   app.post<{ Body: AiPromptBody }>('/api/ai-prompt', async (request, reply) => {
-    const { participantId, participantName, stageIndex } = request.body;
+    const { participantId, participantName, stageId, stageIndex } = request.body;
     const prompt = request.body.prompt?.trim();
 
     if (!prompt) {
@@ -40,6 +41,7 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
       type: 'ai-prompt-pending',
       participantId,
       participantName,
+      stageId,
       stageIndex,
       prompt,
       timestamp: Date.now(),
@@ -84,6 +86,7 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
       type: 'ai-prompt-response',
       participantId,
       participantName,
+      stageId,
       stageIndex,
       prompt,
       response,

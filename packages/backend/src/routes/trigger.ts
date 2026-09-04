@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { getAllParticipants, getParticipant } from '../services/sync.js';
 import { sendSmsToAll, sendSmsToParticipant } from '../services/messaging.js';
 import { initiateAgentCall } from '../services/voice.js';
+import { responseFor } from '@twilio-preso/shared';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -34,9 +35,11 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
 
       case 'sms-memory': {
         await sendSmsToAll(participants, (p) => {
-          const responses = p.responses || {};
-          const challengeResponse = Object.values(responses).find((r: any) => r.stageIndex === 10);
-          const challenge = (challengeResponse as any)?.value || 'customer experience';
+          // Keyed by stage id, so reordering or omitting slides cannot make this
+          // read a different stage's answer. Falls back to generic copy when the
+          // word-cloud stage is absent from the deck — validateDeck warns about
+          // that case in the HUD rather than blocking the trigger.
+          const challenge = responseFor(p, 'customers-are')?.value || 'customer experience';
           return `Hey ${p.name}, you said "${challenge}" was your biggest challenge. We remembered — no database lookup, no asking again. That's Conversation Memory. — Twilio`;
         });
         return { sent: participants.length };

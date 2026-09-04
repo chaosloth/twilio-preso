@@ -8,7 +8,7 @@ export default function Stage09CustomersAre() {
   const words = useMemo(() => {
     const wordMap: Record<string, number> = {};
     recentResponses
-      .filter((r) => r.stageIndex === 10 && r.interactionType === 'text')
+      .filter((r) => r.stageId === 'customers-are' && r.interactionType === 'text')
       .forEach((r) => {
         const word = r.value.toLowerCase();
         wordMap[word] = (wordMap[word] || 0) + 1;

@@ -120,6 +120,7 @@ export function App() {
     publishResponse(
       participantId,
       name,
+      activeInteraction.stageId,
       activeStageIndex,
       activeInteraction.type,
       value

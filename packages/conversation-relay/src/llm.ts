@@ -1,4 +1,5 @@
 import { createLlmClientFromEnv } from '@twilio-preso/llm';
+import { responseFor } from '@twilio-preso/shared';
 import type { Participant } from '@twilio-preso/shared';
 
 // VOICE_-prefixed env vars override the shared LLM_* config, so the voice agent
@@ -23,15 +24,18 @@ export async function generateResponse(
 
 function buildSystemPrompt(participant: Participant | null): string {
   const name = participant?.name || 'friend';
-  const challenge = participant?.responses?.[8]?.value || null;
-  const excitedProduct = participant?.responses?.[15]?.value || null;
+  // Keyed by stage id. These previously read responses[8] and responses[15] —
+  // neither index had an interaction, so both were always null and the voice
+  // agent never actually used what the audience told us.
+  const challenge = responseFor(participant, 'customers-are')?.value || null;
+  const deployTarget = responseFor(participant, 'innovation')?.value || null;
 
   let context = '';
   if (challenge) {
     context += `\nThey mentioned "${challenge}" as their biggest CX challenge during the presentation.`;
   }
-  if (excitedProduct) {
-    context += `\nThey expressed interest in ${excitedProduct}.`;
+  if (deployTarget) {
+    context += `\nThey said they need this to run on ${deployTarget}.`;
   }
 
   return `You are a friendly AI assistant at a Twilio Wonder event. You were just built live on stage in under 5 minutes — you're a demo of how fast Twilio enables developers to deploy voice AI agents.

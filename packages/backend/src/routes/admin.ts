@@ -57,7 +57,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
       // Reset aggregate results
       await syncService.documents('aggregate-results').update({
-        data: { stageIndex: 0, type: 'poll', results: {}, totalResponses: 0 },
+        data: { stageId: '', stageIndex: 0, type: 'poll', results: {}, totalResponses: 0 },
       });
 
       return { reset: true };

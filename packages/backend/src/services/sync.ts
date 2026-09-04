@@ -23,7 +23,7 @@ export async function initSync(): Promise<void> {
   try {
     await syncService.documents.create({
       uniqueName: AGGREGATE_RESULTS_DOC,
-      data: { stageIndex: 0, type: 'poll', results: {}, totalResponses: 0 } satisfies AggregateResultsDoc,
+      data: { stageId: '', stageIndex: 0, type: 'poll', results: {}, totalResponses: 0 } satisfies AggregateResultsDoc,
     });
   } catch (e: any) {
     if (e.code !== 54301) throw e;
@@ -83,9 +83,10 @@ export async function updateParticipant(id: string, updates: Partial<Participant
 }
 
 /**
- * Records an answer against the participant, keyed by stage index so a re-answer
- * replaces the old one. This is what makes later stages personal: the memory SMS
- * trigger, the voice agent, and the AI-prompt agent all read `responses`.
+ * Records an answer against the participant, keyed by stage id so a re-answer
+ * replaces the old one and a reordered deck still finds it. This is what makes
+ * later stages personal: the memory SMS trigger, the voice agent, and the
+ * AI-prompt agent all read `responses`.
  */
 export async function recordParticipantResponse(
   id: string,
@@ -96,7 +97,7 @@ export async function recordParticipantResponse(
   await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems(id).update({
     data: {
       ...participant,
-      responses: { ...(participant.responses || {}), [response.stageIndex]: response },
+      responses: { ...(participant.responses || {}), [response.stageId]: response },
     },
   });
 }

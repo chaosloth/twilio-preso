@@ -8,7 +8,7 @@ export default function Stage05CustomerNerves() {
   const pollData = useMemo(() => {
     const counts: Record<string, number> = {};
     recentResponses
-      .filter((r) => r.stageIndex === 5 && r.interactionType === 'poll')
+      .filter((r) => r.stageId === 'customer-nerves' && r.interactionType === 'poll')
       .forEach((r) => {
         counts[r.value] = (counts[r.value] || 0) + 1;
       });

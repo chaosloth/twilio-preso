@@ -8,7 +8,7 @@ export default function Stage16Innovation() {
   const pollData = useMemo(() => {
     const counts: Record<string, number> = {};
     recentResponses
-      .filter((r) => r.stageIndex === 19 && r.interactionType === 'poll')
+      .filter((r) => r.stageId === 'innovation' && r.interactionType === 'poll')
       .forEach((r) => {
         counts[r.value] = (counts[r.value] || 0) + 1;
       });

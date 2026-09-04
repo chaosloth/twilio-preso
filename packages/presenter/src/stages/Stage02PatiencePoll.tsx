@@ -8,7 +8,7 @@ export default function Stage02PatiencePoll() {
   const pollData = useMemo(() => {
     const counts: Record<string, number> = {};
     recentResponses
-      .filter((r) => r.stageIndex === 1 && r.interactionType === 'poll')
+      .filter((r) => r.stageId === 'patience-poll' && r.interactionType === 'poll')
       .forEach((r) => {
         counts[r.value] = (counts[r.value] || 0) + 1;
       });
