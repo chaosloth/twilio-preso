@@ -1,136 +1,185 @@
 import Twilio from 'twilio';
 import { config } from '../config.js';
 import { syncNames } from '@twilio-preso/shared';
-import type { PresentationStateDoc, AggregateResultsDoc, SyncStreamEvent, Participant, ParticipantResponse, SyncObjectNames } from '@twilio-preso/shared';
+import { ignoring, isAlreadyExists, isNotFound } from './syncErrors.js';
+import type {
+  AggregateResultsDoc,
+  Participant,
+  ParticipantResponse,
+  PresentationStateDoc,
+  SyncObjectNames,
+  SyncStreamEvent,
+} from '@twilio-preso/shared';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 const syncService = client.sync.v1.services(config.twilio.syncServiceSid);
 
-const PRESENTATION_STATE_DOC = 'presentation-state';
-const AGGREGATE_RESULTS_DOC = 'aggregate-results';
-const EVENT_STREAM = 'event-stream';
-const PARTICIPANTS_MAP = 'participants';
-
-/** Sync's "unique name already exists". Creation is idempotent by design. */
-const ALREADY_EXISTS = 54301;
-
-/** Sync's "not found" — a delete of something already gone is a success. */
-const NOT_FOUND = 54100;
-
-async function ignoring<T>(code: number, fn: () => Promise<T>): Promise<T | null> {
-  try {
-    return await fn();
-  } catch (e: any) {
-    if (e.code !== code) throw e;
-    return null;
-  }
-}
-
 /**
- * Creates the four data-plane objects under the given names. Idempotent, so
- * re-running it on an existing set is a no-op rather than an error.
+ * Every object name in this file comes from here, so a session can only ever
+ * touch its own four objects. `syncNames` rejects ids containing `_` — the
+ * prefix separator — so a crafted id cannot address another session's objects.
  */
-async function createDataPlane(names: SyncObjectNames, isLive: boolean): Promise<void> {
-  await ignoring(ALREADY_EXISTS, () =>
-    syncService.documents.create({
-      uniqueName: names.state,
-      data: { currentStageIndex: 0, activeInteraction: null, totalParticipants: 0, isLive } satisfies PresentationStateDoc,
-    })
-  );
-
-  await ignoring(ALREADY_EXISTS, () =>
-    syncService.documents.create({
-      uniqueName: names.aggregate,
-      data: { stageId: '', stageIndex: 0, type: 'poll', results: {}, totalResponses: 0 } satisfies AggregateResultsDoc,
-    })
-  );
-
-  await ignoring(ALREADY_EXISTS, () => syncService.syncStreams.create({ uniqueName: names.events }));
-  await ignoring(ALREADY_EXISTS, () => syncService.syncMaps.create({ uniqueName: names.participants }));
+function names(sessionId: string): SyncObjectNames {
+  return syncNames(sessionId);
 }
 
+// ---------------------------------------------------------------------------
+// Lifecycle
+// ---------------------------------------------------------------------------
+
 /**
- * The legacy single-presentation objects, still what every read/write function
- * below uses. Step 5 of the multi-tenant spec threads `sessionId` through those
- * and this goes away.
+ * Creates one session's four objects. Idempotent.
  *
- * `isLive: true` preserves the existing behaviour, and only applies on first
- * creation — an existing doc is never touched, so a restart cannot flip live
- * outbound traffic on or off under an operator.
- */
-export async function initSync(): Promise<void> {
-  await createDataPlane(
-    {
-      state: PRESENTATION_STATE_DOC,
-      aggregate: AGGREGATE_RESULTS_DOC,
-      events: EVENT_STREAM,
-      participants: PARTICIPANTS_MAP,
-    },
-    true
-  );
-}
-
-/**
- * Creates one session's four objects. A new session starts **not live**: the
- * presenter can walk the deck to rehearse without a demo-trigger stage texting
- * or calling real phones.
+ * A new session starts **not live**: the presenter can walk the whole deck to
+ * rehearse without a demo-trigger stage texting or calling real phones.
  */
 export async function initSessionSync(sessionId: string): Promise<void> {
-  await createDataPlane(syncNames(sessionId), false);
+  const n = names(sessionId);
+
+  await ignoring(isAlreadyExists, () =>
+    syncService.documents.create({
+      uniqueName: n.state,
+      data: {
+        currentStageIndex: 0,
+        activeInteraction: null,
+        totalParticipants: 0,
+        isLive: false,
+      } satisfies PresentationStateDoc,
+    })
+  );
+
+  await ignoring(isAlreadyExists, () =>
+    syncService.documents.create({
+      uniqueName: n.aggregate,
+      data: {
+        stageId: '',
+        stageIndex: 0,
+        type: 'poll',
+        results: {},
+        totalResponses: 0,
+      } satisfies AggregateResultsDoc,
+    })
+  );
+
+  await ignoring(isAlreadyExists, () => syncService.syncStreams.create({ uniqueName: n.events }));
+  await ignoring(isAlreadyExists, () => syncService.syncMaps.create({ uniqueName: n.participants }));
 }
 
 /**
  * Deletes one session's four objects. Without this a single Sync service
  * accumulates four objects per event forever and eventually hits service
- * limits. Tolerates missing objects so a partially-created session can still be
+ * limits. Tolerates missing objects, so a partially-created session can still be
  * cleaned up.
  */
 export async function teardownSessionSync(sessionId: string): Promise<void> {
-  const names = syncNames(sessionId);
-  await ignoring(NOT_FOUND, () => syncService.documents(names.state).remove());
-  await ignoring(NOT_FOUND, () => syncService.documents(names.aggregate).remove());
-  await ignoring(NOT_FOUND, () => syncService.syncStreams(names.events).remove());
-  await ignoring(NOT_FOUND, () => syncService.syncMaps(names.participants).remove());
+  const n = names(sessionId);
+  await ignoring(isNotFound, () => syncService.documents(n.state).remove());
+  await ignoring(isNotFound, () => syncService.documents(n.aggregate).remove());
+  await ignoring(isNotFound, () => syncService.syncStreams(n.events).remove());
+  await ignoring(isNotFound, () => syncService.syncMaps(n.participants).remove());
 }
 
-export async function publishEvent(event: SyncStreamEvent): Promise<void> {
-  await syncService.syncStreams(EVENT_STREAM).streamMessages.create({ data: event });
+// ---------------------------------------------------------------------------
+// State, events, aggregates
+// ---------------------------------------------------------------------------
+
+export async function publishEvent(sessionId: string, event: SyncStreamEvent): Promise<void> {
+  await syncService.syncStreams(names(sessionId).events).streamMessages.create({ data: event });
 }
 
-export async function updatePresentationState(updates: Partial<PresentationStateDoc>): Promise<void> {
-  const doc = await syncService.documents(PRESENTATION_STATE_DOC).fetch();
-  await syncService.documents(PRESENTATION_STATE_DOC).update({
-    data: { ...doc.data, ...updates },
+export async function getPresentationState(
+  sessionId: string
+): Promise<PresentationStateDoc | null> {
+  try {
+    const doc = await syncService.documents(names(sessionId).state).fetch();
+    return doc.data as PresentationStateDoc;
+  } catch {
+    return null;
+  }
+}
+
+export async function updatePresentationState(
+  sessionId: string,
+  updates: Partial<PresentationStateDoc>
+): Promise<void> {
+  const name = names(sessionId).state;
+  const doc = await syncService.documents(name).fetch();
+  await syncService.documents(name).update({ data: { ...doc.data, ...updates } });
+}
+
+/** Whether this session's outbound Twilio traffic is armed. */
+export async function isSessionLive(sessionId: string): Promise<boolean> {
+  return (await getPresentationState(sessionId))?.isLive === true;
+}
+
+export async function updateAggregateResults(
+  sessionId: string,
+  results: AggregateResultsDoc
+): Promise<void> {
+  await syncService.documents(names(sessionId).aggregate).update({ data: results });
+}
+
+export async function resetAggregateResults(sessionId: string): Promise<void> {
+  await updateAggregateResults(sessionId, {
+    stageId: '',
+    stageIndex: 0,
+    type: 'poll',
+    results: {},
+    totalResponses: 0,
   });
 }
 
-export async function updateAggregateResults(results: AggregateResultsDoc): Promise<void> {
-  await syncService.documents(AGGREGATE_RESULTS_DOC).update({ data: results });
-}
+// ---------------------------------------------------------------------------
+// Participants
+// ---------------------------------------------------------------------------
 
-export async function addParticipant(participant: Participant): Promise<void> {
-  await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems.create({
+export async function addParticipant(
+  sessionId: string,
+  participant: Participant
+): Promise<void> {
+  const name = names(sessionId).participants;
+  await syncService.syncMaps(name).syncMapItems.create({
     key: participant.id,
     data: participant,
   });
-  const items = await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems.list();
-  await updatePresentationState({ totalParticipants: items.length });
+  const items = await syncService.syncMaps(name).syncMapItems.list({ limit: 1000 });
+  await updatePresentationState(sessionId, { totalParticipants: items.length });
 }
 
-export async function getParticipant(id: string): Promise<Participant | null> {
+export async function getParticipant(
+  sessionId: string,
+  id: string
+): Promise<Participant | null> {
   try {
-    const item = await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems(id).fetch();
+    const item = await syncService.syncMaps(names(sessionId).participants).syncMapItems(id).fetch();
     return item.data as Participant;
   } catch {
     return null;
   }
 }
 
-export async function updateParticipant(id: string, updates: Partial<Participant>): Promise<void> {
-  const item = await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems(id).fetch();
-  await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems(id).update({
+export async function updateParticipant(
+  sessionId: string,
+  id: string,
+  updates: Partial<Participant>
+): Promise<void> {
+  const name = names(sessionId).participants;
+  const item = await syncService.syncMaps(name).syncMapItems(id).fetch();
+  await syncService.syncMaps(name).syncMapItems(id).update({
     data: { ...item.data, ...updates },
   });
+}
+
+export async function removeParticipant(sessionId: string, id: string): Promise<boolean> {
+  const removed = await ignoring(isNotFound, () =>
+    syncService.syncMaps(names(sessionId).participants).syncMapItems(id).remove()
+  );
+  if (removed === null) return false;
+  const items = await syncService
+    .syncMaps(names(sessionId).participants)
+    .syncMapItems.list({ limit: 1000 });
+  await updatePresentationState(sessionId, { totalParticipants: items.length });
+  return true;
 }
 
 /**
@@ -140,12 +189,14 @@ export async function updateParticipant(id: string, updates: Partial<Participant
  * AI-prompt agent all read `responses`.
  */
 export async function recordParticipantResponse(
+  sessionId: string,
   id: string,
   response: ParticipantResponse
 ): Promise<void> {
-  const item = await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems(id).fetch();
+  const name = names(sessionId).participants;
+  const item = await syncService.syncMaps(name).syncMapItems(id).fetch();
   const participant = item.data as Participant;
-  await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems(id).update({
+  await syncService.syncMaps(name).syncMapItems(id).update({
     data: {
       ...participant,
       responses: { ...(participant.responses || {}), [response.stageId]: response },
@@ -153,28 +204,56 @@ export async function recordParticipantResponse(
   });
 }
 
-export async function getAllParticipants(): Promise<Participant[]> {
-  const items = await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems.list();
-  return items.map((item) => item.data as Participant);
-}
-
-/**
- * Participants of one session, read from its prefixed map. Separate from
- * `getAllParticipants` above only until step 5 threads `sessionId` through every
- * read/write here; then the unprefixed version goes away.
- */
-export async function getSessionParticipants(sessionId: string): Promise<Participant[]> {
-  const names = syncNames(sessionId);
+export async function getAllParticipants(sessionId: string): Promise<Participant[]> {
   try {
-    const items = await syncService.syncMaps(names.participants).syncMapItems.list({ limit: 1000 });
+    const items = await syncService
+      .syncMaps(names(sessionId).participants)
+      .syncMapItems.list({ limit: 1000 });
     return items.map((item) => item.data as Participant);
-  } catch (e: any) {
+  } catch (e) {
     // A torn-down session has no map. An empty roster is the truthful answer.
-    if (e.code === NOT_FOUND) return [];
+    if (isNotFound(e)) return [];
     throw e;
   }
 }
 
+/** Deletes and recreates the roster — the `admin/reset` path. */
+export async function resetParticipants(sessionId: string): Promise<void> {
+  const name = names(sessionId).participants;
+  await ignoring(isNotFound, () => syncService.syncMaps(name).remove());
+  await ignoring(isAlreadyExists, () => syncService.syncMaps.create({ uniqueName: name }));
+  await updatePresentationState(sessionId, {
+    currentStageIndex: 0,
+    activeInteraction: null,
+    totalParticipants: 0,
+  });
+  await resetAggregateResults(sessionId);
+}
+
+/**
+ * Finds a participant by phone number within one session. This is why the phone
+ * pool matters: the same attendee may be registered at two concurrent events,
+ * and an account-wide search could not tell those registrations apart.
+ */
+export async function findParticipantByPhone(
+  sessionId: string,
+  phone: string
+): Promise<Participant | null> {
+  const participants = await getAllParticipants(sessionId);
+  return participants.find((p) => p.phone === phone) ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Tokens
+// ---------------------------------------------------------------------------
+
+/**
+ * The Sync grant remains **service-wide** under namespacing, so this token can
+ * technically reach another session's objects. Session ids are not discoverable
+ * without a join code and that lookup is rate-limited, which is acceptable for
+ * trusted internal use; tightening to per-identity ACLs is a change here and in
+ * the token route rather than an audit of every call site.
+ */
 export function generateSyncToken(identity: string): string {
   const AccessToken = Twilio.jwt.AccessToken;
   const SyncGrant = AccessToken.SyncGrant;
@@ -186,8 +265,7 @@ export function generateSyncToken(identity: string): string {
     { identity }
   );
 
-  const syncGrant = new SyncGrant({ serviceSid: config.twilio.syncServiceSid });
-  token.addGrant(syncGrant);
+  token.addGrant(new SyncGrant({ serviceSid: config.twilio.syncServiceSid }));
 
   return token.toJwt();
 }

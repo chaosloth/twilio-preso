@@ -1,7 +1,6 @@
 import { createLlmClientFromEnv } from '@twilio-preso/llm';
 import { answeredQuestions } from '@twilio-preso/shared';
-import type { Participant } from '@twilio-preso/shared';
-import { STAGES } from '../deck.js';
+import type { Participant, ResolvedStage } from '@twilio-preso/shared';
 
 const llm = createLlmClientFromEnv();
 
@@ -16,17 +15,17 @@ const FALLBACK = "Hmm, I didn't quite catch that — try asking again!";
 /**
  * Turns the participant's earlier poll/text answers into a system-prompt block,
  * pairing each stored response with the question it answered. `answeredQuestions`
- * walks the deck, so ordering follows the running order and answers to stages
- * this deck doesn't show are left out.
+ * walks the session's own deck, so ordering follows that presentation's running
+ * order and answers to stages it doesn't show are left out.
  */
-function buildParticipantContext(participant: Participant | null): string {
+function buildParticipantContext(participant: Participant | null, stages: ResolvedStage[]): string {
   if (!participant) return '';
 
   const lines: string[] = [];
   if (participant.company) lines.push(`They work at ${participant.company}.`);
   if (participant.role) lines.push(`Their role is ${participant.role}.`);
 
-  const answers = answeredQuestions(participant, STAGES).map(({ question, answer }) =>
+  const answers = answeredQuestions(participant, stages).map(({ question, answer }) =>
     question ? `- "${question}" → ${answer}` : `- ${answer}`
   );
 
@@ -43,9 +42,14 @@ function buildParticipantContext(participant: Participant | null): string {
   )}\n\nWeave this in naturally when it's relevant — it makes the answer feel personal. Don't recite it back to them or mention it if it has nothing to do with what they asked.`;
 }
 
-function buildRequest(userPrompt: string, name?: string, participant?: Participant | null) {
+function buildRequest(
+  userPrompt: string,
+  stages: ResolvedStage[],
+  name?: string,
+  participant?: Participant | null
+) {
   return {
-    system: SYSTEM_PROMPT + buildParticipantContext(participant ?? null),
+    system: SYSTEM_PROMPT + buildParticipantContext(participant ?? null, stages),
     maxTokens: 200,
     messages: [
       {
@@ -58,20 +62,22 @@ function buildRequest(userPrompt: string, name?: string, participant?: Participa
 
 export async function generateAiResponse(
   userPrompt: string,
+  stages: ResolvedStage[],
   name?: string,
   participant?: Participant | null
 ): Promise<string> {
-  const text = await llm.complete(buildRequest(userPrompt, name, participant));
+  const text = await llm.complete(buildRequest(userPrompt, stages, name, participant));
   return text.trim() || FALLBACK;
 }
 
 /** Yields text deltas as the model produces them. */
 export function streamAiResponse(
   userPrompt: string,
+  stages: ResolvedStage[],
   name?: string,
   participant?: Participant | null
 ): AsyncIterable<string> {
-  return llm.stream(buildRequest(userPrompt, name, participant));
+  return llm.stream(buildRequest(userPrompt, stages, name, participant));
 }
 
 export const llmInfo = { provider: llm.provider, model: llm.model };

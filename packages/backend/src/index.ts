@@ -4,7 +4,6 @@ import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
 import rateLimit from '@fastify/rate-limit';
 import { config } from './config.js';
-import { initSync } from './services/sync.js';
 import { initControlPlane } from './services/sessions.js';
 import { tokenRoutes } from './routes/token.js';
 import { verifyRoutes } from './routes/verify.js';
@@ -38,7 +37,6 @@ await app.register(aiPromptRoutes);
 
 app.get('/health', async () => ({ status: 'ok' }));
 
-await initSync();
 // Control-plane maps + allowlist bootstrap. Must precede listen: an empty
 // allowlist means nobody can sign in.
 await initControlPlane();

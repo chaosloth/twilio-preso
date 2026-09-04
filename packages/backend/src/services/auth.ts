@@ -71,6 +71,23 @@ export async function requirePresenter(
   request.presenter = { phone: presenter.phone, name: presenter.name };
 }
 
+/**
+ * Attaches `request.presenter` when a valid, still-allowlisted token is present
+ * and does nothing otherwise. For routes an audience phone and a presenter both
+ * use — `/api/token` — where the two get different answers but neither is
+ * rejected for lacking the other's credential.
+ */
+export async function attachPresenter(request: FastifyRequest): Promise<void> {
+  const token = bearerToken(request);
+  const identity = token ? verifyPresenterToken(token) : null;
+  if (!identity) return;
+
+  const presenter = await getPresenter(identity.phone);
+  if (!presenter) return;
+
+  request.presenter = { phone: presenter.phone, name: presenter.name };
+}
+
 declare module 'fastify' {
   interface FastifyRequest {
     presenter?: PresenterIdentity;

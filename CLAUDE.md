@@ -43,7 +43,7 @@ What stages *exist* is separate from what a given presentation *shows*.
 - **`packages/shared/src/deck.ts`** — a `Deck` is an ordered list of `DeckStage`s, each a `stageId` plus optional overrides. `resolveDeck(deck)` merges template with overrides and stamps the runtime `index`, returning the `ResolvedStage[]` that presenter, audience, and backend consume. **Override rule: `undefined` inherits from the template, explicit `null` disables** — so a presenter can suppress the mass-outbound call without deleting the slide. `DEFAULT_DECK` is every library stage in library order.
 - **`packages/shared/src/validateDeck.ts`** — `validateDeck` returns `DeckWarning[]` for a reordered deck: a trigger whose `dependsOn` stage is absent or sequenced after it, an unknown stage id, an `llm-prompt` stage with no model configured. These are **warnings surfaced in the HUD, never hard errors** — nothing here blocks a presentation.
 
-`packages/presenter/src/deck.ts` and `packages/backend/src/deck.ts` currently resolve `DEFAULT_DECK` at module level, standing in for the per-session deck that will come from the session record. Call sites already read a resolved array, so only those two files change when sessions land.
+The backend no longer has a module-level deck: it resolves `session.deck` per request (`stagesFor` in `services/sessionContext.ts`). `packages/presenter/src/deck.ts` still resolves `DEFAULT_DECK` at module level, standing in for the deck the session picker will supply; call sites already read a resolved array, so only that file changes.
 
 To add or change presentation content, edit `STAGE_LIBRARY` first, then add the matching presenter stage component in `packages/presenter/src/stages/StageNN*.tsx` and, if there's a new `demoTrigger`, a case in the backend trigger route.
 
@@ -57,7 +57,7 @@ There is **no custom WebSocket/state server** — Twilio Sync is the real-time b
 - `event-stream` — fire-and-forget events (stage-advance, interaction-prompt, audience-response, participant-joined).
 - `participants` SyncMap — one entry per registered attendee, keyed by participant id, holding their `responses`.
 
-Clients fetch a short-lived Sync access token from the backend (`GET /api/token?identity=`) then connect directly to Twilio — the backend is not in the realtime path.
+Every one of these objects is per-session and name-prefixed (`s_<id>_*`, via `syncNames`); the bullets above name the *roles*, not the literal unique names. Clients fetch a short-lived Sync access token from the backend (`GET /api/token?identity=&sessionId=`, issued only to a presenter or a registered participant of that session) then connect directly to Twilio — the backend is not in the realtime path.
 
 ### Navigation & the echo-suppression pattern
 
@@ -75,7 +75,7 @@ When the presenter reaches a stage with a `demoTrigger` **and `isLive` is true**
 
 ### Control plane, sessions, and auth
 
-Multi-tenancy is landing incrementally against `docs/superpowers/specs/2026-08-05-multi-tenant-presentations-design.md`. Three **unprefixed** control-plane SyncMaps sit alongside the (still unprefixed) data plane:
+Multi-tenancy is landing incrementally against `docs/superpowers/specs/2026-08-05-multi-tenant-presentations-design.md`. Three **unprefixed** control-plane SyncMaps sit alongside a **per-session, prefixed** data plane:
 
 - `presenter-allowlist` — keyed by E.164 phone. The only thing that decides who may present. `PRESENTER_BOOTSTRAP_PHONES` is re-seeded at every boot, so an emptied allowlist can never become a lockout; `DELETE /api/presenters/:phone` refuses to remove your own entry for the same reason.
 - `sessions` — keyed by **join code**, so an audience join is one map read. Holds a `SessionRecord` whose `deck` is a self-contained snapshot, not a reference.
@@ -86,6 +86,14 @@ Multi-tenancy is landing incrementally against `docs/superpowers/specs/2026-08-0
 Presenter auth is a 12-hour HS256 JWT (`PRESENTER_JWT_SECRET`, required at boot). `requirePresenter` in `services/auth.ts` checks the signature **and** that `sub` is still in the allowlist, so removing someone revokes access immediately rather than at token expiry — hence bad signature → 401, de-listed presenter → 403. `POST /api/auth/start` returns `{ sent: true }` whether or not the number is allowlisted; anything else turns it into an oracle for which colleagues can present.
 
 Route auth is the explicit matrix in the spec, and the boundary runs in both directions — the audience has no credential, so `register`/`response`/`ai-prompt`/`token` and `GET /api/session/:code` must stay public. Everything that exposes attendee phone numbers, toggles `isLive`, or destroys data is presenter-only. TwiML webhooks can't carry a JWT, so `/api/voice/*` validates `X-Twilio-Signature` (`services/twilioSignature.ts`) — this needs `PUBLIC_BASE_URL` to match the URL Twilio signed, since behind Fly's proxy the request reports `http`.
+
+**Everything in the data plane is session-scoped.** Every function in `services/sync.ts` takes `sessionId` as its first argument and derives its object names from `syncNames(sessionId)` — there are no unprefixed names or raw `syncService` calls left outside that file, and no `initSync()`: objects are created per session by `initSessionSync` and deleted by `teardownSessionSync`. The old account-wide `presentation-state` / `aggregate-results` / `participants` / `event-stream` objects still exist in the Sync service but nothing writes them (`packages/conversation-relay` still reads `participants` until session resolution lands).
+
+`requireLiveSession` (`services/sessionContext.ts`) is the preHandler for every session-scoped route: it resolves `sessionId` from the body or query, loads the record, attaches it as `request.session`, and **rejects anything that is not `status: 'live'` with a 409**. That does double duty — one event's phones can't answer another's prompts, and responses can't trickle in against a session whose Sync objects are already gone. Rehearsal is `status: 'live'` with the `isLive` flag *off*, so `draft` being rejected is intended. `GET /api/token` is the one exception: a presenter needs a token while still in `draft`, so it uses `attachPresenter` (soft) and checks session membership instead of liveness.
+
+Outbound traffic is sent **from the session's own claimed pool number**, not `TWILIO_PHONE_NUMBER` or the Messaging Service sender — `sendSms*` and `initiateAgentCall` all take `from`. `from` and `messagingServiceSid` are mutually exclusive, so this trades the service's sticky sender for per-session routing; the voice agent identifies a session by the number that was called, so that trade is required, not preference.
+
+Sync reports "already exists" and "not found" with **different codes for objects vs map items** (and a plain `20404` for a REST delete of a missing item). `services/syncErrors.ts` centralizes those families — matching a single code silently turned a re-added presenter and a lost race for a pool number into 500s.
 
 Join codes (`packages/shared/src/joinCode.ts`) are Crockford base32: I/L/O/U are never emitted, and `normalizeJoinCode` folds them onto the characters they resemble on input. **Always normalize before a lookup** — the map is keyed by canonical codes only.
 

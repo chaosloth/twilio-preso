@@ -13,7 +13,7 @@ import {
   setSessionDeck,
   setSessionStatus,
 } from '../services/sessions.js';
-import { getSessionParticipants } from '../services/sync.js';
+import { getAllParticipants } from '../services/sync.js';
 import { buildSnapshot, snapshotFilename, toCsv } from '../services/export.js';
 
 interface CreateBody {
@@ -112,7 +112,7 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
       const session = await getSessionById(request.params.id);
       if (!session) return reply.status(404).send({ error: 'Session not found' });
 
-      const participants = await getSessionParticipants(session.id);
+      const participants = await getAllParticipants(session.id);
 
       if (request.query.format === 'csv') {
         // A download rather than a file on disk: this backend runs on ephemeral
@@ -139,7 +139,7 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
     const existing = await getSessionById(request.params.id);
     if (!existing) return reply.status(404).send({ error: 'Session not found' });
 
-    const participants = await getSessionParticipants(existing.id);
+    const participants = await getAllParticipants(existing.id);
     const snapshot = buildSnapshot(existing, participants);
     const csv = toCsv(existing, participants);
 

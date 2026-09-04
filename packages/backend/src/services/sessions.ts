@@ -11,6 +11,7 @@ import type {
 } from '@twilio-preso/shared';
 import { config } from '../config.js';
 import { initSessionSync, teardownSessionSync } from './sync.js';
+import { isAlreadyExists, isNotFound } from './syncErrors.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 const syncService = client.sync.v1.services(config.twilio.syncServiceSid);
@@ -23,8 +24,6 @@ const PRESENTER_ALLOWLIST = 'presenter-allowlist';
 const SESSIONS_MAP = 'sessions';
 const PHONE_POOL_CLAIMS = 'phone-pool-claims';
 
-const ALREADY_EXISTS = 54301;
-const NOT_FOUND = 54100;
 
 /** Thrown when the pool has no free number. Routes turn this into a 409. */
 export class PhonePoolExhaustedError extends Error {
@@ -39,7 +38,7 @@ export async function initControlPlane(): Promise<void> {
     try {
       await syncService.syncMaps.create({ uniqueName });
     } catch (e: any) {
-      if (e.code !== ALREADY_EXISTS) throw e;
+      if (!isAlreadyExists(e)) throw e;
     }
   }
   await seedBootstrapPresenters();
@@ -81,7 +80,7 @@ export async function addPresenter(
   try {
     await syncService.syncMaps(PRESENTER_ALLOWLIST).syncMapItems.create({ key: phone, data: record });
   } catch (e: any) {
-    if (e.code !== ALREADY_EXISTS) throw e;
+    if (!isAlreadyExists(e)) throw e;
     // Re-adding an existing presenter updates their name rather than failing.
     await syncService.syncMaps(PRESENTER_ALLOWLIST).syncMapItems(phone).update({ data: record });
   }
@@ -92,7 +91,7 @@ export async function removePresenter(phone: string): Promise<void> {
   try {
     await syncService.syncMaps(PRESENTER_ALLOWLIST).syncMapItems(phone).remove();
   } catch (e: any) {
-    if (e.code !== NOT_FOUND) throw e;
+    if (!isNotFound(e)) throw e;
   }
 }
 
@@ -123,8 +122,8 @@ async function listClaims(): Promise<Array<{ phoneNumber: string; claim: PhonePo
  *
  * The create-if-absent below is what makes this safe against two presenters
  * creating a session at the same moment: Sync rejects a duplicate key, so the
- * loser sees `ALREADY_EXISTS` and moves to the next number rather than both
- * walking away believing they own it.
+ * loser sees an already-exists error and moves to the next number rather than
+ * both walking away believing they own it.
  */
 export async function claimPhoneNumber(sessionId: string): Promise<string> {
   const claims = new Map((await listClaims()).map((c) => [c.phoneNumber, c.claim]));
@@ -138,7 +137,7 @@ export async function claimPhoneNumber(sessionId: string): Promise<string> {
       });
       return phoneNumber;
     } catch (e: any) {
-      if (e.code !== ALREADY_EXISTS) throw e;
+      if (!isAlreadyExists(e)) throw e;
     }
   }
 
@@ -149,7 +148,7 @@ export async function releasePhoneNumber(phoneNumber: string): Promise<void> {
   try {
     await syncService.syncMaps(PHONE_POOL_CLAIMS).syncMapItems(phoneNumber).remove();
   } catch (e: any) {
-    if (e.code !== NOT_FOUND) throw e;
+    if (!isNotFound(e)) throw e;
   }
 }
 
