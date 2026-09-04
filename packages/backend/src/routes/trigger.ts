@@ -11,6 +11,14 @@ import { requireLiveSession } from '../services/sessionContext.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
+/** TwiML is built as a string here, so anything interpolated into an attribute
+ *  is escaped. Session ids are uuids, but the escape is where it belongs. */
+function escapeXml(value: string): string {
+  return value.replace(/[<>&"']/g, (c) =>
+    ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c]!
+  );
+}
+
 interface TriggerBody {
   sessionId: string;
   triggerId: string;
@@ -72,9 +80,10 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
 
         case 'voice-mass-outbound': {
           const useRelay = !!process.env.CONVERSATION_RELAY_URL;
+          const base = process.env.BACKEND_URL || 'http://localhost:3001';
           const twimlUrl = useRelay
-            ? `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/voice/conversation-relay`
-            : `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/voice/demo-bot`;
+            ? `${base}/api/voice/conversation-relay?sessionId=${encodeURIComponent(session.id)}`
+            : `${base}/api/voice/demo-bot`;
 
           const calls = await Promise.allSettled(
             participants.map((p) =>
@@ -104,13 +113,24 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // TwiML endpoint for ConversationRelay mode
-  app.post('/api/voice/conversation-relay', { preHandler: requireTwilioSignature }, async (request, reply) => {
+  app.post<{ Querystring: { sessionId?: string } }>('/api/voice/conversation-relay', { preHandler: requireTwilioSignature }, async (request, reply) => {
     const conversationRelayUrl = process.env.CONVERSATION_RELAY_URL || 'wss://localhost:3003';
     const voice = process.env.TWILIO_VOICE || 'Google.en-AU-Neural2-B';
+    /**
+     * Tell the relay which session this call belongs to rather than making it
+     * infer one from the number. It can fall back to the `phone-pool-claims`
+     * reverse lookup, but that only holds while the claim is live — an outbound
+     * call placed here already knows the answer, so it says so.
+     */
+    const sessionId = request.query.sessionId;
+    const parameter = sessionId
+      ? `\n      <Parameter name="sessionId" value="${escapeXml(sessionId)}" />`
+      : '';
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <ConversationRelay url="${conversationRelayUrl}" voice="${voice}" dtmfDetection="true" interruptible="true" />
+    <ConversationRelay url="${conversationRelayUrl}" voice="${voice}" dtmfDetection="true" interruptible="true">${parameter}
+    </ConversationRelay>
   </Connect>
 </Response>`;
     reply.header('Content-Type', 'text/xml');
