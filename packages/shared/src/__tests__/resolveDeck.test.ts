@@ -7,12 +7,18 @@ import stagesFixture from './stages.fixture.json' with { type: 'json' };
  * captured before it was deleted. It is the regression test for the whole deck
  * refactor: resolving DEFAULT_DECK must reproduce the presentation exactly.
  *
- * One intentional schema change stands between the two shapes — the spec drops
+ * Two intentional schema changes stand between the two shapes. The first — the spec drops
  * `InteractionConfig.stageIndex` (a second source of truth for array position)
  * in favour of `stageId`. That migration is applied here, in the open, rather
  * than baked into the fixture, so the fixture stays an honest record of what
  * shipped and the one permitted difference is visible in the test.
  */
+/** Slots carry template defaults only; the fixture predates them. */
+function withoutSlots(stage: Record<string, unknown>) {
+  const { slots: _dropped, ...rest } = stage;
+  return rest;
+}
+
 function migrateFixtureStage(stage: Record<string, unknown>) {
   const interaction = stage.interaction as Record<string, unknown> | null;
   if (!interaction) return stage;
@@ -24,7 +30,9 @@ const expectedStages = (stagesFixture as Record<string, unknown>[]).map(migrateF
 
 describe('resolveDeck(DEFAULT_DECK)', () => {
   test('reproduces the 23 stages the presentation shipped with', () => {
-    expect(resolveDeck(DEFAULT_DECK)).toEqual(expectedStages);
+    expect(resolveDeck(DEFAULT_DECK).map((s) => withoutSlots(s as unknown as Record<string, unknown>))).toEqual(
+      expectedStages
+    );
   });
 
   test('stamps a runtime index matching array position', () => {

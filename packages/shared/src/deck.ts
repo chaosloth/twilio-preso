@@ -1,5 +1,5 @@
 import { STAGE_LIBRARY, STAGE_LIBRARY_ORDER } from './stageLibrary.js';
-import type { DemoTriggerId } from './stageLibrary.js';
+import type { DemoTriggerId, SlotDef } from './stageLibrary.js';
 import type { InteractionConfig } from './types.js';
 
 /**
@@ -16,6 +16,12 @@ export interface DeckStage {
   notes?: string;
   interaction?: InteractionConfig | null;
   demoTrigger?: DemoTriggerId | null;
+  /**
+   * Per-slot copy and image overrides, keyed by slot key. Same rule as above:
+   * a missing key inherits the template default, an explicit `null` clears the
+   * slot so the presenter hides that element rather than drawing empty text.
+   */
+  slots?: Record<string, string | null>;
 }
 
 export interface Deck {
@@ -40,6 +46,12 @@ export interface ResolvedStage {
   notes: string;
   interaction: InteractionConfig | null;
   demoTrigger?: DemoTriggerId;
+  /**
+   * Resolved slot values, present only for templates that declare slots. Kept
+   * off the object otherwise so a stage with no editable copy serialises exactly
+   * as it did before slots existed.
+   */
+  slots?: Record<string, string>;
 }
 
 /** Today's presentation: every library stage, in library order, no overrides. */
@@ -73,8 +85,27 @@ export function resolveDeck(deck: Deck): ResolvedStage[] {
     const demoTrigger = deckStage.demoTrigger === undefined ? template.demoTrigger : deckStage.demoTrigger;
     if (demoTrigger) stage.demoTrigger = demoTrigger;
 
+    if (template.slots) stage.slots = resolveSlots(template.slots, deckStage.slots);
+
     resolved.push(stage);
   }
 
   return resolved;
+}
+
+/**
+ * Resolves declared slots against a deck stage's overrides. Only declared keys
+ * survive: an override left behind by an earlier version of a template cannot
+ * inject copy the component does not render.
+ */
+function resolveSlots(
+  defs: SlotDef[],
+  overrides: Record<string, string | null> | undefined
+): Record<string, string> {
+  const slots: Record<string, string> = {};
+  for (const def of defs) {
+    const override = overrides?.[def.key];
+    slots[def.key] = override === undefined ? def.default : (override ?? '');
+  }
+  return slots;
 }

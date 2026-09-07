@@ -1,6 +1,7 @@
 import { FloatingText, ParticleField } from '../objects';
 import { Html } from '@react-three/drei';
 import { useIsStageActive } from '../components/Stage';
+import { useSlots } from '../hooks/useSlots';
 
 const config = `# Claude Code
 claude mcp add --transport http \\
@@ -12,12 +13,13 @@ claude mcp add --transport http \\
   → twilio__retrieve (exact schemas)`;
 
 export default function Stage16MCPServer() {
+  const slot = useSlots();
   const active = useIsStageActive();
 
   return (
     <group>
       <FloatingText position={[0, 3.2, 0]} fontSize={0.45} color="#ef223a" bold delay={0}>
-        Twilio MCP Server
+        {slot('headline')}
       </FloatingText>
 
       {/* Left side text */}

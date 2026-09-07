@@ -1,6 +1,7 @@
 import { FloatingText, ParticleField } from '../objects';
 import { Html } from '@react-three/drei';
 import { useIsStageActive } from '../components/Stage';
+import { useSlots } from '../hooks/useSlots';
 
 const stats = [
   { pct: '36%', label: 'try to fix it themselves' },
@@ -9,6 +10,7 @@ const stats = [
 ];
 
 export default function Stage07ImpatientCustomers() {
+  const slot = useSlots();
   const active = useIsStageActive();
 
   return (
@@ -16,7 +18,7 @@ export default function Stage07ImpatientCustomers() {
       <ParticleField count={60} color="#ef223a" speed={0.04} spread={12} size={0.012} />
 
       <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
-        {'When customers get impatient…'}
+        {slot('headline')}
       </FloatingText>
 
       {active && <Html center transform position={[0, 0, 0]}>
@@ -50,7 +52,7 @@ export default function Stage07ImpatientCustomers() {
       </Html>}
 
       <FloatingText position={[0, -2.8, 0]} fontSize={0.1} color="#4d5777" delay={1.5}>
-        Source: Decoding Digital Patience Report, Twilio
+        {slot('footnote')}
       </FloatingText>
 
       <pointLight position={[0, 2, 3]} color="#ef223a" intensity={0.8} distance={8} />

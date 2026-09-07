@@ -1,14 +1,16 @@
 import { FloatingText, ParticleField } from '../objects';
 import { Html } from '@react-three/drei';
 import { useIsStageActive } from '../components/Stage';
+import { useSlots } from '../hooks/useSlots';
 
 export default function Stage13Memory() {
+  const slot = useSlots();
   const active = useIsStageActive();
 
   return (
     <group>
       <FloatingText position={[0, 3.2, 0]} fontSize={0.45} color="#ef223a" bold delay={0}>
-        Conversation Memory
+        {slot('headline')}
       </FloatingText>
 
 

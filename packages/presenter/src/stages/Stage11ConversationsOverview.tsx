@@ -4,6 +4,7 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Group, Mesh } from 'three';
+import { useSlots } from '../hooks/useSlots';
 
 const NODE_LABELS = ['Intent', 'Participants', 'Context', 'Sentiment', 'Emotion', 'Channel', 'Location', 'Observation', 'Traits', 'NBA', 'Preference', 'Modality'];
 const NODE_COLORS = ['#ef223a', '#ffffff', '#babecc', '#7e869c', '#4d5777'];
@@ -122,6 +123,7 @@ function NetworkEdge({ from, to, dashed, timeOffset }: { from: [number, number, 
 }
 
 export default function Stage11ConversationsOverview() {
+  const slot = useSlots();
   const groupRef = useRef<Group>(null);
   const { nodes, edges } = useMemo(() => generateNetwork(), []);
 
@@ -135,10 +137,10 @@ export default function Stage11ConversationsOverview() {
   return (
     <group>
       <FloatingText position={[0, 3, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
-        Twilio Conversations
+        {slot('headline')}
       </FloatingText>
       <FloatingText position={[0, 2.3, 0]} fontSize={0.18} color="#babecc" delay={0.4} maxWidth={10}>
-        A foundation for driving customer lifetime value through every interaction
+        {slot('subhead')}
       </FloatingText>
 
       <group ref={groupRef} position={[0, -0.3, 0]}>

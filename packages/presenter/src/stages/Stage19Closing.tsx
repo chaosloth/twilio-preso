@@ -1,8 +1,10 @@
 import { FloatingText, ParticleField, TwilioGem } from '../objects';
 import { Html } from '@react-three/drei';
 import { useIsStageActive } from '../components/Stage';
+import { useSlots } from '../hooks/useSlots';
 
 export default function Stage19Closing() {
+  const slot = useSlots();
   const active = useIsStageActive();
   return (
     <group>
@@ -11,11 +13,11 @@ export default function Stage19Closing() {
       <ParticleField count={100} spread={10} color="#ffffff" speed={0.05} size={0.015} />
 
       <FloatingText position={[0, 0.5, 0]} fontSize={0.5} color="#ffffff" bold delay={0.2} maxWidth={12}>
-        Thank you for being part of the experience.
+        {slot('headline')}
       </FloatingText>
 
       <FloatingText position={[0, -0.8, 0]} fontSize={0.25} color="#ef223a" bold delay={1} maxWidth={12}>
-        We can't wait to see what you build with Twilio.
+        {slot('subhead')}
       </FloatingText>
 
       {active && <Html center transform position={[0, -2, 0]}>

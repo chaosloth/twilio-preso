@@ -10,3 +10,4 @@ export { FloatingOrb } from './FloatingOrb';
 export { WireframeCube } from './WireframeCube';
 export { PulseRing } from './PulseRing';
 export { SceneAccents } from './SceneAccents';
+export { SlideImage } from './SlideImage';

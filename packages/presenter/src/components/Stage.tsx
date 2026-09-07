@@ -1,5 +1,7 @@
 import { Suspense, lazy, type ComponentType, createContext, useContext } from 'react';
 import { usePresenterStore } from '../store';
+import { SlotProvider } from '../hooks/useSlots';
+import { SlideImage } from '../objects';
 
 const STAGE_SPACING = 50;
 
@@ -46,11 +48,18 @@ export function StageContainer() {
         const StageComponent = stageComponents[stage.id];
         const isActive = i === currentStageIndex;
         return (
-          <group key={stage.id} position={[0, 0, -i * STAGE_SPACING]}>
+          // Keyed by position as well as id: a deck may legitimately contain
+          // the same stage twice, and a duplicate key silently drops one.
+          <group key={`${stage.id}-${i}`} position={[0, 0, -i * STAGE_SPACING]}>
             <StageActiveContext.Provider value={isActive}>
-              <Suspense fallback={null}>
-                {StageComponent && <StageComponent />}
-              </Suspense>
+              <SlotProvider stage={stage}>
+                <Suspense fallback={null}>
+                  {StageComponent && <StageComponent />}
+                  {/* The image slot is rendered here so it works on every
+                      stage, including ones whose scene knows nothing about it. */}
+                  <SlideImage url={stage.slots?.image ?? ''} />
+                </Suspense>
+              </SlotProvider>
             </StageActiveContext.Provider>
           </group>
         );

@@ -1,16 +1,18 @@
 import { TwilioGem, FloatingText, ParticleField, SceneAccents } from '../objects';
+import { useSlots } from '../hooks/useSlots';
 
 export default function Stage02Speakers() {
+  const slot = useSlots();
   return (
     <group>
       <TwilioGem scale={2} position={[0, 0, -3]} emissiveIntensity={0.4} rotationSpeed={0.08} wireframe />
       <ParticleField count={200} spread={14} color="#ef223a" speed={0.08} size={0.02} />
 
       <FloatingText position={[0, 1.5, 0]} fontSize={1} color="#ffffff" heading delay={0.2}>
-        Wonder
+        {slot('headline')}
       </FloatingText>
       <FloatingText position={[0, -0.2, 0]} fontSize={0.3} color="#babecc" delay={0.5}>
-        Connecting technology to imagination
+        {slot('subhead')}
       </FloatingText>
 
       {/* Pill badge */}
@@ -29,7 +31,7 @@ export default function Stage02Speakers() {
           <meshStandardMaterial color="#1e3a5f" transparent opacity={0.9} />
         </mesh>
         <FloatingText position={[0, 0, 0.05]} fontSize={0.18} color="#babecc" delay={0.7}>
-          Twilio World Tour 2026
+          {slot('badge')}
         </FloatingText>
       </group>
 

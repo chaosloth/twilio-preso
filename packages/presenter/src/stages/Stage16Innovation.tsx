@@ -1,8 +1,10 @@
 import { FloatingText, ParticleField, BarChart3D } from '../objects';
 import { usePresenterStore } from '../store';
 import { useMemo } from 'react';
+import { useSlots } from '../hooks/useSlots';
 
 export default function Stage16Innovation() {
+  const slot = useSlots();
   const recentResponses = usePresenterStore((s) => s.recentResponses);
 
   const pollData = useMemo(() => {
@@ -20,7 +22,7 @@ export default function Stage16Innovation() {
   return (
     <group>
       <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={12}>
-        Where do you need this to run?
+        {slot('headline')}
       </FloatingText>
 
       {hasResponses ? (
@@ -28,10 +30,10 @@ export default function Stage16Innovation() {
       ) : (
         <group>
           <FloatingText position={[0, 0, 0]} fontSize={0.22} color="#ef223a" delay={0.8}>
-            Check your phone to vote
+            {slot('waiting')}
           </FloatingText>
           <FloatingText position={[0, -0.6, 0]} fontSize={0.15} color="#7e869c" delay={1}>
-            Results will appear here in real-time
+            {slot('waitingHint')}
           </FloatingText>
         </group>
       )}

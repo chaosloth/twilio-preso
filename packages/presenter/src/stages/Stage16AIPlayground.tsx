@@ -5,6 +5,7 @@ import type { Mesh, MeshBasicMaterial } from 'three';
 import { FloatingText, ParticleField } from '../objects';
 import { useIsStageActive } from '../components/Stage';
 import { usePresenterStore } from '../store';
+import { useSlots } from '../hooks/useSlots';
 
 /** Chars revealed per tick while "typing" an answer onto the screen. */
 const TYPE_CHARS_PER_TICK = 3;
@@ -59,6 +60,7 @@ function BackdropFade({ dim }: { dim: boolean }) {
 }
 
 export default function Stage16AIPlayground() {
+  const slot = useSlots();
   const active = useIsStageActive();
   const aiPromptResponses = usePresenterStore((s) => s.aiPromptResponses);
   const pendingAiPrompts = usePresenterStore((s) => s.pendingAiPrompts);
@@ -99,7 +101,7 @@ export default function Stage16AIPlayground() {
   return (
     <group>
       <FloatingText position={[0, 3.2, 0]} fontSize={0.45} color="#ef223a" bold delay={0}>
-        Ask the Agent
+        {slot('headline')}
       </FloatingText>
 
       <BackdropFade dim={dim} />

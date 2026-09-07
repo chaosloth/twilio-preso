@@ -1,8 +1,10 @@
 import { ParticleField, FloatingText, SceneAccents } from '../objects';
 import { Html } from '@react-three/drei';
 import { useIsStageActive } from '../components/Stage';
+import { useSlots } from '../hooks/useSlots';
 
 export default function Stage03WhyWonder() {
+  const slot = useSlots();
   const active = useIsStageActive();
   return (
     <group>
@@ -10,7 +12,7 @@ export default function Stage03WhyWonder() {
       <ParticleField count={100} spread={8} color="#ef223a" speed={0.1} size={0.02} />
 
       <FloatingText position={[0, 2.8, 0]} fontSize={0.5} color="#ffffff" bold delay={0.2} maxWidth={10}>
-        Why Wonder?
+        {slot('headline')}
       </FloatingText>
 
       {active && <Html position={[0, -0.3, 0]} center transform>

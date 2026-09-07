@@ -5,6 +5,7 @@ import { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import gsap from 'gsap';
 import type { Group } from 'three';
+import { useSlots } from '../hooks/useSlots';
 
 const cards = [
   { time: '+1 min', label: 'Financial disputes' },
@@ -89,6 +90,7 @@ function TimeCard({ time, label, targetX, targetY, index, active }: { time: stri
 }
 
 export default function Stage06PatienceDeficit() {
+  const slot = useSlots();
   const active = useIsStageActive();
   const clockRef = useRef<Group>(null);
 
@@ -103,7 +105,7 @@ export default function Stage06PatienceDeficit() {
       <ParticleField count={60} color="#ef223a" speed={0.05} spread={12} size={0.012} />
 
       <FloatingText position={[0, 2.8, 0]} fontSize={0.45} color="#ffffff" bold delay={0.2}>
-        The Patience Deficit
+        {slot('headline')}
       </FloatingText>
 
       {/* Clock face - left third */}
@@ -125,7 +127,7 @@ export default function Stage06PatienceDeficit() {
       <TimeCard time={cards[3].time} label={cards[3].label} targetX={3.8} targetY={-1.5} index={3} active={active} />
 
       <FloatingText position={[0, -2.8, 0]} fontSize={0.1} color="#4d5777" delay={1.5}>
-        Source: Decoding Digital Patience Report, Twilio
+        {slot('footnote')}
       </FloatingText>
 
       <pointLight position={[0, 2, 3]} color="#ef223a" intensity={1} distance={8} />

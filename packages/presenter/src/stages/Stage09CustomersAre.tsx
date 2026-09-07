@@ -1,8 +1,10 @@
 import { FloatingText, ParticleField, WordCloud3D, SceneAccents } from '../objects';
 import { usePresenterStore } from '../store';
 import { useMemo } from 'react';
+import { useSlots } from '../hooks/useSlots';
 
 export default function Stage09CustomersAre() {
+  const slot = useSlots();
   const recentResponses = usePresenterStore((s) => s.recentResponses);
 
   const words = useMemo(() => {
@@ -21,7 +23,7 @@ export default function Stage09CustomersAre() {
       <ParticleField count={100} spread={12} color="#ef223a" speed={0.1} size={0.015} />
 
       <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={14}>
-        In one word, your biggest CX challenge?
+        {slot('headline')}
       </FloatingText>
 
       {words.length > 0 ? (
@@ -29,10 +31,10 @@ export default function Stage09CustomersAre() {
       ) : (
         <group>
           <FloatingText position={[0, 0, 0]} fontSize={0.2} color="#ef223a" delay={0.8}>
-            Check your phone to respond
+            {slot('waiting')}
           </FloatingText>
           <FloatingText position={[0, -0.5, 0]} fontSize={0.14} color="#7e869c" delay={1}>
-            Words will appear here as they come in
+            {slot('waitingHint')}
           </FloatingText>
         </group>
       )}

@@ -1,7 +1,9 @@
 import { FloatingText, ParticleField, TwilioGem, SceneAccents } from '../objects';
 import { usePresenterStore } from '../store';
+import { useSlots } from '../hooks/useSlots';
 
 export default function Stage17NeverEasier() {
+  const slot = useSlots();
   const participants = usePresenterStore((s) => s.totalParticipants);
   const responses = usePresenterStore((s) => s.recentResponses);
 
@@ -12,7 +14,7 @@ export default function Stage17NeverEasier() {
       <ParticleField count={100} spread={12} color="#ffffff" speed={0.05} size={0.015} />
 
       <FloatingText position={[0, 1.2, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={14}>
-        It's never been easier to build amazing engagement.
+        {slot('headline')}
       </FloatingText>
 
       {/* Stats */}
