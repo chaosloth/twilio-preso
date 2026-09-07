@@ -8,6 +8,7 @@ import { responseFor } from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
 import { requireTwilioSignature } from '../services/twilioSignature.js';
 import { requireLiveSession } from '../services/sessionContext.js';
+import { recall } from '../services/memory.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -67,7 +68,29 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
         }
 
         case 'sms-memory': {
+          // Ask Conversation Memory first: that is the thing being demonstrated,
+          // and it can know something the attendee said at a previous event. The
+          // session's own Sync response is the fallback for a phone with no
+          // profile, or when memory is not configured at all.
+          const recalled = new Map<string, string>();
+          await Promise.all(
+            participants.map(async (p) => {
+              try {
+                const memory = await recall(p.memoryProfileId, 'biggest customer experience challenge');
+                if (memory) recalled.set(p.id, memory);
+              } catch (err) {
+                request.log.warn({ err, participantId: p.id }, 'memory recall failed');
+              }
+            })
+          );
+
           await sendSmsToAll(from, participants, (p) => {
+            // A recalled observation is a sentence, not a phrase, so it is quoted
+            // as its own line rather than dropped into "you said \"…\"".
+            const memory = recalled.get(p.id);
+            if (memory) {
+              return `Hey ${p.name}, here's what we remember about you: ${memory}\n\nNo database lookup, no asking again. That's Conversation Memory. — Twilio`;
+            }
             // Keyed by stage id, so reordering or omitting slides cannot make this
             // read a different stage's answer. Falls back to generic copy when the
             // word-cloud stage is absent from the deck — validateDeck warns about

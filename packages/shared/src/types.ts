@@ -12,6 +12,12 @@ export interface Participant {
    * slide 10 is a different stage in a different deck.
    */
   responses: Record<string, ParticipantResponse>;
+  /**
+   * Their Twilio Conversation Memory Customer Profile, when memory is
+   * configured. Optional and possibly absent even then — profile creation is
+   * best-effort and must never fail a join.
+   */
+  memoryProfileId?: string;
 }
 
 export interface ParticipantResponse {

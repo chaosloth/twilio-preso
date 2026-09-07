@@ -87,6 +87,16 @@ When the presenter reaches a stage with a `demoTrigger` **and `isLive` is true**
 
 Session resolution (`src/session.ts`) has a declared path and an inferred one. The TwiML carries `<Parameter name="sessionId">` when the backend knows it — `voice-mass-outbound` appends `?sessionId=` to the webhook URL, and the signature covers the query string, so this needs no change to validation. Failing that, it looks the session's claimed pool number up in `phone-pool-claims`. **Which end of the call that number is depends on direction:** an outbound call is placed *from* the pool number to the attendee, an inbound call is the reverse, and getting it backwards silently looks up the wrong party. The setup message's real fields are `from` / `to` / `direction` / `customParameters` — there is no `callerNumber`, which is why the pre-refactor lookup never matched and every caller got the generic greeting.
 
+### Conversation Memory holds who the person is
+
+Sync holds what *this* session's phones have said; **Twilio Conversation Memory** holds the durable Customer Profile that outlives the event. `packages/backend/src/services/memory.ts` is a small basic-auth fetch client over `https://memory.twilio.com/v1/Stores/{TWILIO_MEMORY_STORE_ID}` — there is no Node SDK surface for these endpoints yet.
+
+`TWILIO_MEMORY_STORE_ID` is **optional** (`config.twilio.memoryStoreId`, deliberately not `requireEnv`): unset, every function is a no-op and every call site falls back to the Sync `responses` path. The whole feature is best-effort — registration `void`s `upsertProfile` and never awaits it, so a memory outage cannot fail a join, and `POST /api/response` mirrors the answer into the profile the same way.
+
+Registration does **Lookup by phone before Create**, then posts the phone as an *identifier* (`phone_number`): a trait is not indexed for lookup, and the identifier is what Identity Resolution merges on, which is the only thing that makes a returning attendee the same person rather than a new profile. Patch merges, so nothing a previous event learned is cleared. The profile id is written back onto the participant as `memoryProfileId`.
+
+Two read paths use `Recall`, both with a fallback: the `sms-memory` trigger prefers a recalled observation (phrased as its own line, since it is a sentence and not a quotable phrase) over `responseFor(p, 'customers-are')`, and the voice agent recalls **once at setup** — a memory round-trip between every question and answer is dead air on a phone call. `packages/conversation-relay/src/memory.ts` is a second, read-only client on purpose: the relay is its own process with its own env and no HTTP route into the backend.
+
 ### Control plane, sessions, and auth
 
 Multi-tenancy is landing incrementally against `docs/superpowers/specs/2026-08-05-multi-tenant-presentations-design.md`. Three **unprefixed** control-plane SyncMaps sit alongside a **per-session, prefixed** data plane:

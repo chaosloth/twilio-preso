@@ -41,6 +41,13 @@ export const config = {
     phonePool: envList('TWILIO_PHONE_POOL').length
       ? envList('TWILIO_PHONE_POOL')
       : [requireEnv('TWILIO_PHONE_NUMBER')],
+    /**
+     * Conversation Memory store holding the audience's Customer Profiles.
+     * Optional on purpose: absent, `services/memory.ts` is a no-op and every
+     * personalized message falls back to this session's Sync responses. A
+     * missing store must degrade the demo, not stop the backend booting.
+     */
+    memoryStoreId: process.env.TWILIO_MEMORY_STORE_ID || '',
   },
   /**
    * Seeded into `presenter-allowlist` at boot if missing. An empty allowlist is

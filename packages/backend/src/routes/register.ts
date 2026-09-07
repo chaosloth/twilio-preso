@@ -1,6 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'crypto';
-import { addParticipant, publishEvent, generateSyncToken, isSessionLive } from '../services/sync.js';
+import {
+  addParticipant,
+  publishEvent,
+  generateSyncToken,
+  isSessionLive,
+  updateParticipant,
+} from '../services/sync.js';
+import { upsertProfile } from '../services/memory.js';
 import { sendWelcomeSms } from '../services/messaging.js';
 import { requireLiveSession } from '../services/sessionContext.js';
 import type { Participant, ParticipantJoinedEvent } from '@twilio-preso/shared';
@@ -55,6 +62,20 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
           app.log.warn({ err, sessionId: session.id }, 'failed to send welcome SMS');
         });
       }
+
+      // Conversation Memory profile: looked up by phone so a returning attendee
+      // keeps the profile they already have, created otherwise. Fired after the
+      // participant exists and deliberately not awaited — the phone must get its
+      // token immediately, and a memory outage cannot be allowed to fail a join.
+      void upsertProfile(participant)
+        .then(async (memoryProfileId) => {
+          if (memoryProfileId) {
+            await updateParticipant(session.id, participant.id, { memoryProfileId });
+          }
+        })
+        .catch((err) => {
+          app.log.warn({ err, sessionId: session.id }, 'failed to create memory profile');
+        });
 
       const token = generateSyncToken(participant.id);
 

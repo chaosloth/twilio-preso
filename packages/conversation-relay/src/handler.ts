@@ -2,6 +2,7 @@ import type { WebSocket } from 'ws';
 import { lookupParticipantByPhone } from './participant.js';
 import { resolveSession } from './session.js';
 import { generateResponse, generateGreeting } from './llm.js';
+import { recallForProfile } from './memory.js';
 import type { Participant } from '@twilio-preso/shared';
 
 interface ConversationRelayEvent {
@@ -21,6 +22,9 @@ interface SessionState {
   /** Which presentation this call belongs to. Null if it could not be resolved. */
   sessionId: string | null;
   participant: Participant | null;
+  /** Recalled from Conversation Memory once at setup. Null when memory is off,
+   *  the caller has no profile, or nothing was remembered. */
+  memoryContext: string | null;
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
   exchangeCount: number;
 }
@@ -29,6 +33,7 @@ export async function handleConnection(ws: WebSocket): Promise<void> {
   const state: SessionState = {
     sessionId: null,
     participant: null,
+    memoryContext: null,
     conversationHistory: [],
     exchangeCount: 0,
   };
@@ -70,6 +75,13 @@ async function handleEvent(
         );
       }
 
+      // Recalled once at setup rather than per turn: this is a phone call, and a
+      // memory round-trip between every question and answer is dead air.
+      state.memoryContext = await recallForProfile(
+        state.participant?.memoryProfileId,
+        'customer experience challenges and what they want to build'
+      );
+
       const greeting = generateGreeting(state.participant);
       state.conversationHistory.push({ role: 'assistant', content: greeting });
       sendResponse(ws, greeting);
@@ -91,7 +103,8 @@ async function handleEvent(
       const response = await generateResponse(
         state.participant,
         state.conversationHistory,
-        userMessage
+        userMessage,
+        state.memoryContext
       );
 
       state.conversationHistory.push({ role: 'user', content: userMessage });

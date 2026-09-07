@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { publishEvent, recordParticipantResponse } from '../services/sync.js';
 import { requireLiveSession } from '../services/sessionContext.js';
+import { getParticipant } from '../services/sync.js';
+import { patchTraits, traitsForResponse } from '../services/memory.js';
 import type { AudienceResponseEvent, InteractionType } from '@twilio-preso/shared';
 
 interface ResponseBody {
@@ -50,6 +52,25 @@ export async function responseRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       app.log.warn({ err, participantId, stageId }, 'failed to persist participant response');
     }
+
+    // Mirror the answer into the attendee's durable Customer Profile. Sync is
+    // still the source of truth for this session; memory is what survives it.
+    // Not awaited, and swallowed on failure — the tally must not wait on it.
+    void (async () => {
+      const participant = await getParticipant(sessionId, participantId);
+      await patchTraits(
+        participant?.memoryProfileId,
+        traitsForResponse({
+          stageId,
+          stageIndex,
+          type: interactionType,
+          value,
+          timestamp: event.timestamp,
+        })
+      );
+    })().catch((err) => {
+      app.log.warn({ err, participantId, stageId }, 'failed to write response to memory');
+    });
 
     await publishEvent(sessionId, event);
     return { ok: true };
