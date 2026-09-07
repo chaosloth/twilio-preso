@@ -1,5 +1,6 @@
 import { Suspense, Component, type ReactNode } from 'react';
 import { Image } from '@react-three/drei';
+import { useAnimatedTexture } from '../hooks/useAnimatedTexture';
 
 /**
  * A texture load that 404s throws from inside Suspense and would take the whole
@@ -33,8 +34,29 @@ export function SlideImage({ url, position = [0, -0.2, -1], width = 5 }: SlideIm
   return (
     <Hide>
       <Suspense fallback={null}>
-        <Image url={url} position={position} scale={width} transparent toneMapped={false} />
+        <SlideImageContent url={url} position={position} width={width} />
       </Suspense>
     </Hide>
   );
+}
+
+/**
+ * Split out so the animated-decode hook runs unconditionally: the `!url` guard
+ * above is an early return, and a hook cannot sit behind one.
+ */
+function SlideImageContent({ url, position, width }: Required<SlideImageProps>) {
+  const animated = useAnimatedTexture(url);
+
+  if (animated) {
+    // Own mesh rather than drei's `<Image>`, which owns its texture and would
+    // overwrite the canvas one on every frame.
+    return (
+      <mesh position={position}>
+        <planeGeometry args={[width, width / animated.aspect]} />
+        <meshBasicMaterial map={animated.texture} transparent toneMapped={false} />
+      </mesh>
+    );
+  }
+
+  return <Image url={url} position={position} scale={width} transparent toneMapped={false} />;
 }
