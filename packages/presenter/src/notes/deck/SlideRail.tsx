@@ -5,34 +5,44 @@ import { useState } from 'react';
 
 interface SlideRailProps {
   draft: DeckStage[];
-  selected: number;
-  /** Slide currently on the presentation screen, outlined in the rail. */
+  /** Slide currently on the presentation screen, or -1 while edits are unsaved. */
   onScreen: number;
-  onSelect: (index: number) => void;
+  /** Disabled while the draft is dirty — draft positions aren't live yet. */
+  canActivate: boolean;
+  onActivate: (index: number) => void;
+  onEdit: (index: number) => void;
   onReorder: (from: number, to: number) => void;
   onDelete: (index: number) => void;
   onAdd: (stageId: string) => void;
 }
 
 /**
- * The slide rail: the deck as a vertical strip, in the spirit of the thumbnail
- * pane in Slides or PowerPoint. Selecting a slide opens it in the editor; the
- * grip reorders by drag.
+ * The deck as a list of slides, in the spirit of the thumbnail pane in Slides or
+ * PowerPoint: the grip reorders by drag, clicking a slide opens its editor, and
+ * each row can be put on the presentation screen directly.
  */
-export function SlideRail({ draft, selected, onScreen, onSelect, onReorder, onDelete, onAdd }: SlideRailProps) {
+export function SlideRail({
+  draft,
+  onScreen,
+  canActivate,
+  onActivate,
+  onEdit,
+  onReorder,
+  onDelete,
+  onAdd,
+}: SlideRailProps) {
   const [dragging, setDragging] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [newStage, setNewStage] = useState(STAGE_LIBRARY_ORDER[0] ?? '');
 
   return (
-    <div style={{ width: 210, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {draft.map((deckStage, i) => {
         const template = STAGE_LIBRARY[deckStage.stageId];
-        const isSelected = i === selected;
         return (
           <div
             key={`${deckStage.stageId}-${i}`}
-            onClick={() => onSelect(i)}
+            onClick={() => onEdit(i)}
             onDragOver={(e) => {
               // Without preventDefault the drop is refused and the row snaps back.
               e.preventDefault();
@@ -47,17 +57,17 @@ export function SlideRail({ draft, selected, onScreen, onSelect, onReorder, onDe
             }}
             style={{
               display: 'flex',
-              alignItems: 'flex-start',
-              gap: 6,
-              padding: '8px 8px',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 10px',
               borderRadius: 6,
               cursor: 'pointer',
               opacity: dragging === i ? 0.5 : 1,
-              background: isSelected ? '#12224a' : '#0a1535',
-              border: `1px solid ${i === onScreen ? '#ef223a' : isSelected ? '#4d5777' : 'transparent'}`,
+              background: '#0a1535',
+              border: `1px solid ${i === onScreen ? '#ef223a' : 'transparent'}`,
             }}
           >
-            {/* Only the grip is draggable, so a click anywhere else selects. */}
+            {/* Only the grip is draggable, so a click anywhere else opens the editor. */}
             <div
               draggable
               onDragStart={(e) => {
@@ -66,57 +76,90 @@ export function SlideRail({ draft, selected, onScreen, onSelect, onReorder, onDe
               }}
               onDragEnd={() => setDragging(null)}
               title="Drag to reorder"
-              style={{ cursor: 'grab', color: '#4d5777', userSelect: 'none', lineHeight: 1.2 }}
+              style={{ cursor: 'grab', color: '#4d5777', userSelect: 'none', lineHeight: 1 }}
             >
               ⠿
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, color: '#7e869c', fontFamily: 'monospace' }}>{i + 1}</div>
-              <div style={{ fontSize: 12, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {deckStage.title ?? template?.title ?? deckStage.stageId}
-              </div>
-              {!template && <div style={{ fontSize: 11, color: '#ef223a' }}>unknown stage</div>}
-            </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(i);
+            {/* Number and title share one line: `nowrap` plus a min-width-0 flex
+                item, or a long title wraps under its own number. */}
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                fontSize: 13,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
               }}
-              title="Remove slide"
-              style={{ ...smallButton, border: 'none', color: '#4d5777', padding: 2 }}
             >
-              ✕
-            </button>
+              <span style={{ color: '#7e869c', fontFamily: 'monospace' }}>{i + 1}. </span>
+              {deckStage.title ?? template?.title ?? deckStage.stageId}
+              {!template && <span style={{ color: '#ef223a' }}> (unknown stage)</span>}
+            </div>
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+              <button
+                style={i === onScreen ? { ...smallButton, borderColor: '#ef223a', color: '#ffffff' } : smallButton}
+                disabled={!canActivate}
+                title={canActivate ? 'Show this slide on the presentation screen' : 'Save the deck before activating a slide'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onActivate(i);
+                }}
+              >
+                {i === onScreen ? 'on screen' : 'activate'}
+              </button>
+              <button
+                style={smallButton}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(i);
+                }}
+              >
+                edit
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(i);
+                }}
+                title="Remove slide"
+                style={{ ...smallButton, border: 'none', color: '#4d5777' }}
+              >
+                ✕
+              </button>
+            </div>
           </div>
         );
       })}
 
       {adding ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <select style={{ ...textInput, fontSize: 12 }} value={newStage} onChange={(e) => setNewStage(e.target.value)}>
+        <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+          <select
+            style={{ ...textInput, flex: 1, fontSize: 12 }}
+            value={newStage}
+            onChange={(e) => setNewStage(e.target.value)}
+          >
             {STAGE_LIBRARY_ORDER.map((id) => (
               <option key={id} value={id}>
                 {STAGE_LIBRARY[id].title}
               </option>
             ))}
           </select>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button
-              style={smallButton}
-              onClick={() => {
-                onAdd(newStage);
-                setAdding(false);
-              }}
-            >
-              Add
-            </button>
-            <button style={smallButton} onClick={() => setAdding(false)}>
-              Cancel
-            </button>
-          </div>
+          <button
+            style={smallButton}
+            onClick={() => {
+              onAdd(newStage);
+              setAdding(false);
+            }}
+          >
+            Add
+          </button>
+          <button style={smallButton} onClick={() => setAdding(false)}>
+            Cancel
+          </button>
         </div>
       ) : (
-        <button style={smallButton} onClick={() => setAdding(true)}>
+        <button style={{ ...smallButton, marginTop: 4 }} onClick={() => setAdding(true)}>
           + New slide
         </button>
       )}

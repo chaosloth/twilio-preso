@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { validateDeck } from '@twilio-preso/shared';
 import type { Deck, DeckStage } from '@twilio-preso/shared';
 import type { AdminApi } from '../useAdminApi';
-import { SlideEditor } from '../deck/SlideEditor';
+import { SlideModal } from '../deck/SlideModal';
 import { SlideRail } from '../deck/SlideRail';
 import { Empty, ErrorText, Row, caption, heading, smallButton } from '../ui';
 
@@ -14,10 +14,12 @@ interface DeckTabProps {
 }
 
 /**
- * The deck editor: a slide rail on the left, an editor for the selected slide on
- * the right. Edits are local until saved, so a half-finished reorder or an
- * unfinished poll option never reaches the running presentation; the presenter
- * laptop only picks up a deck change when it is committed.
+ * The deck editor: the slide list, with one slide's editor opening in an overlay.
+ * The editor is large enough that inline it pushed the deck off a laptop screen.
+ *
+ * Edits are local until saved, so a half-finished reorder or an unfinished poll
+ * option never reaches the running presentation; the presenter laptop only picks
+ * up a deck change when it is committed.
  *
  * Warnings are advisory throughout — this previews `validateDeck` against the
  * draft so a bad order is visible *before* saving, and the backend returns its
@@ -26,7 +28,8 @@ interface DeckTabProps {
 export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
   const { session, warnings, commitDeck } = api;
   const [draft, setDraft] = useState<DeckStage[]>([]);
-  const [selected, setSelected] = useState(0);
+  /** Index of the slide open in the editor overlay, or null when closed. */
+  const [editing, setEditing] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -69,7 +72,6 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
       next.splice(to, 0, row);
       return next;
     });
-    setSelected(to);
   }
 
   async function save() {
@@ -90,27 +92,11 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
     }
   }
 
-  const current = draft[selected];
-
   return (
     <div>
       <Row style={{ marginBottom: 16 }}>
         <h3 style={{ ...heading, marginBottom: 0 }}>Deck</h3>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {/* Draft positions don't match the running deck until the edit is
-              committed, so activating mid-edit would show the wrong slide. */}
-          <button
-            style={
-              selected === stageIndex && !dirty
-                ? { ...smallButton, borderColor: '#ef223a', color: '#ffffff' }
-                : smallButton
-            }
-            disabled={dirty || !current}
-            title={dirty ? 'Save the deck before activating a slide' : 'Show this slide on the presentation screen'}
-            onClick={() => onGoTo(selected)}
-          >
-            {selected === stageIndex && !dirty ? 'On screen' : 'Activate slide'}
-          </button>
           <button style={smallButton} disabled={!dirty} onClick={() => setDraft(session.deck.stages)}>
             Revert
           </button>
@@ -160,32 +146,33 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-        <SlideRail
-          draft={draft}
-          selected={selected}
-          onScreen={dirty ? -1 : stageIndex}
-          onSelect={setSelected}
-          onReorder={reorder}
-          onDelete={(i) => {
-            setDraft((d) => d.filter((_, j) => j !== i));
-            setSelected((s) => Math.max(0, s > i ? s - 1 : s));
-          }}
-          onAdd={(stageId) => {
-            setDraft((d) => [...d, { stageId }]);
-            setSelected(draft.length);
-          }}
+      <SlideRail
+        draft={draft}
+        onScreen={dirty ? -1 : stageIndex}
+        canActivate={!dirty}
+        onActivate={onGoTo}
+        onEdit={setEditing}
+        onReorder={reorder}
+        onDelete={(i) => {
+          setDraft((d) => d.filter((_, j) => j !== i));
+          setEditing(null);
+        }}
+        onAdd={(stageId) => {
+          setDraft((d) => [...d, { stageId }]);
+          setEditing(draft.length);
+        }}
+      />
+
+      {draft.length === 0 && <Empty>Empty deck — add a slide with “+ New slide”.</Empty>}
+
+      {editing !== null && draft[editing] && (
+        <SlideModal
+          index={editing}
+          deckStage={draft[editing]}
+          onChange={(patch) => edit(editing, patch)}
+          onClose={() => setEditing(null)}
         />
-        {current ? (
-          <SlideEditor
-            index={selected}
-            deckStage={current}
-            onChange={(patch) => edit(selected, patch)}
-          />
-        ) : (
-          <Empty>Empty deck — add a slide from the rail.</Empty>
-        )}
-      </div>
+      )}
     </div>
   );
 }
