@@ -1,6 +1,7 @@
 import { FloatingText } from '../objects';
 import { Html } from '@react-three/drei';
 import { useIsStageActive } from '../components/Stage';
+import { useSlots } from '../hooks/useSlots';
 
 const concepts = [
   { title: 'Conversation Intelligence', desc: 'Understand what customers mean, not just what they say' },
@@ -10,12 +11,13 @@ const concepts = [
 ];
 
 export default function Stage12Orchestrator() {
+  const slot = useSlots();
   const active = useIsStageActive();
 
   return (
     <group>
       <FloatingText position={[0, 3, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={12}>
-        Introducing Twilio Conversations
+        {slot('headline')}
       </FloatingText>
 
       {active && <Html center transform position={[0, 0, 0]}>

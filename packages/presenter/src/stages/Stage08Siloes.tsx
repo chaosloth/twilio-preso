@@ -1,6 +1,7 @@
 import { FloatingText, ParticleField } from '../objects';
 import { Html } from '@react-three/drei';
 import { useIsStageActive } from '../components/Stage';
+import { useSlots } from '../hooks/useSlots';
 
 const quotes = [
   "Why do your emails get me, but your agent doesn't?",
@@ -8,12 +9,13 @@ const quotes = [
 ];
 
 export default function Stage08Siloes() {
+  const slot = useSlots();
   const active = useIsStageActive();
 
   return (
     <group>
       <FloatingText position={[0, 2.8, 0]} fontSize={0.4} color="#ffffff" bold delay={0.2} maxWidth={10}>
-        {'The result for employees\nand customers is siloes.'}
+        {slot('headline')}
       </FloatingText>
 
       {active && <Html center transform position={[0, 0, 0]}>

@@ -3,12 +3,15 @@ import { useState } from 'react';
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
 interface RegisterProps {
+  /** The session being joined. Registration is session-scoped: the backend
+   *  rejects anything that is not a live session. */
+  sessionId: string;
   onRegistered: (participantId: string, name: string) => void;
 }
 
 type Step = 'phone' | 'otp' | 'name';
 
-export function Register({ onRegistered }: RegisterProps) {
+export function Register({ sessionId, onRegistered }: RegisterProps) {
   const [step, setStep] = useState<Step>('phone');
   const [countryCode, setCountryCode] = useState('+61');
   const [localNumber, setLocalNumber] = useState('');
@@ -81,7 +84,7 @@ export function Register({ onRegistered }: RegisterProps) {
       const res = await fetch(`${BACKEND_URL}/api/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, company }),
+        body: JSON.stringify({ sessionId, name, phone, company }),
       });
 
       if (!res.ok) {

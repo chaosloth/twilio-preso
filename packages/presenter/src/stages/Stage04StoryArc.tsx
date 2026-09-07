@@ -1,6 +1,7 @@
 import { FloatingText, ParticleField } from '../objects';
 import { Html } from '@react-three/drei';
 import { useIsStageActive } from '../components/Stage';
+import { useSlots } from '../hooks/useSlots';
 
 const topics = [
   'Patience',
@@ -14,6 +15,7 @@ const topics = [
 ];
 
 export default function Stage04StoryArc() {
+  const slot = useSlots();
   const active = useIsStageActive();
 
   return (
@@ -21,7 +23,7 @@ export default function Stage04StoryArc() {
       <ParticleField count={60} spread={14} color="#ef223a" speed={0.05} size={0.012} />
 
       <FloatingText position={[0, 2.8, 0]} fontSize={0.45} color="#ffffff" bold delay={0} maxWidth={12}>
-        Topics for today
+        {slot('headline')}
       </FloatingText>
 
       {active && <Html center transform position={[0, -0.2, 0]}>

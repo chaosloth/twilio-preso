@@ -1,22 +1,32 @@
 import Twilio from 'twilio';
-import { config } from './config.js';
+import { syncNames } from '@twilio-preso/shared';
 import type { Participant } from '@twilio-preso/shared';
+import { config } from './config.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 const syncService = client.sync.v1.services(config.twilio.syncServiceSid);
-const PARTICIPANTS_MAP = 'participants';
 
-export async function lookupParticipantByPhone(phone: string): Promise<Participant | null> {
+/**
+ * Find the attendee in *this session's* participants map.
+ *
+ * The map is per-session and prefixed, so a phone that attended two events is
+ * greeted with the answers it gave at the event it is currently on the phone
+ * about, and a number registered at neither is simply unknown.
+ */
+export async function lookupParticipantByPhone(
+  sessionId: string,
+  phone: string
+): Promise<Participant | null> {
   try {
-    const items = await syncService.syncMaps(PARTICIPANTS_MAP).syncMapItems.list({ limit: 500 });
+    const mapName = syncNames(sessionId).participants;
+    const items = await syncService.syncMaps(mapName).syncMapItems.list({ limit: 500 });
     const normalized = normalizePhone(phone);
-    const match = items.find((item) => {
-      const data = item.data as Participant;
-      return normalizePhone(data.phone) === normalized;
-    });
+    const match = items.find(
+      (item) => normalizePhone((item.data as Participant).phone) === normalized
+    );
     return match ? (match.data as Participant) : null;
   } catch (err) {
-    console.error('Failed to lookup participant:', err);
+    console.error(`Failed to look up participant in session ${sessionId}:`, err);
     return null;
   }
 }

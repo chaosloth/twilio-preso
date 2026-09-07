@@ -1,11 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { getParticipant, publishEvent } from '../services/sync.js';
 import { streamAiResponse } from '../services/ai.js';
+import { requireLiveSession, stagesFor } from '../services/sessionContext.js';
 import type { AiPromptPendingEvent, AiPromptResponseEvent } from '@twilio-preso/shared';
 
 interface AiPromptBody {
+  sessionId: string;
   participantId: string;
   participantName: string;
+  stageId: string;
   stageIndex: number;
   prompt: string;
 }
@@ -18,8 +21,9 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
    * word. The presenter screen still receives one `ai-prompt-response` Sync
    * event, published once the full text is assembled.
    */
-  app.post<{ Body: AiPromptBody }>('/api/ai-prompt', async (request, reply) => {
-    const { participantId, participantName, stageIndex } = request.body;
+  app.post<{ Body: AiPromptBody }>('/api/ai-prompt', { preHandler: requireLiveSession }, async (request, reply) => {
+    const session = request.session!;
+    const { participantId, participantName, stageId, stageIndex } = request.body;
     const prompt = request.body.prompt?.trim();
 
     if (!prompt) {
@@ -28,7 +32,7 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
 
     // Their earlier poll/text answers get folded into the agent's context.
     // A lookup failure just means a less personal answer — never a failed ask.
-    const participant = await getParticipant(participantId).catch((err) => {
+    const participant = await getParticipant(session.id, participantId).catch((err) => {
       app.log.warn({ err, participantId }, 'ai-prompt: participant lookup failed');
       return null;
     });
@@ -40,11 +44,12 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
       type: 'ai-prompt-pending',
       participantId,
       participantName,
+      stageId,
       stageIndex,
       prompt,
       timestamp: Date.now(),
     };
-    publishEvent(pending).catch((err) =>
+    publishEvent(session.id, pending).catch((err) =>
       app.log.error({ err }, 'failed to publish ai-prompt-pending')
     );
 
@@ -66,7 +71,7 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
     let full = '';
     let failed = false;
     try {
-      for await (const delta of streamAiResponse(prompt, participantName, participant)) {
+      for await (const delta of streamAiResponse(prompt, stagesFor(session), participantName, participant)) {
         full += delta;
         send({ type: 'delta', text: delta });
       }
@@ -84,6 +89,7 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
       type: 'ai-prompt-response',
       participantId,
       participantName,
+      stageId,
       stageIndex,
       prompt,
       response,
@@ -92,7 +98,7 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
 
     // Broadcast to the presenter screen after the phone has its answer.
     try {
-      await publishEvent(event);
+      await publishEvent(session.id, event);
     } catch (err) {
       app.log.error({ err }, 'failed to publish ai-prompt-response');
     }

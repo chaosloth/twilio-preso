@@ -4,6 +4,9 @@ import { submitAiPrompt } from '../sync';
 
 interface AIPromptProps {
   interaction: InteractionConfig;
+  /** Deck position this prompt was shown at — reported with the response. */
+  stageIndex: number;
+  sessionId: string;
   participantId: string;
   name: string;
 }
@@ -13,7 +16,7 @@ type Phase = 'input' | 'thinking' | 'answered';
 /** How fast words are revealed once they've arrived from the stream. */
 const WORD_INTERVAL_MS = 55;
 
-export function AIPrompt({ interaction, participantId, name }: AIPromptProps) {
+export function AIPrompt({ interaction, stageIndex, sessionId, participantId, name }: AIPromptProps) {
   const [value, setValue] = useState('');
   const [phase, setPhase] = useState<Phase>('input');
   const [shown, setShown] = useState('');
@@ -59,7 +62,7 @@ export function AIPrompt({ interaction, participantId, name }: AIPromptProps) {
     shownLenRef.current = 0;
 
     try {
-      await submitAiPrompt(participantId, name, interaction.stageIndex, prompt, (delta) => {
+      await submitAiPrompt(sessionId, participantId, name, interaction.stageId, stageIndex, prompt, (delta) => {
         receivedRef.current += delta;
         // Flip to the answer view on the first token so streaming is visible.
         setPhase('answered');

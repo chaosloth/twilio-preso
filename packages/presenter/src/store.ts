@@ -1,8 +1,14 @@
 import { create } from 'zustand';
-import type { PresentationStateDoc, AggregateResultsDoc, AudienceResponseEvent, AiPromptPendingEvent, AiPromptResponseEvent } from '@twilio-preso/shared';
-import { TOTAL_STAGES } from '@twilio-preso/shared';
+import type { PresentationStateDoc, AggregateResultsDoc, AudienceResponseEvent, AiPromptPendingEvent, AiPromptResponseEvent, ResolvedStage } from '@twilio-preso/shared';
 
 interface PresenterStore {
+  /** The session this window is driving. Empty until one is selected — every
+   *  Sync object name and API call is derived from it. */
+  sessionId: string;
+  joinCode: string;
+  /** The session's own resolved deck. There is no module-level deck any more:
+   *  what this presenter shows comes from the session record. */
+  stages: ResolvedStage[];
   currentStageIndex: number;
   totalParticipants: number;
   activeInteraction: PresentationStateDoc['activeInteraction'];
@@ -13,6 +19,10 @@ interface PresenterStore {
   pendingAiPrompts: AiPromptPendingEvent[];
   isLive: boolean;
 
+  setSession: (session: { sessionId: string; joinCode: string; stages: ResolvedStage[] }) => void;
+  /** Adopt a deck edited in the HUD without jumping the presenter off the slide
+   *  they are on — only clamped if the deck got shorter. */
+  setStages: (stages: ResolvedStage[]) => void;
   advance: () => void;
   back: () => void;
   goTo: (index: number) => void;
@@ -26,6 +36,9 @@ interface PresenterStore {
 }
 
 export const usePresenterStore = create<PresenterStore>((set) => ({
+  sessionId: '',
+  joinCode: '',
+  stages: [],
   currentStageIndex: 0,
   totalParticipants: 0,
   activeInteraction: null,
@@ -35,9 +48,18 @@ export const usePresenterStore = create<PresenterStore>((set) => ({
   pendingAiPrompts: [],
   isLive: false,
 
-  advance: () => set((s) => ({ currentStageIndex: Math.min(s.currentStageIndex + 1, TOTAL_STAGES - 1) })),
+  // Clamped against the session's own deck length, not a module constant — two
+  // sessions in one browser can have different running orders.
+  setSession: ({ sessionId, joinCode, stages }) =>
+    set({ sessionId, joinCode, stages, currentStageIndex: 0 }),
+  setStages: (stages) =>
+    set((s) => ({
+      stages,
+      currentStageIndex: Math.min(s.currentStageIndex, Math.max(0, stages.length - 1)),
+    })),
+  advance: () => set((s) => ({ currentStageIndex: Math.min(s.currentStageIndex + 1, s.stages.length - 1) })),
   back: () => set((s) => ({ currentStageIndex: Math.max(s.currentStageIndex - 1, 0) })),
-  goTo: (index) => set({ currentStageIndex: Math.max(0, Math.min(index, TOTAL_STAGES - 1)) }),
+  goTo: (index) => set((s) => ({ currentStageIndex: Math.max(0, Math.min(index, s.stages.length - 1)) })),
   setTotalParticipants: (count) => set({ totalParticipants: count }),
   setActiveInteraction: (interaction) => set({ activeInteraction: interaction }),
   setAggregateResults: (results) => set({ aggregateResults: results }),

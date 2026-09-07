@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { usePresenterStore } from '../store';
-import { STAGES } from '@twilio-preso/shared';
 import { publishStageAdvance, publishInteractionPrompt, triggerDemo } from '../sync';
+import { fetchSession, stagesFor } from '../sessions';
 
 let suppressNextPublish = false;
 
@@ -13,6 +13,8 @@ export function useNavigation() {
   const advance = usePresenterStore((s) => s.advance);
   const back = usePresenterStore((s) => s.back);
   const currentStageIndex = usePresenterStore((s) => s.currentStageIndex);
+  const stages = usePresenterStore((s) => s.stages);
+  const sessionId = usePresenterStore((s) => s.sessionId);
   const prevStageIndex = useRef(currentStageIndex);
 
   useEffect(() => {
@@ -32,7 +34,13 @@ export function useNavigation() {
         case 'n':
         case 'N':
           if (!e.repeat) {
-            window.open('/notes', 'presenter-notes', 'width=500,height=700,menubar=no,toolbar=no');
+            // Session in the URL and in the window name: two presenter windows
+            // for different sessions must not share a HUD or drive each other.
+            window.open(
+              `/notes?sessionId=${encodeURIComponent(sessionId)}`,
+              `presenter-notes-${sessionId}`,
+              'width=500,height=700,menubar=no,toolbar=no'
+            );
           }
           break;
       }
@@ -40,27 +48,34 @@ export function useNavigation() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [advance, back]);
+  }, [advance, back, sessionId]);
 
   // Listen for go-to-stage and demo-toggle from notes window (same browser)
   useEffect(() => {
-    const channel = new BroadcastChannel('presenter-sync');
+    const channel = new BroadcastChannel(`presenter-sync:${sessionId}`);
     channel.onmessage = (event) => {
       if (event.data.type === 'go-to-stage') {
         usePresenterStore.getState().goTo(event.data.stageIndex);
       } else if (event.data.type === 'demo-toggle') {
         usePresenterStore.getState().setLive(event.data.enabled);
+      } else if (event.data.type === 'deck-change') {
+        // The HUD saved a new running order. Re-read the record rather than
+        // trusting the message: the backend is what actually stored it.
+        fetchSession(sessionId)
+          .then(({ session }) => usePresenterStore.getState().setStages(stagesFor(session)))
+          .catch(() => {});
       }
     };
     return () => channel.close();
-  }, []);
+  }, [sessionId]);
 
   // When stage changes, publish to Sync and trigger demos
   useEffect(() => {
     if (currentStageIndex === prevStageIndex.current) return;
     prevStageIndex.current = currentStageIndex;
 
-    const stage = STAGES[currentStageIndex];
+    const stage = stages[currentStageIndex];
+    if (!stage) return;
     const shouldPublish = !suppressNextPublish;
     suppressNextPublish = false;
 
@@ -74,17 +89,17 @@ export function useNavigation() {
       }
 
       // Broadcast to local notes window
-      const channel = new BroadcastChannel('presenter-sync');
+      const channel = new BroadcastChannel(`presenter-sync:${sessionId}`);
       channel.postMessage({ type: 'stage-change', stageIndex: currentStageIndex });
       channel.close();
 
       // If stage has a demo trigger AND demos are enabled, fire it
       // Re-read isLive from store at trigger time in case mode changed mid-presentation
       if (stage.demoTrigger && usePresenterStore.getState().isLive) {
-        triggerDemo(stage.demoTrigger).catch((err) => {
+        triggerDemo(sessionId, stage.demoTrigger).catch((err) => {
           console.error(`Demo trigger failed for ${stage.demoTrigger}:`, err);
         });
       }
     }
-  }, [currentStageIndex]);
+  }, [currentStageIndex, stages, sessionId]);
 }

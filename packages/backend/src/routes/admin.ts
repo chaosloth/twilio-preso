@@ -1,68 +1,66 @@
 import type { FastifyInstance } from 'fastify';
-import { getAllParticipants } from '../services/sync.js';
-import Twilio from 'twilio';
-import { config } from '../config.js';
-
-const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
-const syncService = client.sync.v1.services(config.twilio.syncServiceSid);
+import {
+  getAllParticipants,
+  getPresentationState,
+  removeParticipant,
+  resetParticipants,
+  updatePresentationState,
+} from '../services/sync.js';
+import { requirePresenter } from '../services/auth.js';
+import { requireLiveSession } from '../services/sessionContext.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
-  // List all participants
-  app.get('/api/admin/participants', async () => {
-    const participants = await getAllParticipants();
+  // Every route here is presenter-only and session-scoped: they expose attendee
+  // names and phone numbers, toggle the isLive gate on all outbound Twilio
+  // traffic, and destroy participant data — always for exactly one session. The
+  // raw Sync client is gone; object names now come only from `syncNames`.
+  app.addHook('preHandler', requirePresenter);
+  app.addHook('preHandler', requireLiveSession);
+
+  app.get<{ Querystring: { sessionId: string } }>('/api/admin/participants', async (request) => {
+    const participants = await getAllParticipants(request.session!.id);
     return { participants, count: participants.length };
   });
 
-  // Remove a single participant
-  app.delete<{ Params: { id: string } }>('/api/admin/participants/:id', async (request, reply) => {
-    const { id } = request.params;
-    try {
-      await syncService.syncMaps('participants').syncMapItems(id).remove();
-      return { removed: id };
-    } catch {
-      return reply.status(404).send({ error: 'Participant not found' });
+  app.delete<{ Params: { id: string }; Querystring: { sessionId: string } }>(
+    '/api/admin/participants/:id',
+    async (request, reply) => {
+      const removed = await removeParticipant(request.session!.id, request.params.id);
+      if (!removed) {
+        return reply.status(404).send({ error: 'Participant not found' });
+      }
+      return { removed: request.params.id };
     }
+  );
+
+  /**
+   * The rehearsal gate. Reported as `false` when the state document cannot be
+   * read: defaulting to live on an error would arm SMS and voice calls to real
+   * phones off the back of a failed fetch.
+   */
+  app.get<{ Querystring: { sessionId: string } }>('/api/admin/mode', async (request) => {
+    const state = await getPresentationState(request.session!.id);
+    return { isLive: state?.isLive ?? false };
   });
 
-  // Get presentation mode (live/rehearsal)
-  app.get('/api/admin/mode', async () => {
-    try {
-      const doc = await syncService.documents('presentation-state').fetch();
-      return { isLive: doc.data.isLive ?? true };
-    } catch {
-      return { isLive: true };
-    }
-  });
-
-  // Toggle presentation mode
-  app.post('/api/admin/mode', async (request) => {
-    const { isLive } = request.body as { isLive: boolean };
-    const doc = await syncService.documents('presentation-state').fetch();
-    await syncService.documents('presentation-state').update({
-      data: { ...doc.data, isLive },
-    });
+  app.post<{ Body: { sessionId: string; isLive: boolean } }>('/api/admin/mode', async (request) => {
+    const { isLive } = request.body;
+    await updatePresentationState(request.session!.id, { isLive });
     return { isLive };
   });
 
-  // Reset all participants
-  app.post('/api/admin/reset', async () => {
+  /**
+   * Clears one session's roster, stage position, and tallies. `isLive` is
+   * deliberately left as it was — a reset between rehearsal runs should not
+   * silently arm outbound traffic.
+   */
+  app.post<{ Body: { sessionId: string } }>('/api/admin/reset', async (request, reply) => {
     try {
-      await syncService.syncMaps('participants').remove();
-      await syncService.syncMaps.create({ uniqueName: 'participants' });
-
-      // Reset presentation state doc
-      await syncService.documents('presentation-state').update({
-        data: { currentStageIndex: 0, activeInteraction: null, totalParticipants: 0, isLive: true },
-      });
-
-      // Reset aggregate results
-      await syncService.documents('aggregate-results').update({
-        data: { stageIndex: 0, type: 'poll', results: {}, totalResponses: 0 },
-      });
-
+      await resetParticipants(request.session!.id);
       return { reset: true };
     } catch (err: any) {
-      return { reset: false, error: err.message };
+      request.log.error({ err, sessionId: request.session!.id }, 'admin reset failed');
+      return reply.status(500).send({ reset: false, error: err.message });
     }
   });
 }

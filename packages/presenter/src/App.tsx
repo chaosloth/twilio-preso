@@ -1,12 +1,16 @@
 import { Canvas } from '@react-three/fiber';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { SessionRecord } from '@twilio-preso/shared';
 import { Camera } from './components/Camera';
 import { StageContainer } from './components/Stage';
 import { PostProcessing } from './components/PostProcessing';
 import { useNavigation } from './hooks/useNavigation';
 import { initPresenterSync } from './sync';
 import { usePresenterStore } from './store';
-import { STAGES, TOTAL_STAGES } from '@twilio-preso/shared';
+import { whoAmI, type PresenterIdentity } from './auth';
+import { Login } from './pages/Login';
+import { SessionPicker } from './pages/SessionPicker';
+import { stagesFor } from './sessions';
 
 function Scene() {
   useNavigation();
@@ -23,10 +27,11 @@ function Scene() {
 function HUD() {
   const participants = usePresenterStore((s) => s.totalParticipants);
   const stageIndex = usePresenterStore((s) => s.currentStageIndex);
+  const total = usePresenterStore((s) => s.stages.length);
   return (
     <>
       <div style={{ position: 'fixed', bottom: 16, right: 16, color: 'white', fontFamily: 'monospace', opacity: 0.5, fontSize: 12 }}>
-        Stage {stageIndex + 1}/{TOTAL_STAGES} | {participants} connected
+        Stage {stageIndex + 1}/{total} | {participants} connected
       </div>
       <img src="/images/twilio-logo-full.png" alt="Twilio" style={{ position: 'fixed', bottom: 16, left: 16, width: 72, height: 'auto', opacity: 0.4 }} />
     </>
@@ -35,7 +40,7 @@ function HUD() {
 
 function InteractionIndicator() {
   const stageIndex = usePresenterStore((s) => s.currentStageIndex);
-  const stage = STAGES[stageIndex];
+  const stage = usePresenterStore((s) => s.stages[stageIndex]);
 
   if (!stage?.interaction) return null;
 
@@ -112,10 +117,50 @@ function ResponseStream() {
   );
 }
 
+/**
+ * Boot gate in front of the canvas: no token → login, token but no session →
+ * picker, session selected → the presentation. Nothing below this point runs
+ * without a session, since every Sync object name derives from its id.
+ */
 export function App() {
+  const [presenter, setPresenter] = useState<PresenterIdentity | null>(null);
+  const [checked, setChecked] = useState(false);
+  const [session, setSession] = useState<SessionRecord | null>(null);
+  const setStoreSession = usePresenterStore((s) => s.setSession);
+
+  // A stored token is only trusted after /api/auth/me confirms it is still
+  // signed *and* still allowlisted — removal revokes access immediately.
   useEffect(() => {
-    initPresenterSync().catch(() => {});
+    whoAmI().then((identity) => {
+      setPresenter(identity);
+      setChecked(true);
+    });
   }, []);
+
+  const pick = useCallback(
+    (picked: SessionRecord) => {
+      setStoreSession({
+        sessionId: picked.id,
+        joinCode: picked.joinCode,
+        stages: stagesFor(picked),
+      });
+      setSession(picked);
+      initPresenterSync(picked.id).catch(() => {});
+    },
+    [setStoreSession]
+  );
+
+  if (!checked) return null;
+  if (!presenter) return <Login onSignedIn={setPresenter} />;
+  if (!session) {
+    return (
+      <SessionPicker
+        presenter={presenter}
+        onPicked={pick}
+        onSignedOut={() => setPresenter(null)}
+      />
+    );
+  }
 
   return (
     <>

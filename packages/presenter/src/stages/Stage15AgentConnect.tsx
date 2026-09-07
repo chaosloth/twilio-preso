@@ -1,6 +1,7 @@
 import { FloatingText, ParticleField } from '../objects';
 import { Html } from '@react-three/drei';
 import { useIsStageActive } from '../components/Stage';
+import { useSlots } from '../hooks/useSlots';
 
 const code = `const tac = await TAC.create({ config: TACConfig.fromEnv() });
 const voiceChannel = new VoiceChannel(tac);
@@ -18,12 +19,13 @@ const server = new TACServer(tac);
 await server.start();`;
 
 export default function Stage15AgentConnect() {
+  const slot = useSlots();
   const active = useIsStageActive();
 
   return (
     <group>
       <FloatingText position={[0, 3.2, 0]} fontSize={0.45} color="#ef223a" bold delay={0}>
-        Agent Connect
+        {slot('headline')}
       </FloatingText>
 
       {/* Left side text */}

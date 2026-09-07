@@ -6,10 +6,24 @@ export interface Participant {
   company?: string;
   role?: string;
   registeredAt: number;
-  responses: Record<number, ParticipantResponse>;
+  /**
+   * Answers keyed by **stage id**, so a re-answer replaces the old one and a
+   * reordered deck still finds the right response. Never key this by index:
+   * slide 10 is a different stage in a different deck.
+   */
+  responses: Record<string, ParticipantResponse>;
+  /**
+   * Their Twilio Conversation Memory Customer Profile, when memory is
+   * configured. Optional and possibly absent even then — profile creation is
+   * best-effort and must never fail a join.
+   */
+  memoryProfileId?: string;
 }
 
 export interface ParticipantResponse {
+  /** The stage this answers. The key — stable across decks and reordering. */
+  stageId: string;
+  /** Deck position when the answer was given. Display ordering only. */
   stageIndex: number;
   type: InteractionType;
   value: string;
@@ -20,7 +34,8 @@ export interface ParticipantResponse {
 export type InteractionType = 'poll' | 'text' | 'trigger' | 'sentiment' | 'llm-prompt';
 
 export interface InteractionConfig {
-  stageIndex: number;
+  /** Id of the stage this interaction belongs to. Stable across reordering. */
+  stageId: string;
   type: InteractionType;
   prompt: string;
   options?: string[];
@@ -38,6 +53,9 @@ export interface PresentationStateDoc {
 }
 
 export interface AggregateResultsDoc {
+  /** Stage these tallies belong to. Empty before the first interaction. */
+  stageId: string;
+  /** Deck position. Display only. */
   stageIndex: number;
   type: InteractionType;
   results: Record<string, number>;
@@ -61,6 +79,8 @@ export interface AudienceResponseEvent {
   type: 'audience-response';
   participantId: string;
   participantName: string;
+  stageId: string;
+  /** Deck position it was answered at. Display ordering only — filter by stageId. */
   stageIndex: number;
   interactionType: InteractionType;
   value: string;
@@ -83,6 +103,7 @@ export interface AiPromptPendingEvent {
   type: 'ai-prompt-pending';
   participantId: string;
   participantName: string;
+  stageId: string;
   stageIndex: number;
   prompt: string;
   timestamp: number;
@@ -92,6 +113,7 @@ export interface AiPromptResponseEvent {
   type: 'ai-prompt-response';
   participantId: string;
   participantName: string;
+  stageId: string;
   stageIndex: number;
   prompt: string;
   response: string;

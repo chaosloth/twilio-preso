@@ -5,3 +5,5 @@ dist/
 *.local
 .superpowers/
 .env.prod
+*.tsbuildinfo
+.playwright-mcp/
