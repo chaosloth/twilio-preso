@@ -6,3 +6,4 @@ export * from './syncNames.js';
 export * from './participants.js';
 export * from './joinCode.js';
 export * from './session.js';
+export * from './features.js';

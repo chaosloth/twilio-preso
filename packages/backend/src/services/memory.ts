@@ -34,7 +34,14 @@ async function memoryFetch<T>(path: string, body?: unknown, method = 'POST'): Pr
   const storeId = config.twilio.memoryStoreId;
   if (!storeId) return null;
 
-  const res = await fetch(`${BASE}/Stores/${storeId}${path}`, {
+  // Profile paths hang off the store; the store itself lives on the control
+  // plane (`/v1/ControlPlane/Stores/{id}`), not under its own data path, so a
+  // `/v1/`-prefixed path here is taken as absolute rather than store-relative.
+  const url = path.startsWith('/v1/')
+    ? `https://memory.twilio.com${path}`
+    : `${BASE}/Stores/${storeId}${path}`;
+
+  const res = await fetch(url, {
     method,
     headers: {
       Authorization: authHeader(),
@@ -122,6 +129,25 @@ export async function upsertProfile(participant: Participant): Promise<string | 
   });
 
   return profileId;
+}
+
+/**
+ * One cheap read against the store, so the HUD can say "configured *and*
+ * reachable" rather than only "configured". `ok: false` with no store id means
+ * the feature is off, which is not an error — callers distinguish the two.
+ */
+export async function probeMemoryStore(): Promise<{ ok: boolean; detail: string }> {
+  if (!isMemoryEnabled()) return { ok: false, detail: 'not configured' };
+  try {
+    const store = await memoryFetch<{ display_name?: string; store_id?: string }>(
+      `/v1/ControlPlane/Stores/${config.twilio.memoryStoreId}`,
+      undefined,
+      'GET'
+    );
+    return { ok: true, detail: store?.display_name || config.twilio.memoryStoreId };
+  } catch (err: any) {
+    return { ok: false, detail: err?.message ?? 'unreachable' };
+  }
 }
 
 /** Merges new traits into an existing profile. No-op without a profile id. */
