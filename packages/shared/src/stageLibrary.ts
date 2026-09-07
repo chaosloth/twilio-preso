@@ -1,4 +1,5 @@
 import type { InteractionConfig } from './types.js';
+import type { CanvasElement } from './canvas.js';
 
 /**
  * Every demo trigger the backend knows how to fire. Named so that deck
@@ -47,6 +48,18 @@ export interface StageTemplate {
   slots?: SlotDef[];
   /** Stage ids whose responses this stage's trigger reads. Drives validation. */
   dependsOn?: string[];
+  /**
+   * Free-form elements the template ships with. A template that declares this
+   * (even as `[]`) is canvas-editable from the start; any other stage becomes
+   * canvas-editable the moment a deck stage adds elements to it.
+   */
+  canvas?: CanvasElement[];
+  /**
+   * An empty starting point for the slide editor rather than presentation
+   * content. Offered in the library, excluded from DEFAULT_DECK — a blank slide
+   * in the shipped deck is a black screen partway through the talk.
+   */
+  blank?: boolean;
 }
 
 const templates: StageTemplate[] = [
@@ -360,6 +373,18 @@ const templates: StageTemplate[] = [
       { key: 'subhead', label: 'Sub-headline', kind: 'multiline', default: 'We can\'t wait to see what you build with Twilio.' },
       { key: 'image', label: 'Image URL', kind: 'image', default: '' },
     ],
+  },
+  {
+    // Deliberately last and `blank`: it is what you reach for to build a slide
+    // that isn't in the library, and it has no scene of its own — everything on
+    // it comes from the canvas elements the presenter places.
+    id: 'canvas',
+    title: 'Blank canvas',
+    act: 1,
+    notes: 'Free-form slide. Add text and images in the HUD deck editor.',
+    interaction: null,
+    blank: true,
+    canvas: [],
   },
 ];
 

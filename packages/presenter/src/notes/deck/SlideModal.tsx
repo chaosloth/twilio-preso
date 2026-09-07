@@ -1,8 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { DeckStage } from '@twilio-preso/shared';
 import { SlideEditor } from './SlideEditor';
 import { SlidePreview } from './SlidePreview';
+import { RenderedPreview } from './RenderedPreview';
+import { CanvasEditor } from './CanvasEditor';
 import { smallButton } from '../ui';
+
+/** Flat is the fast read of the copy; rendered is what the projector shows. */
+const PREVIEW_MODES = ['flat', 'rendered'] as const;
+type PreviewMode = (typeof PREVIEW_MODES)[number];
 
 interface SlideModalProps {
   index: number;
@@ -17,6 +23,10 @@ interface SlideModalProps {
  * "Save deck" in the tab remains the only thing that reaches the audience.
  */
 export function SlideModal({ index, deckStage, onChange, onClose }: SlideModalProps) {
+  /** Flat by default: it is instant, and most edits are copy. The rendered tab
+   *  mounts a real r3f canvas, so it is opened deliberately. */
+  const [preview, setPreview] = useState<PreviewMode>('flat');
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       // Escape closes; the HUD's own arrow-key navigation already ignores inputs.
@@ -72,9 +82,32 @@ export function SlideModal({ index, deckStage, onChange, onClose }: SlideModalPr
         <div style={{ overflowY: 'auto', padding: 16, display: 'flex', flexWrap: 'wrap', gap: 20 }}>
           <div style={{ flex: '1 1 340px', minWidth: 300 }}>
             <SlideEditor index={index} deckStage={deckStage} onChange={onChange} />
+            <div style={{ marginTop: 20 }}>
+              <CanvasEditor deckStage={deckStage} onChange={onChange} />
+            </div>
           </div>
           <div style={{ flex: '1 1 280px', minWidth: 260 }}>
-            <SlidePreview deckStage={deckStage} />
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              {PREVIEW_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setPreview(mode)}
+                  style={{
+                    ...smallButton,
+                    color: preview === mode ? '#ffffff' : '#babecc',
+                    borderColor: preview === mode ? '#ef223a' : '#4d5777',
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+            {preview === 'flat' ? (
+              <SlidePreview deckStage={deckStage} />
+            ) : (
+              <RenderedPreview deckStage={deckStage} />
+            )}
           </div>
         </div>
       </div>

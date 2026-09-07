@@ -11,3 +11,4 @@ export { WireframeCube } from './WireframeCube';
 export { PulseRing } from './PulseRing';
 export { SceneAccents } from './SceneAccents';
 export { SlideImage } from './SlideImage';
+export { CanvasSlide, CANVAS_WIDTH, CANVAS_HEIGHT } from './CanvasSlide';

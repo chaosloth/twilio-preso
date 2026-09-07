@@ -1,6 +1,7 @@
 import { STAGE_LIBRARY, STAGE_LIBRARY_ORDER } from './stageLibrary.js';
 import type { DemoTriggerId, SlotDef } from './stageLibrary.js';
 import type { InteractionConfig } from './types.js';
+import type { CanvasElement } from './canvas.js';
 
 /**
  * One slide in a deck: a reference to a library stage, plus optional overrides.
@@ -22,6 +23,12 @@ export interface DeckStage {
    * slot so the presenter hides that element rather than drawing empty text.
    */
   slots?: Record<string, string | null>;
+  /**
+   * Free-form positioned elements, drawn on top of whatever the stage's own
+   * scene renders. Any stage may carry them, not just the blank canvas
+   * template — the same `null`-clears rule applies.
+   */
+  canvas?: CanvasElement[] | null;
 }
 
 export interface Deck {
@@ -52,13 +59,27 @@ export interface ResolvedStage {
    * as it did before slots existed.
    */
   slots?: Record<string, string>;
+  /**
+   * Resolved canvas elements. Like `slots`, absent entirely when neither the
+   * template nor the deck stage has any, so a stage that predates the canvas
+   * serialises exactly as it did before.
+   */
+  canvas?: CanvasElement[];
 }
 
-/** Today's presentation: every library stage, in library order, no overrides. */
+/**
+ * Today's presentation: every library stage, in library order, no overrides.
+ *
+ * `blank` templates are excluded. They are starting points for the slide editor,
+ * not content — a blank canvas slide in the shipped deck would be a black screen
+ * partway through the talk.
+ */
 export const DEFAULT_DECK: Deck = {
   id: 'default',
   name: 'Wonder — full deck',
-  stages: STAGE_LIBRARY_ORDER.map((stageId) => ({ stageId })),
+  stages: STAGE_LIBRARY_ORDER.filter((stageId) => !STAGE_LIBRARY[stageId].blank).map((stageId) => ({
+    stageId,
+  })),
 };
 
 /**
@@ -86,6 +107,10 @@ export function resolveDeck(deck: Deck): ResolvedStage[] {
     if (demoTrigger) stage.demoTrigger = demoTrigger;
 
     if (template.slots) stage.slots = resolveSlots(template.slots, deckStage.slots);
+
+    const canvas = deckStage.canvas === undefined ? template.canvas : deckStage.canvas;
+    if (canvas) stage.canvas = canvas;
+    else if (template.canvas || deckStage.canvas === null) stage.canvas = [];
 
     resolved.push(stage);
   }
