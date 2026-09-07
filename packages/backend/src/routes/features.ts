@@ -152,12 +152,17 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
           detail: relayUrl
             ? 'Calls are answered by the live Claude agent.'
             : 'CONVERSATION_RELAY_URL unset — calls fall back to the static TwiML bot.',
-          values: relayUrl
-            ? [
-                { label: 'Relay', value: relayUrl },
-                { label: 'TwiML', value: `${config.publicBaseUrl}/api/voice/conversation-relay` },
-              ]
-            : [{ label: 'TwiML', value: `${config.publicBaseUrl}/api/voice/demo-bot` }],
+          values: [
+            ...(relayUrl
+              ? [
+                  { label: 'Relay', value: relayUrl },
+                  { label: 'TwiML', value: `${config.publicBaseUrl}/api/voice/conversation-relay` },
+                ]
+              : [{ label: 'TwiML', value: `${config.publicBaseUrl}/api/voice/demo-bot` }]),
+            // The claim points this number's inbound webhook at the agent, so it
+            // is a number an attendee can actually ring — worth reading out.
+            ...(thisSessionNumber ? [{ label: 'Call in on', value: thisSessionNumber }] : []),
+          ],
         },
         {
           id: 'memory',

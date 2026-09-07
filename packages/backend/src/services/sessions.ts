@@ -134,6 +134,7 @@ export async function claimPhoneNumber(sessionId: string): Promise<string> {
         key: phoneNumber,
         data: { sessionId, claimedAt: Date.now() } satisfies PhonePoolClaim,
       });
+      await pointNumberAtVoiceAgent(phoneNumber, sessionId);
       return phoneNumber;
     } catch (e: any) {
       if (!isAlreadyExists(e)) throw e;
@@ -141,6 +142,31 @@ export async function claimPhoneNumber(sessionId: string): Promise<string> {
   }
 
   throw new PhonePoolExhaustedError(await describePoolUsage());
+}
+
+/**
+ * Points an inbound call at this session's voice agent.
+ *
+ * Without this the number answers with whatever it was last configured for, so
+ * an attendee *calling back in* — the only way the agent is reachable other than
+ * the mass outbound trigger — never reaches it. The session id goes in the query
+ * string, which the signature covers, so the relay is told which presentation
+ * the caller belongs to instead of inferring it.
+ *
+ * Best-effort: a number the account cannot reconfigure (or a relay that isn't
+ * running) must not stop a session being created. Outbound still works.
+ */
+async function pointNumberAtVoiceAgent(phoneNumber: string, sessionId: string): Promise<void> {
+  try {
+    const [number] = await client.incomingPhoneNumbers.list({ phoneNumber, limit: 1 });
+    if (!number) return;
+    const voiceUrl = process.env.CONVERSATION_RELAY_URL
+      ? `${config.publicBaseUrl}/api/voice/conversation-relay?sessionId=${encodeURIComponent(sessionId)}`
+      : `${config.publicBaseUrl}/api/voice/demo-bot`;
+    await client.incomingPhoneNumbers(number.sid).update({ voiceUrl, voiceMethod: 'POST' });
+  } catch (err) {
+    console.warn(`Could not point ${phoneNumber} at the voice agent:`, err);
+  }
 }
 
 export async function releasePhoneNumber(phoneNumber: string): Promise<void> {
