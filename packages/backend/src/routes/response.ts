@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { publishEvent, recordParticipantResponse } from '../services/sync.js';
 import { requireLiveSession } from '../services/sessionContext.js';
 import { getParticipant } from '../services/sync.js';
-import { patchTraits, traitsForResponse } from '../services/memory.js';
+import { recordObservation, responseObservation } from '../services/memory.js';
 import type { AudienceResponseEvent, InteractionType } from '@twilio-preso/shared';
 
 interface ResponseBody {
@@ -58,9 +58,12 @@ export async function responseRoutes(app: FastifyInstance): Promise<void> {
     // Not awaited, and swallowed on failure — the tally must not wait on it.
     void (async () => {
       const participant = await getParticipant(sessionId, participantId);
-      await patchTraits(
-        participant?.memoryProfileId,
-        traitsForResponse({
+      if (!participant?.memoryProfileId) return;
+      // An observation rather than a trait: what someone said in a poll is not
+      // a stable fact, and only observations are indexed for recall.
+      await recordObservation(
+        participant.memoryProfileId,
+        responseObservation(participant, {
           stageId,
           stageIndex,
           type: interactionType,
