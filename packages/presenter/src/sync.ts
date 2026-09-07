@@ -14,27 +14,44 @@ let stateDocument: any = null;
 let names: ReturnType<typeof syncNames> | null = null;
 const windowId = `presenter-${Math.random().toString(36).slice(2)}`;
 
-export async function initPresenterSync(sessionId: string): Promise<void> {
-  names = syncNames(sessionId);
-
-  // The token is presenter-issued: `identity` is this window, not a
-  // participant, so the request needs the bearer token to be authorised.
-  let res: Response;
+/**
+ * The token is presenter-issued: `identity` is this window, not a participant,
+ * so the request needs the bearer token to be authorised. Retried, since the
+ * stage machine may come up before the backend does.
+ */
+async function fetchToken(sessionId: string): Promise<string | null> {
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      res = await fetch(
+      const res = await fetch(
         `${BACKEND_URL}/api/token?identity=${windowId}&sessionId=${encodeURIComponent(sessionId)}`,
         { headers: authHeaders() }
       );
-      break;
+      if (!res.ok) return null;
+      return (await res.json()).token as string;
     } catch {
       await new Promise((r) => setTimeout(r, 2000));
     }
   }
-  if (!res! || !res.ok) return;
-  const { token } = await res.json();
+  return null;
+}
+
+export async function initPresenterSync(sessionId: string): Promise<void> {
+  names = syncNames(sessionId);
+
+  const token = await fetchToken(sessionId);
+  if (!token) return;
 
   syncClient = new SyncClient(token);
+
+  // A Sync access token lasts an hour, which a rehearsal plus the talk itself
+  // outlives. Unrenewed, the socket is denied part-way through and the stage
+  // stops publishing to the audience with nothing on screen to say so.
+  const renew = async () => {
+    const fresh = await fetchToken(sessionId);
+    if (fresh) syncClient?.updateToken(fresh);
+  };
+  syncClient.on('tokenAboutToExpire', renew);
+  syncClient.on('tokenExpired', renew);
 
   // Subscribe to event stream
   const stream = await syncClient.stream(names.events);

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { InteractionConfig } from '@twilio-preso/shared';
-import { initSync, subscribeToEvents, publishResponse, isSyncConnected } from './sync';
+import { initSync, subscribeToEvents, publishResponse, isSyncConnected, isSyncDead } from './sync';
 import { Join } from './pages/Join';
 import {
   joinCodeFromPath,
@@ -99,14 +99,17 @@ export function App() {
     [connectSync]
   );
 
-  // Periodically check connection status
+  // Poll the connection, and rebuild the client if it has died for good. A
+  // phone that sat locked through a token expiry used to sit on "Connected"
+  // forever while the presenter advanced past it.
   useEffect(() => {
-    if (state === 'join' || state === 'register') return;
+    if (state === 'join' || state === 'register' || !session || !participantId) return;
     const interval = setInterval(() => {
       setConnected(isSyncConnected());
+      if (isSyncDead()) void connectSync(session.sessionId, participantId);
     }, 5000);
     return () => clearInterval(interval);
-  }, [state]);
+  }, [state, session, participantId, connectSync]);
 
   const handleRegistered = useCallback(async (id: string, participantName: string) => {
     if (!session) return;

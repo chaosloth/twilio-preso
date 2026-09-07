@@ -59,6 +59,8 @@ There is **no custom WebSocket/state server** — Twilio Sync is the real-time b
 
 Every one of these objects is per-session and name-prefixed (`s_<id>_*`, via `syncNames`); the bullets above name the *roles*, not the literal unique names. Clients fetch a short-lived Sync access token from the backend (`GET /api/token?identity=&sessionId=`, issued only to a presenter or a registered participant of that session) then connect directly to Twilio — the backend is not in the realtime path.
 
+That token lasts **one hour**, which a rehearsal plus the talk itself outlives, so both clients renew it on the SDK's `tokenAboutToExpire` / `tokenExpired` events (`packages/{presenter,audience}/src/sync.ts`). Unrenewed, the failure is silent and looks like a bug elsewhere: the presenter still advances locally, `stateDocument.update()` throws into a `console.warn`, and every phone sits on the previous slide. The audience badge reports the client's real `connectionState` for the same reason — it used to report "Connected" whenever a client object existed — and re-inits when the connection is dead for good rather than merely flaky.
+
 ### Navigation & the echo-suppression pattern
 
 Presenter navigation lives in `packages/presenter/src/hooks/useNavigation.ts`. Arrow/space keys advance the local Zustand store (`store.ts`); a store change publishes to the Sync document. Because every client *also listens* to that document, there's a loop risk: `suppressPublish()` sets a one-shot flag so a stage change that arrived *from* Sync doesn't get re-published. When editing navigation or sync code, preserve this suppress-on-inbound pattern or you'll create infinite update loops.

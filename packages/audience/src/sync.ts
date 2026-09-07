@@ -12,20 +12,54 @@ let syncClient: SyncClient | null = null;
  */
 let currentSessionId: string | null = null;
 
+/**
+ * Whether the socket is actually carrying updates — not merely whether a client
+ * object was ever constructed. A dead connection has to read as disconnected:
+ * a badge that says "Connected" while the phone silently stops following the
+ * presenter is worse than no badge at all.
+ */
 export function isSyncConnected(): boolean {
-  return syncClient !== null;
+  return syncClient !== null && syncClient.connectionState === 'connected';
 }
 
-export async function initSync(sessionId: string, participantId: string): Promise<SyncClient> {
+/**
+ * True when the client will never recover on its own — a rejected or expired
+ * token, rather than a flaky network the SDK retries by itself. Only this
+ * warrants tearing the client down and building a new one.
+ */
+export function isSyncDead(): boolean {
+  const state = syncClient?.connectionState;
+  return state === 'denied' || state === 'error' || state === 'disconnected';
+}
+
+async function fetchToken(sessionId: string, participantId: string): Promise<string> {
   const res = await fetch(
     `${BACKEND_URL}/api/token?identity=${encodeURIComponent(participantId)}&sessionId=${encodeURIComponent(sessionId)}`
   );
   if (!res.ok) throw new Error(`token request failed: ${res.status}`);
-  const { token } = await res.json();
+  return (await res.json()).token as string;
+}
 
-  syncClient = new SyncClient(token);
+export async function initSync(sessionId: string, participantId: string): Promise<SyncClient> {
+  const client = new SyncClient(await fetchToken(sessionId, participantId));
+
+  // A Sync access token lasts an hour; a presentation plus its rehearsal easily
+  // outlives that. Without a refresh the socket is denied mid-talk and the phone
+  // quietly stops following the presenter — no error, no reconnect, nothing on
+  // screen. Both events fire on the client, so renew on either.
+  const renew = async () => {
+    try {
+      client.updateToken(await fetchToken(sessionId, participantId));
+    } catch {
+      // The next event, or the app's own retry, will try again.
+    }
+  };
+  client.on('tokenAboutToExpire', renew);
+  client.on('tokenExpired', renew);
+
+  syncClient = client;
   currentSessionId = sessionId;
-  return syncClient;
+  return client;
 }
 
 function sessionNames() {
