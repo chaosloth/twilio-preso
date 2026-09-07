@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import Twilio from 'twilio';
 import { config } from '../config.js';
 import { getAllParticipants, getParticipant, isSessionLive } from '../services/sync.js';
-import { sendSmsToAll, sendSmsToParticipant } from '../services/messaging.js';
+import { sendToAllOnChannel } from '../services/messaging.js';
+import type { MessageChannel } from '../services/messaging.js';
 import { initiateAgentCall } from '../services/voice.js';
 import { responseFor } from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
@@ -52,19 +53,29 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
 
       const participants = await getAllParticipants(session.id);
 
-      switch (triggerId) {
+      /**
+       * A `whatsapp-` trigger is its `sms-` sibling on another channel — same
+       * copy, same recipients — so the two share one branch rather than drifting
+       * apart. The channel decides only how it is sent, and `whatsapp` still
+       * means "SMS if WhatsApp cannot deliver to this person".
+       */
+      const onWhatsApp = triggerId.startsWith('whatsapp-');
+      const channel: MessageChannel = onWhatsApp ? 'whatsapp' : 'sms';
+      const kind = onWhatsApp ? triggerId.replace(/^whatsapp-/, 'sms-') : triggerId;
+
+      switch (kind) {
         case 'sms-patience': {
-          await sendSmsToAll(from, participants, () =>
+          const sent = await sendToAllOnChannel(channel, from, participants, () =>
             `You've been on hold for 7 minutes. Still waiting...\n\nThis is what your customers feel every day. — Wonder by Twilio`
           );
-          return { sent: participants.length };
+          return { ...sent, total: participants.length };
         }
 
         case 'sms-orchestrator': {
-          await sendSmsToAll(from, participants, (p) =>
+          const sent = await sendToAllOnChannel(channel, from, participants, (p) =>
             `Hey ${p.name}, following up from our earlier message. Notice how this conversation continued seamlessly across channels? That's Conversation Orchestrator. — Twilio`
           );
-          return { sent: participants.length };
+          return { ...sent, total: participants.length };
         }
 
         case 'sms-memory': {
@@ -84,7 +95,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
             })
           );
 
-          await sendSmsToAll(from, participants, (p) => {
+          const sent = await sendToAllOnChannel(channel, from, participants, (p) => {
             // A recalled observation is a sentence, not a phrase, so it is quoted
             // as its own line rather than dropped into "you said \"…\"".
             const memory = recalled.get(p.id);
@@ -136,10 +147,10 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
         }
 
         case 'sms-closing': {
-          await sendSmsToAll(from, participants, (p) =>
+          const sent = await sendToAllOnChannel(channel, from, participants, (p) =>
             `Thanks for joining us, ${p.name}! Want to explore the demo yourself? Check it out here: https://www.twilio.com/en-us/solutions/agent-productivity\n\nletsGoMichelangeloMode(); — Wonder by Twilio`
           );
-          return { sent: participants.length };
+          return { ...sent, total: participants.length };
         }
 
         default:

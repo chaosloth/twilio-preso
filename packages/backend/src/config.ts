@@ -11,6 +11,14 @@ function envList(name: string): string[] {
   return [...new Set(raw.split(',').map((v) => v.trim()).filter(Boolean))];
 }
 
+/** Twilio addresses WhatsApp endpoints as `whatsapp:+…`; the prefix is added
+ *  here so nothing downstream has to remember which form it holds. */
+function normalizeWhatsAppSender(value: string | undefined): string {
+  const trimmed = (value ?? '').trim();
+  if (!trimmed) return '';
+  return trimmed.startsWith('whatsapp:') ? trimmed : `whatsapp:${trimmed}`;
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
   /**
@@ -48,6 +56,15 @@ export const config = {
      * missing store must degrade the demo, not stop the backend booting.
      */
     memoryStoreId: process.env.TWILIO_MEMORY_STORE_ID || '',
+    /**
+     * A WhatsApp-enabled sender, `whatsapp:+…` or a bare E.164 number.
+     *
+     * Optional and separate from the phone pool on purpose: a WhatsApp sender is
+     * registered per number with Meta, so a session's claimed pool number is
+     * almost certainly not one. Unset, every WhatsApp trigger sends as SMS
+     * instead — the message still lands, on the channel that always works.
+     */
+    whatsappFrom: normalizeWhatsAppSender(process.env.TWILIO_WHATSAPP_FROM),
   },
   /**
    * Seeded into `presenter-allowlist` at boot if missing. An empty allowlist is

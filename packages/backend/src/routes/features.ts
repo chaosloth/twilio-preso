@@ -146,6 +146,17 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
           ],
         },
         {
+          id: 'whatsapp',
+          label: 'WhatsApp',
+          state: config.twilio.whatsappFrom ? 'ok' : 'off',
+          detail: config.twilio.whatsappFrom
+            ? 'whatsapp- triggers send over WhatsApp, per recipient, and fall back to SMS when it cannot deliver — an unregistered number, or a closed 24-hour window.'
+            : 'TWILIO_WHATSAPP_FROM unset — whatsapp- triggers send as SMS instead. The message still arrives; it just is not the channel being demonstrated.',
+          values: config.twilio.whatsappFrom
+            ? [{ label: 'Sender', value: config.twilio.whatsappFrom }]
+            : undefined,
+        },
+        {
           id: 'voice',
           label: 'Voice agent (ConversationRelay)',
           state: relayUrl ? 'ok' : 'off',

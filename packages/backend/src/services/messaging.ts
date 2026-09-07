@@ -19,6 +19,91 @@ export async function sendSms(from: string, to: string, body: string): Promise<v
   await client.messages.create({ from, to, body });
 }
 
+/**
+ * Which channel a trigger asks for. `whatsapp` always means "WhatsApp if it can,
+ * SMS if it can't" — see `sendOnChannel`.
+ */
+export type MessageChannel = 'sms' | 'whatsapp';
+
+/** What actually happened, per participant, so a trigger can report it. */
+export interface ChannelResult {
+  whatsapp: number;
+  sms: number;
+  failed: number;
+}
+
+/** Twilio's error for a business-initiated free-form WhatsApp message sent
+ *  outside the 24-hour customer service window. The expected failure, not an
+ *  exceptional one: an attendee who has never messaged the sender is outside it
+ *  by definition, which is why the fallback exists at all. */
+const WHATSAPP_OUTSIDE_WINDOW = 63016;
+
+export function isWhatsAppConfigured(): boolean {
+  return !!config.twilio.whatsappFrom;
+}
+
+/**
+ * Sends one message on the requested channel, falling back to SMS.
+ *
+ * Twilio's automatic channel fallback lives in the Bulk Messaging API
+ * (`comms.twilio.com/v1/Messages`, with a sender pool and a channel priority
+ * list), not on the classic Messages API this app uses for its per-session
+ * `from`. So the fallback is application-level: try WhatsApp, and on *any*
+ * failure send the same body as SMS.
+ *
+ * Falling back on any error rather than only on 63016 is deliberate. A room full
+ * of attendees will produce unregistered numbers, opt-outs and template
+ * rejections as well as closed windows, and the presenter's requirement is the
+ * same in every case — the message has to arrive.
+ */
+export async function sendOnChannel(
+  channel: MessageChannel,
+  smsFrom: string,
+  to: string,
+  body: string
+): Promise<'whatsapp' | 'sms'> {
+  const whatsappFrom = config.twilio.whatsappFrom;
+  if (channel === 'sms' || !whatsappFrom) {
+    await sendSms(smsFrom, to, body);
+    return 'sms';
+  }
+
+  try {
+    await client.messages.create({ from: whatsappFrom, to: `whatsapp:${to}`, body });
+    return 'whatsapp';
+  } catch (err: any) {
+    const code = err?.code;
+    console.warn(
+      code === WHATSAPP_OUTSIDE_WINDOW
+        ? `WhatsApp to ${to} is outside the 24-hour window (63016) — sending as SMS`
+        : `WhatsApp to ${to} failed (${code ?? 'unknown'}) — sending as SMS`
+    );
+    await sendSms(smsFrom, to, body);
+    return 'sms';
+  }
+}
+
+/** The same body to everyone, on the requested channel, with per-recipient
+ *  fallback: one attendee outside the WhatsApp window must not drop the room to
+ *  SMS, and one hard failure must not stop the rest. */
+export async function sendToAllOnChannel(
+  channel: MessageChannel,
+  smsFrom: string,
+  participants: Participant[],
+  bodyFn: (p: Participant) => string
+): Promise<ChannelResult> {
+  const results = await Promise.allSettled(
+    participants.map((p) => sendOnChannel(channel, smsFrom, p.phone, bodyFn(p)))
+  );
+
+  const tally: ChannelResult = { whatsapp: 0, sms: 0, failed: 0 };
+  for (const result of results) {
+    if (result.status === 'rejected') tally.failed++;
+    else tally[result.value]++;
+  }
+  return tally;
+}
+
 export async function sendWelcomeSms(from: string, participant: Participant): Promise<void> {
   await sendSms(
     from,
@@ -27,18 +112,3 @@ export async function sendWelcomeSms(from: string, participant: Participant): Pr
   );
 }
 
-export async function sendSmsToParticipant(
-  from: string,
-  phone: string,
-  body: string
-): Promise<void> {
-  await sendSms(from, phone, body);
-}
-
-export async function sendSmsToAll(
-  from: string,
-  participants: Participant[],
-  bodyFn: (p: Participant) => string
-): Promise<void> {
-  await Promise.allSettled(participants.map((p) => sendSms(from, p.phone, bodyFn(p))));
-}

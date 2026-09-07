@@ -9,6 +9,15 @@ export const DEMO_TRIGGER_IDS = [
   'sms-patience',
   'sms-orchestrator',
   'sms-memory',
+  // The same four messages over WhatsApp. A `whatsapp-` trigger falls back to
+  // SMS per recipient when WhatsApp cannot deliver — an unset sender, an
+  // attendee outside the 24-hour window — so choosing one never risks the
+  // message not arriving. Kept as separate ids rather than a channel flag so a
+  // deck records which channel the talk demonstrates on that slide.
+  'whatsapp-patience',
+  'whatsapp-orchestrator',
+  'whatsapp-memory',
+  'whatsapp-closing',
   'intelligence-analysis',
   'voice-agent-connect',
   'voice-mass-outbound',
