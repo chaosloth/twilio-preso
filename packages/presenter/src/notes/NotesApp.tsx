@@ -183,7 +183,7 @@ export function NotesApp({ sessionId }: NotesAppProps) {
         {activeTab === 'controls' && (
           <ControlsTab api={api} joinCode={session?.joinCode ?? ''} onToggleDemo={toggleDemo} />
         )}
-        {activeTab === 'deck' && <DeckTab api={api} />}
+        {activeTab === 'deck' && <DeckTab api={api} stageIndex={stageIndex} onGoTo={goTo} />}
         {activeTab === 'presenters' && <AllowlistTab />}
       </div>
     </div>

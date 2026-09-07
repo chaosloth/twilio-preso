@@ -4,6 +4,13 @@ import type { Deck, DeckStage } from '@twilio-preso/shared';
 import type { AdminApi } from '../useAdminApi';
 import { Empty, ErrorText, Row, caption, dangerButton, heading, smallButton, textInput } from '../ui';
 
+interface DeckTabProps {
+  api: AdminApi;
+  /** The slide the presentation window is currently on, for the Activate button. */
+  stageIndex: number;
+  onGoTo: (index: number) => void;
+}
+
 /**
  * Running-order editor. Edits are local until saved, so a half-finished reorder
  * never reaches the running presentation; the presenter laptop only picks up a
@@ -13,11 +20,13 @@ import { Empty, ErrorText, Row, caption, dangerButton, heading, smallButton, tex
  * draft so a bad order is visible *before* saving, and the backend returns its
  * own on commit. Neither blocks anything.
  */
-export function DeckTab({ api }: { api: AdminApi }) {
+export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
   const { session, warnings, commitDeck } = api;
   const [draft, setDraft] = useState<DeckStage[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /** Index of the row being dragged, or null. Drag state only — not persisted. */
+  const [dragging, setDragging] = useState<number | null>(null);
 
   useEffect(() => {
     if (session) setDraft(session.deck.stages);
@@ -39,6 +48,17 @@ export function DeckTab({ api }: { api: AdminApi }) {
 
   function edit(index: number, patch: Partial<DeckStage>) {
     setDraft((d) => d.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  }
+
+  /** Pulls the dragged row out and re-inserts it at `to`, unlike `move`'s swap. */
+  function reorder(from: number, to: number) {
+    if (from === to) return;
+    setDraft((d) => {
+      const next = [...d];
+      const [row] = next.splice(from, 1);
+      next.splice(to, 0, row);
+      return next;
+    });
   }
 
   function move(index: number, delta: number) {
@@ -117,9 +137,36 @@ export function DeckTab({ api }: { api: AdminApi }) {
           return (
             <div
               key={`${deckStage.stageId}-${i}`}
-              style={{ padding: '10px 12px', background: '#0a1535', borderRadius: 6 }}
+              onDragOver={(e) => {
+                // Without this the drop is refused and the row snaps back.
+                e.preventDefault();
+                if (dragging !== null && dragging !== i) reorder(dragging, i);
+                setDragging(i);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(null);
+              }}
+              style={{
+                padding: '10px 12px',
+                background: '#0a1535',
+                borderRadius: 6,
+                opacity: dragging === i ? 0.5 : 1,
+                border: i === stageIndex && !dirty ? '1px solid #ef223a' : '1px solid transparent',
+              }}
             >
               <Row>
+                {/* Only the handle is draggable, so the row's own buttons and any
+                    text inside it still take clicks normally. */}
+                <div
+                  draggable
+                  onDragStart={() => setDragging(i)}
+                  onDragEnd={() => setDragging(null)}
+                  title="Drag to reorder"
+                  style={{ cursor: 'grab', color: '#4d5777', fontSize: 14, lineHeight: 1, padding: '0 2px', userSelect: 'none' }}
+                >
+                  ⠿
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>
                     <span style={{ color: '#7e869c', fontFamily: 'monospace' }}>{i + 1}. </span>
@@ -133,6 +180,17 @@ export function DeckTab({ api }: { api: AdminApi }) {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 4 }}>
+                  {/* Jumps the big screen to this slide. Draft indices don't
+                      match the running deck until the reorder is saved, so
+                      activating mid-edit would land on the wrong slide. */}
+                  <button
+                    style={i === stageIndex && !dirty ? { ...smallButton, borderColor: '#ef223a', color: '#ffffff' } : smallButton}
+                    disabled={dirty}
+                    title={dirty ? 'Save the deck before activating a slide' : 'Show this slide on the presentation screen'}
+                    onClick={() => onGoTo(i)}
+                  >
+                    {i === stageIndex && !dirty ? 'on screen' : 'activate'}
+                  </button>
                   <button style={smallButton} disabled={i === 0} onClick={() => move(i, -1)}>
                     ↑
                   </button>
