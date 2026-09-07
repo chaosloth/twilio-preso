@@ -1,32 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
-import { STAGE_LIBRARY, STAGE_LIBRARY_ORDER, validateDeck } from '@twilio-preso/shared';
+import { validateDeck } from '@twilio-preso/shared';
 import type { Deck, DeckStage } from '@twilio-preso/shared';
 import type { AdminApi } from '../useAdminApi';
-import { Empty, ErrorText, Row, caption, dangerButton, heading, smallButton, textInput } from '../ui';
+import { SlideEditor } from '../deck/SlideEditor';
+import { SlideRail } from '../deck/SlideRail';
+import { Empty, ErrorText, Row, caption, heading, smallButton } from '../ui';
 
 interface DeckTabProps {
   api: AdminApi;
-  /** The slide the presentation window is currently on, for the Activate button. */
+  /** The slide the presentation window is currently on. */
   stageIndex: number;
   onGoTo: (index: number) => void;
 }
 
 /**
- * Running-order editor. Edits are local until saved, so a half-finished reorder
- * never reaches the running presentation; the presenter laptop only picks up a
- * deck change when it is committed.
+ * The deck editor: a slide rail on the left, an editor for the selected slide on
+ * the right. Edits are local until saved, so a half-finished reorder or an
+ * unfinished poll option never reaches the running presentation; the presenter
+ * laptop only picks up a deck change when it is committed.
  *
- * Warnings are advisory throughout — this preview runs `validateDeck` on the
+ * Warnings are advisory throughout — this previews `validateDeck` against the
  * draft so a bad order is visible *before* saving, and the backend returns its
  * own on commit. Neither blocks anything.
  */
 export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
   const { session, warnings, commitDeck } = api;
   const [draft, setDraft] = useState<DeckStage[]>([]);
+  const [selected, setSelected] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  /** Index of the row being dragged, or null. Drag state only — not persisted. */
-  const [dragging, setDragging] = useState<number | null>(null);
 
   useEffect(() => {
     if (session) setDraft(session.deck.stages);
@@ -44,13 +46,21 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
 
   const shown = dirty ? preview : warnings;
 
+  /**
+   * The deck is stored inside a Twilio Sync map item, which caps at 16 KB of
+   * data — edited copy is the only thing here that grows without bound, so say
+   * so before a save starts failing. Images are URLs for the same reason.
+   */
+  const deckBytes = useMemo(() => new Blob([JSON.stringify(draft)]).size, [draft]);
+  const nearLimit = deckBytes > 12 * 1024;
+
   if (!session) return <Empty>Loading deck…</Empty>;
 
   function edit(index: number, patch: Partial<DeckStage>) {
     setDraft((d) => d.map((s, i) => (i === index ? { ...s, ...patch } : s)));
   }
 
-  /** Pulls the dragged row out and re-inserts it at `to`, unlike `move`'s swap. */
+  /** Pulls the dragged slide out and reinserts it, rather than swapping a pair. */
   function reorder(from: number, to: number) {
     if (from === to) return;
     setDraft((d) => {
@@ -59,16 +69,7 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
       next.splice(to, 0, row);
       return next;
     });
-  }
-
-  function move(index: number, delta: number) {
-    const to = index + delta;
-    if (to < 0 || to >= draft.length) return;
-    setDraft((d) => {
-      const next = [...d];
-      [next[index], next[to]] = [next[to], next[index]];
-      return next;
-    });
+    setSelected(to);
   }
 
   async function save() {
@@ -77,7 +78,7 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
     try {
       const deck: Deck = { ...session!.deck, stages: draft };
       await commitDeck(deck);
-      // Tell the presentation window to re-read the record, so a saved reorder
+      // Tell the presentation window to re-read the record, so a saved edit
       // takes effect on the big screen without restarting the session.
       const channel = new BroadcastChannel(`presenter-sync:${session!.id}`);
       channel.postMessage({ type: 'deck-change' });
@@ -89,18 +90,37 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
     }
   }
 
+  const current = draft[selected];
+
   return (
     <div>
       <Row style={{ marginBottom: 16 }}>
-        <h3 style={{ ...heading, marginBottom: 0 }}>
-          Running order ({draft.length} {draft.length === 1 ? 'stage' : 'stages'})
-        </h3>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <h3 style={{ ...heading, marginBottom: 0 }}>Deck</h3>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Draft positions don't match the running deck until the edit is
+              committed, so activating mid-edit would show the wrong slide. */}
+          <button
+            style={
+              selected === stageIndex && !dirty
+                ? { ...smallButton, borderColor: '#ef223a', color: '#ffffff' }
+                : smallButton
+            }
+            disabled={dirty || !current}
+            title={dirty ? 'Save the deck before activating a slide' : 'Show this slide on the presentation screen'}
+            onClick={() => onGoTo(selected)}
+          >
+            {selected === stageIndex && !dirty ? 'On screen' : 'Activate slide'}
+          </button>
           <button style={smallButton} disabled={!dirty} onClick={() => setDraft(session.deck.stages)}>
             Revert
           </button>
           <button
-            style={{ ...smallButton, borderColor: '#ef223a', color: dirty ? '#ffffff' : '#7e869c', background: dirty ? '#ef223a' : 'transparent' }}
+            style={{
+              ...smallButton,
+              borderColor: '#ef223a',
+              color: dirty ? '#ffffff' : '#7e869c',
+              background: dirty ? '#ef223a' : 'transparent',
+            }}
             disabled={!dirty || busy}
             onClick={() => void save()}
           >
@@ -111,10 +131,25 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
 
       {error && <ErrorText>{error}</ErrorText>}
 
+      {nearLimit && (
+        <ErrorText>
+          This deck is {(deckBytes / 1024).toFixed(1)} KB of the 16 KB a session record holds. Shorten
+          edited copy or split the deck before it stops saving.
+        </ErrorText>
+      )}
+
       {shown.length > 0 && (
-        <div style={{ marginBottom: 16, padding: 12, background: 'rgba(239,34,58,0.08)', border: '1px solid rgba(239,34,58,0.25)', borderRadius: 8 }}>
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 12,
+            background: 'rgba(239,34,58,0.08)',
+            border: '1px solid rgba(239,34,58,0.25)',
+            borderRadius: 8,
+          }}
+        >
           <div style={{ ...caption, color: '#ef223a', marginBottom: 6 }}>
-            {dirty ? 'Unsaved order' : 'Saved deck'} — {shown.length}{' '}
+            {dirty ? 'Unsaved changes' : 'Saved deck'} — {shown.length}{' '}
             {shown.length === 1 ? 'warning' : 'warnings'}
           </div>
           {shown.map((w, i) => (
@@ -125,130 +160,31 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-        {draft.map((deckStage, i) => {
-          const template = STAGE_LIBRARY[deckStage.stageId];
-          // `undefined` inherits from the template, explicit `null` disables.
-          const trigger =
-            deckStage.demoTrigger === undefined ? template?.demoTrigger : deckStage.demoTrigger;
-          const interaction =
-            deckStage.interaction === undefined ? template?.interaction : deckStage.interaction;
-
-          return (
-            <div
-              key={`${deckStage.stageId}-${i}`}
-              onDragOver={(e) => {
-                // Without this the drop is refused and the row snaps back.
-                e.preventDefault();
-                if (dragging !== null && dragging !== i) reorder(dragging, i);
-                setDragging(i);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragging(null);
-              }}
-              style={{
-                padding: '10px 12px',
-                background: '#0a1535',
-                borderRadius: 6,
-                opacity: dragging === i ? 0.5 : 1,
-                border: i === stageIndex && !dirty ? '1px solid #ef223a' : '1px solid transparent',
-              }}
-            >
-              <Row>
-                {/* Only the handle is draggable, so the row's own buttons and any
-                    text inside it still take clicks normally. */}
-                <div
-                  draggable
-                  onDragStart={() => setDragging(i)}
-                  onDragEnd={() => setDragging(null)}
-                  title="Drag to reorder"
-                  style={{ cursor: 'grab', color: '#4d5777', fontSize: 14, lineHeight: 1, padding: '0 2px', userSelect: 'none' }}
-                >
-                  ⠿
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>
-                    <span style={{ color: '#7e869c', fontFamily: 'monospace' }}>{i + 1}. </span>
-                    {deckStage.title ?? template?.title ?? deckStage.stageId}
-                    {!template && <span style={{ color: '#ef223a' }}> (unknown stage)</span>}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#7e869c' }}>
-                    {deckStage.stageId}
-                    {interaction && ` · ${interaction.type}`}
-                    {trigger && ` · ${trigger}`}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {/* Jumps the big screen to this slide. Draft indices don't
-                      match the running deck until the reorder is saved, so
-                      activating mid-edit would land on the wrong slide. */}
-                  <button
-                    style={i === stageIndex && !dirty ? { ...smallButton, borderColor: '#ef223a', color: '#ffffff' } : smallButton}
-                    disabled={dirty}
-                    title={dirty ? 'Save the deck before activating a slide' : 'Show this slide on the presentation screen'}
-                    onClick={() => onGoTo(i)}
-                  >
-                    {i === stageIndex && !dirty ? 'on screen' : 'activate'}
-                  </button>
-                  <button style={smallButton} disabled={i === 0} onClick={() => move(i, -1)}>
-                    ↑
-                  </button>
-                  <button
-                    style={smallButton}
-                    disabled={i === draft.length - 1}
-                    onClick={() => move(i, 1)}
-                  >
-                    ↓
-                  </button>
-                  {template?.demoTrigger && (
-                    <button
-                      style={deckStage.demoTrigger === null ? smallButton : dangerButton}
-                      title="Suppress this stage's real SMS/call without removing the slide"
-                      onClick={() =>
-                        edit(i, { demoTrigger: deckStage.demoTrigger === null ? undefined : null })
-                      }
-                    >
-                      {deckStage.demoTrigger === null ? 'trigger off' : 'trigger on'}
-                    </button>
-                  )}
-                  <button style={dangerButton} onClick={() => setDraft((d) => d.filter((_, j) => j !== i))}>
-                    ✕
-                  </button>
-                </div>
-              </Row>
-            </div>
-          );
-        })}
-        {draft.length === 0 && <Empty>Empty deck — add a stage below.</Empty>}
-      </div>
-
-      <AddStage onAdd={(stageId) => setDraft((d) => [...d, { stageId }])} />
-    </div>
-  );
-}
-
-function AddStage({ onAdd }: { onAdd: (stageId: string) => void }) {
-  const [stageId, setStageId] = useState(STAGE_LIBRARY_ORDER[0] ?? '');
-
-  return (
-    <div style={{ borderTop: '1px solid #1a2540', paddingTop: 14 }}>
-      <div style={{ ...caption, marginBottom: 8 }}>Add from stage library</div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <select
-          style={{ ...textInput, flex: 1 }}
-          value={stageId}
-          onChange={(e) => setStageId(e.target.value)}
-        >
-          {STAGE_LIBRARY_ORDER.map((id) => (
-            <option key={id} value={id}>
-              {STAGE_LIBRARY[id].title}
-            </option>
-          ))}
-        </select>
-        <button style={smallButton} disabled={!stageId} onClick={() => onAdd(stageId)}>
-          Add
-        </button>
+      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+        <SlideRail
+          draft={draft}
+          selected={selected}
+          onScreen={dirty ? -1 : stageIndex}
+          onSelect={setSelected}
+          onReorder={reorder}
+          onDelete={(i) => {
+            setDraft((d) => d.filter((_, j) => j !== i));
+            setSelected((s) => Math.max(0, s > i ? s - 1 : s));
+          }}
+          onAdd={(stageId) => {
+            setDraft((d) => [...d, { stageId }]);
+            setSelected(draft.length);
+          }}
+        />
+        {current ? (
+          <SlideEditor
+            index={selected}
+            deckStage={current}
+            onChange={(patch) => edit(selected, patch)}
+          />
+        ) : (
+          <Empty>Empty deck — add a slide from the rail.</Empty>
+        )}
       </div>
     </div>
   );

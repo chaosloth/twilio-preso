@@ -4,14 +4,17 @@ import type { InteractionConfig } from './types.js';
  * Every demo trigger the backend knows how to fire. Named so that deck
  * overrides and the backend's trigger switch share one definition.
  */
-export type DemoTriggerId =
-  | 'sms-patience'
-  | 'sms-orchestrator'
-  | 'sms-memory'
-  | 'intelligence-analysis'
-  | 'voice-agent-connect'
-  | 'voice-mass-outbound'
-  | 'sms-closing';
+export const DEMO_TRIGGER_IDS = [
+  'sms-patience',
+  'sms-orchestrator',
+  'sms-memory',
+  'intelligence-analysis',
+  'voice-agent-connect',
+  'voice-mass-outbound',
+  'sms-closing',
+] as const;
+
+export type DemoTriggerId = (typeof DEMO_TRIGGER_IDS)[number];
 
 /** What kind of editor the HUD offers for a slot. */
 export type SlotKind = 'text' | 'multiline' | 'image';
