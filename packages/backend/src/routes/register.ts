@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'crypto';
-import { addParticipant, publishEvent, generateSyncToken } from '../services/sync.js';
+import { addParticipant, publishEvent, generateSyncToken, isSessionLive } from '../services/sync.js';
 import { sendWelcomeSms } from '../services/messaging.js';
 import { requireLiveSession } from '../services/sessionContext.js';
 import type { Participant, ParticipantJoinedEvent } from '@twilio-preso/shared';
@@ -46,10 +46,15 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       await publishEvent(session.id, joinEvent);
 
       // Sent from the session's own number, so the attendee's thread — and any
-      // reply to it — belongs to this event and not a concurrent one.
-      sendWelcomeSms(session.phoneNumber, participant).catch((err) => {
-        app.log.warn({ err, sessionId: session.id }, 'failed to send welcome SMS');
-      });
+      // reply to it — belongs to this event and not a concurrent one. Gated on
+      // `isLive` like every other outbound: rehearsing with a few colleagues'
+      // real phones should not text them, and registration is the one outbound
+      // path an audience can trigger without the presenter touching anything.
+      if (await isSessionLive(session.id)) {
+        sendWelcomeSms(session.phoneNumber, participant).catch((err) => {
+          app.log.warn({ err, sessionId: session.id }, 'failed to send welcome SMS');
+        });
+      }
 
       const token = generateSyncToken(participant.id);
 

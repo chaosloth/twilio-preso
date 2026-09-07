@@ -1,7 +1,7 @@
 import Twilio from 'twilio';
 import { config } from '../config.js';
 import { syncNames } from '@twilio-preso/shared';
-import { ignoring, isAlreadyExists, isNotFound } from './syncErrors.js';
+import { ignoring, isAlreadyExists, isNotFound, isRevisionMismatch } from './syncErrors.js';
 import type {
   AggregateResultsDoc,
   Participant,
@@ -98,13 +98,32 @@ export async function getPresentationState(
   }
 }
 
+/**
+ * Merge fields into the state document under optimistic concurrency.
+ *
+ * A plain fetch-then-update loses whichever write lands second, and the field
+ * that gets lost is `isLive`: a registration arriving while the presenter arms
+ * the session re-writes the count from a doc fetched before the arm and silently
+ * disarms it — or, worse, re-arms a session the presenter just disarmed. `If-Match`
+ * turns that into a 412 we retry against the fresh revision instead.
+ */
 export async function updatePresentationState(
   sessionId: string,
   updates: Partial<PresentationStateDoc>
 ): Promise<void> {
   const name = names(sessionId).state;
-  const doc = await syncService.documents(name).fetch();
-  await syncService.documents(name).update({ data: { ...doc.data, ...updates } });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const doc = await syncService.documents(name).fetch();
+    try {
+      await syncService.documents(name).update({
+        data: { ...doc.data, ...updates },
+        ifMatch: doc.revision,
+      });
+      return;
+    } catch (err) {
+      if (!isRevisionMismatch(err) || attempt === 4) throw err;
+    }
+  }
 }
 
 /** Whether this session's outbound Twilio traffic is armed. */
@@ -158,16 +177,30 @@ export async function getParticipant(
   }
 }
 
+/**
+ * Same optimistic-concurrency treatment as the state doc, for the same reason:
+ * two answers submitted at once (a phone re-answering while an AI prompt lands)
+ * would otherwise drop one of them, and `responses` is what the memory SMS and
+ * the voice agent read back.
+ */
 export async function updateParticipant(
   sessionId: string,
   id: string,
   updates: Partial<Participant>
 ): Promise<void> {
   const name = names(sessionId).participants;
-  const item = await syncService.syncMaps(name).syncMapItems(id).fetch();
-  await syncService.syncMaps(name).syncMapItems(id).update({
-    data: { ...item.data, ...updates },
-  });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const item = await syncService.syncMaps(name).syncMapItems(id).fetch();
+    try {
+      await syncService.syncMaps(name).syncMapItems(id).update({
+        data: { ...item.data, ...updates },
+        ifMatch: item.revision,
+      });
+      return;
+    } catch (err) {
+      if (!isRevisionMismatch(err) || attempt === 4) throw err;
+    }
+  }
 }
 
 export async function removeParticipant(sessionId: string, id: string): Promise<boolean> {
@@ -194,14 +227,24 @@ export async function recordParticipantResponse(
   response: ParticipantResponse
 ): Promise<void> {
   const name = names(sessionId).participants;
-  const item = await syncService.syncMaps(name).syncMapItems(id).fetch();
-  const participant = item.data as Participant;
-  await syncService.syncMaps(name).syncMapItems(id).update({
-    data: {
-      ...participant,
-      responses: { ...(participant.responses || {}), [response.stageId]: response },
-    },
-  });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const item = await syncService.syncMaps(name).syncMapItems(id).fetch();
+    const participant = item.data as Participant;
+    try {
+      await syncService.syncMaps(name).syncMapItems(id).update({
+        data: {
+          ...participant,
+          responses: { ...(participant.responses || {}), [response.stageId]: response },
+        },
+        ifMatch: item.revision,
+      });
+      return;
+    } catch (err) {
+      // Two answers landing together — a poll and an AI prompt, say — would
+      // otherwise drop one; retry against the revision that won.
+      if (!isRevisionMismatch(err) || attempt === 4) throw err;
+    }
+  }
 }
 
 export async function getAllParticipants(sessionId: string): Promise<Participant[]> {

@@ -49,3 +49,12 @@ export async function ignoring<T>(
     return null;
   }
 }
+
+/**
+ * A conditional write lost the race — the document changed between the fetch
+ * and the update. Sync answers `If-Match` with a plain 412, so match on the
+ * status rather than a Sync error code.
+ */
+export function isRevisionMismatch(err: unknown): boolean {
+  return (err as { status?: number })?.status === 412;
+}

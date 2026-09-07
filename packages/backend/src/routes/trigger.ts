@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import Twilio from 'twilio';
 import { config } from '../config.js';
-import { getAllParticipants, getParticipant } from '../services/sync.js';
+import { getAllParticipants, getParticipant, isSessionLive } from '../services/sync.js';
 import { sendSmsToAll, sendSmsToParticipant } from '../services/messaging.js';
 import { initiateAgentCall } from '../services/voice.js';
 import { responseFor } from '@twilio-preso/shared';
@@ -36,6 +36,19 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
       const session = request.session!;
       const from = session.phoneNumber;
       const { triggerId, targetParticipantId } = request.body;
+
+      /**
+       * The `isLive` gate, enforced here rather than only in the presenter.
+       * Rehearsal has to be safe against every caller — a HUD manual-trigger
+       * button, a second presenter laptop, a stale tab — not just against the
+       * one client that happens to check its own store before posting.
+       */
+      if (!(await isSessionLive(session.id))) {
+        return reply
+          .status(409)
+          .send({ error: 'Session is in rehearsal — arm it in the HUD to send real SMS and calls' });
+      }
+
       const participants = await getAllParticipants(session.id);
 
       switch (triggerId) {

@@ -1,1 +1,0 @@
-{"root":["./src/config.ts","./src/env.ts","./src/index.ts","./src/routes/admin.ts","./src/routes/register.ts","./src/routes/response.ts","./src/routes/token.ts","./src/routes/trigger.ts","./src/routes/verify.ts","./src/services/messaging.ts","./src/services/sync.ts","./src/services/verify.ts","./src/services/voice.ts"],"version":"5.9.3"}
