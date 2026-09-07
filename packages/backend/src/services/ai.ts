@@ -81,3 +81,28 @@ export function streamAiResponse(
 }
 
 export const llmInfo = { provider: llm.provider, model: llm.model };
+
+/**
+ * One real, minimal completion against the configured provider.
+ *
+ * Validating `LLM_*` env vars only proves the config parses — it says nothing
+ * about an expired key, a model this account cannot reach, or an exhausted
+ * credit balance. Every one of those presents identically on stage: the question
+ * lands on the big screen and no answer ever arrives. This is the check that
+ * distinguishes them, so it costs a token or two on purpose.
+ */
+export async function probeLlm(): Promise<{ ok: boolean; detail: string }> {
+  try {
+    await llm.complete({
+      system: 'Reply with the single word: ok',
+      maxTokens: 4,
+      messages: [{ role: 'user' as const, content: 'ok' }],
+    });
+    return { ok: true, detail: `${llm.provider} ${llm.model} answered` };
+  } catch (err: any) {
+    // The provider SDKs bury the useful sentence ("credit balance is too low",
+    // "model not found") inside a long message; keep it, trimmed.
+    const detail = String(err?.message ?? 'unreachable').replace(/\s+/g, ' ').slice(0, 240);
+    return { ok: false, detail };
+  }
+}

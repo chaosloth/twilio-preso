@@ -15,6 +15,15 @@ interface AiPromptBody {
 
 const FALLBACK = "Hmm, I didn't quite catch that — try asking again!";
 
+/**
+ * Shown when the model itself could not be reached — an expired key, a model
+ * this account cannot use, an exhausted credit balance. Deliberately distinct
+ * from FALLBACK: that one invites a retry, and this is the case where retrying
+ * cannot help. The provider's own message goes to the log, never to a phone or
+ * the big screen.
+ */
+const UNAVAILABLE = 'The AI agent is offline right now — the presenter has been told.';
+
 export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
   /**
    * Streams the answer back to the asking phone as SSE so it can render word by
@@ -78,10 +87,13 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       app.log.error({ err }, 'ai-prompt stream failed');
       failed = true;
-      send({ type: 'error' });
+      // Carry a message the phone can actually render. Without one the audience
+      // sees a generic "something went wrong" and the only way to tell an outage
+      // from a typo is to read the server log — which nobody does mid-talk.
+      send({ type: 'error', message: UNAVAILABLE });
     }
 
-    const response = full.trim() || FALLBACK;
+    const response = failed ? UNAVAILABLE : full.trim() || FALLBACK;
     if (!failed) send({ type: 'done', response });
     reply.raw.end();
 
@@ -96,7 +108,9 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
       timestamp: Date.now(),
     };
 
-    // Broadcast to the presenter screen after the phone has its answer.
+    // Broadcast to the presenter screen after the phone has its answer — on
+    // failure too, so the slide stops thinking and the room is not left watching
+    // a spinner for a question that will never be answered.
     try {
       await publishEvent(session.id, event);
     } catch (err) {

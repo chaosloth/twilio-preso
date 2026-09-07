@@ -21,7 +21,7 @@ export function AIPrompt({ interaction, stageIndex, sessionId, participantId, na
   const [phase, setPhase] = useState<Phase>('input');
   const [shown, setShown] = useState('');
   const [asked, setAsked] = useState('');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
   const [streamDone, setStreamDone] = useState(false);
 
   // Text received from the backend so far. The reveal loop below trails this,
@@ -55,7 +55,7 @@ export function AIPrompt({ interaction, stageIndex, sessionId, participantId, na
 
     setAsked(prompt);
     setPhase('thinking');
-    setError(false);
+    setError('');
     setStreamDone(false);
     setShown('');
     receivedRef.current = '';
@@ -68,8 +68,10 @@ export function AIPrompt({ interaction, stageIndex, sessionId, participantId, na
         setPhase('answered');
       });
       setStreamDone(true);
-    } catch {
-      setError(true);
+    } catch (err) {
+      // The backend distinguishes "the model is unreachable" from a transient
+      // blip, so show what it said rather than one message for every cause.
+      setError(err instanceof Error && err.message ? err.message : 'Something went wrong — try again.');
       setPhase('input');
     }
   }
@@ -135,7 +137,7 @@ export function AIPrompt({ interaction, stageIndex, sessionId, participantId, na
           disabled={phase === 'thinking'}
           className="w-full px-4 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white placeholder-accent-2 focus:outline-none focus:border-twilio-red text-lg resize-none disabled:opacity-50"
         />
-        {error && <p className="text-twilio-red text-sm text-center">Something went wrong — try again.</p>}
+        {error && <p className="text-twilio-red text-sm text-center">{error}</p>}
         <button
           type="submit"
           disabled={phase === 'thinking' || !value.trim()}

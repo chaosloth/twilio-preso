@@ -7,6 +7,7 @@ import { requirePresenter } from '../services/auth.js';
 import { describePoolUsage } from '../services/sessions.js';
 import { getPresentationState } from '../services/sync.js';
 import { probeMemoryStore } from '../services/memory.js';
+import { probeLlm } from '../services/ai.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -33,7 +34,7 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const sessionId = request.query.sessionId;
 
-      const [sync, verify, messaging, memory, pool, state] = await Promise.all([
+      const [sync, verify, messaging, memory, llmProbe, pool, state] = await Promise.all([
         probe(async () => {
           const s = await client.sync.v1.services(config.twilio.syncServiceSid).fetch();
           return s.friendlyName || s.sid;
@@ -47,6 +48,7 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
           return s.friendlyName || s.sid;
         }),
         probeMemoryStore(),
+        probeLlm(),
         describePoolUsage().catch(() => []),
         sessionId ? getPresentationState(sessionId).catch(() => null) : Promise.resolve(null),
       ]);
@@ -76,11 +78,16 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
       let llm: FeatureStatus;
       try {
         const cfg = llmConfigFromEnv(process.env);
+        // The probe, not the env, decides `ok`. Valid config with a dead key or
+        // an empty credit balance is the exact failure that looks like a bug in
+        // the app: the question reaches the big screen and no answer follows.
         llm = {
           id: 'llm',
           label: 'AI prompt agent',
-          state: 'ok',
-          detail: 'The on-screen agent and voice agent can answer.',
+          state: llmProbe.ok ? 'ok' : 'error',
+          detail: llmProbe.ok
+            ? 'The on-screen agent and voice agent can answer.'
+            : `Configured but the provider refused the call — every "Ask the agent" will fail: ${llmProbe.detail}`,
           values: [
             { label: 'Provider', value: cfg.provider },
             { label: 'Model', value: cfg.model },

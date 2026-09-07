@@ -194,7 +194,7 @@ export async function submitAiPrompt(
       const event = JSON.parse(line.slice(5).trim()) as
         | { type: 'delta'; text: string }
         | { type: 'done'; response: string }
-        | { type: 'error' };
+        | { type: 'error'; message?: string };
 
       if (event.type === 'delta') {
         full += event.text;
@@ -202,7 +202,8 @@ export async function submitAiPrompt(
       } else if (event.type === 'done') {
         done = event.response;
       } else {
-        throw new Error('ai-prompt stream errored');
+        // The backend's own words: it knows whether this is worth retrying.
+        throw new Error(event.message || 'ai-prompt stream errored');
       }
     }
   }
