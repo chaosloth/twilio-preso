@@ -314,6 +314,15 @@ Everything else — Sync wiring, Verify, the 3D stages — is verified manually.
 
 This is the check that matters. An automated suite could not verify it honestly without a Twilio test harness that does not exist yet.
 
+**Run 2026-09-07: all seven points pass.** Two live sessions, a reordered deck
+with stages omitted, and one phone registered in both. Two things the run caught
+and that the code now guards: Sync read-modify-write had to become conditional
+(`ifMatch: revision`) because a phone registering while the presenter armed the
+session silently disarmed `isLive`, and the ConversationRelay session lookup has
+to pick the pool number by call *direction* — outbound places the call from it,
+inbound receives on it, and reversing them looks up the wrong party without
+erroring.
+
 ## Implementation order
 
 Each step leaves the repo type-clean and runnable.
