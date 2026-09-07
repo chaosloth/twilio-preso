@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { validateDeck } from '@twilio-preso/shared';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { deckExportFilename, exportDeck, parseDeckTransfer, validateDeck } from '@twilio-preso/shared';
 import type { Deck, DeckStage } from '@twilio-preso/shared';
 import type { AdminApi } from '../useAdminApi';
 import { SlideModal } from '../deck/SlideModal';
@@ -32,6 +32,9 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
   const [editing, setEditing] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /** What an import said about the file, shown until the next edit. */
+  const [importNote, setImportNote] = useState<string[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (session) setDraft(session.deck.stages);
@@ -74,6 +77,46 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
     });
   }
 
+  /**
+   * Downloads the deck as JSON. The *draft*, not the saved record: what you are
+   * looking at is what you meant to copy, and an export is read-only anyway.
+   */
+  function exportToFile() {
+    const file = exportDeck({ ...session!.deck, stages: draft }, session!.title);
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' })
+    );
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = deckExportFilename(session!.title);
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Loads a deck file into the draft — never straight into the session.
+   *
+   * An import from another environment is exactly the case where you want to look
+   * before committing: the warnings it produces (a stage this build has no
+   * component for, a trigger whose dependency is now out of order) are the
+   * reason for the review, and `Save deck` is still the only thing that reaches
+   * the running presentation.
+   */
+  async function importFromFile(file: File) {
+    setError('');
+    setImportNote([]);
+    try {
+      const { deck, warnings: fileWarnings } = parseDeckTransfer(await file.text());
+      setDraft(deck.stages);
+      setImportNote([
+        `Loaded ${deck.stages.length} slides from ${file.name} — review, then Save deck.`,
+        ...fileWarnings,
+      ]);
+    } catch (err: any) {
+      setError(err?.message ?? 'Could not read that deck file.');
+    }
+  }
+
   async function save() {
     setBusy(true);
     setError('');
@@ -97,7 +140,34 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
       <Row style={{ marginBottom: 16 }}>
         <h3 style={{ ...heading, marginBottom: 0 }}>Deck</h3>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button style={smallButton} disabled={!dirty} onClick={() => setDraft(session.deck.stages)}>
+          <button style={smallButton} onClick={exportToFile}>
+            Export
+          </button>
+          <button style={smallButton} onClick={() => fileInput.current?.click()}>
+            Import
+          </button>
+          {/* Hidden input rather than a drop zone: this is a laptop backstage,
+              and a file picker is the thing that works with a trackpad. */}
+          <input
+            ref={fileInput}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              // Cleared so re-picking the same file after an edit still fires.
+              e.target.value = '';
+              if (file) void importFromFile(file);
+            }}
+          />
+          <button
+            style={smallButton}
+            disabled={!dirty}
+            onClick={() => {
+              setDraft(session.deck.stages);
+              setImportNote([]);
+            }}
+          >
             Revert
           </button>
           <button
@@ -116,6 +186,24 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
       </Row>
 
       {error && <ErrorText>{error}</ErrorText>}
+
+      {importNote.length > 0 && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 12,
+            background: 'rgba(30,58,95,0.5)',
+            border: '1px solid rgba(186,190,204,0.25)',
+            borderRadius: 8,
+          }}
+        >
+          {importNote.map((note, i) => (
+            <div key={i} style={{ fontSize: 12, color: i === 0 ? '#ffffff' : '#babecc', marginBottom: 4 }}>
+              {note}
+            </div>
+          ))}
+        </div>
+      )}
 
       {nearLimit && (
         <ErrorText>

@@ -8,3 +8,4 @@ export * from './joinCode.js';
 export * from './session.js';
 export * from './features.js';
 export * from './canvas.js';
+export * from './deckTransfer.js';
