@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { InteractionConfig } from '@twilio-preso/shared';
-import { initSync, subscribeToEvents, publishResponse, isSyncConnected, isSyncDead } from './sync';
+import { initSync, subscribeToEvents, publishResponse, isSyncConnected, isSyncDead, shutdownSync } from './sync';
 import { Join } from './pages/Join';
 import {
   joinCodeFromPath,
@@ -106,7 +106,9 @@ export function App() {
     if (state === 'join' || state === 'register' || !session || !participantId) return;
     const interval = setInterval(() => {
       setConnected(isSyncConnected());
-      if (isSyncDead()) void connectSync(session.sessionId, participantId);
+      if (isSyncDead()) {
+        void shutdownSync().then(() => connectSync(session.sessionId, participantId));
+      }
     }, 5000);
     return () => clearInterval(interval);
   }, [state, session, participantId, connectSync]);

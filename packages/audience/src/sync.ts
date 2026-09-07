@@ -23,13 +23,27 @@ export function isSyncConnected(): boolean {
 }
 
 /**
- * True when the client will never recover on its own — a rejected or expired
- * token, rather than a flaky network the SDK retries by itself. Only this
- * warrants tearing the client down and building a new one.
+ * True when the client will never recover on its own — a rejected token or a
+ * hard error. Only these two warrant a rebuild. `disconnected`, `retrying` and
+ * `connecting` are all states the SDK works its own way out of, and treating
+ * them as dead makes the phone tear down and re-create its client every few
+ * seconds, which is worse than the stall it was meant to cure.
  */
 export function isSyncDead(): boolean {
   const state = syncClient?.connectionState;
-  return state === 'denied' || state === 'error' || state === 'disconnected';
+  return state === 'denied' || state === 'error';
+}
+
+/** Closes the current client so a rebuild does not leave the old socket running. */
+export async function shutdownSync(): Promise<void> {
+  const client = syncClient;
+  syncClient = null;
+  currentSessionId = null;
+  try {
+    await client?.shutdown();
+  } catch {
+    // Already gone; the point was only to stop it holding a socket open.
+  }
 }
 
 async function fetchToken(sessionId: string, participantId: string): Promise<string> {
