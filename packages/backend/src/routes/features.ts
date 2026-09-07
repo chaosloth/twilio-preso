@@ -6,7 +6,12 @@ import { config } from '../config.js';
 import { requirePresenter } from '../services/auth.js';
 import { describePoolUsage } from '../services/sessions.js';
 import { getPresentationState } from '../services/sync.js';
-import { probeMemoryStore } from '../services/memory.js';
+import {
+  DESIRED_TRAITS,
+  ensureTraitGroups,
+  probeMemoryStore,
+  probeMemoryTraits,
+} from '../services/memory.js';
 import { probeLlm } from '../services/ai.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
@@ -34,7 +39,7 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const sessionId = request.query.sessionId;
 
-      const [sync, verify, messaging, memory, llmProbe, pool, state] = await Promise.all([
+      const [sync, verify, messaging, memory, traits, llmProbe, pool, state] = await Promise.all([
         probe(async () => {
           const s = await client.sync.v1.services(config.twilio.syncServiceSid).fetch();
           return s.friendlyName || s.sid;
@@ -48,6 +53,7 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
           return s.friendlyName || s.sid;
         }),
         probeMemoryStore(),
+        probeMemoryTraits(),
         probeLlm(),
         describePoolUsage().catch(() => []),
         sessionId ? getPresentationState(sessionId).catch(() => null) : Promise.resolve(null),
@@ -166,6 +172,26 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
             ? [{ label: 'Store', value: config.twilio.memoryStoreId }]
             : undefined,
         },
+        {
+          id: 'memory-traits',
+          label: 'Memory trait schema',
+          state: !config.twilio.memoryStoreId ? 'off' : traits.ok ? 'ok' : 'warn',
+          detail: !config.twilio.memoryStoreId
+            ? 'No store, so no schema to declare.'
+            : traits.ok
+              ? 'Registration’s company and role are stored as traits, not just prose.'
+              : `Undeclared traits are dropped from every profile write — the demo still runs, just thinner: ${traits.detail}`,
+          // Idempotent and additive (create the group, PATCH the missing
+          // traits), so it is safe to press twice; still a button rather than
+          // automatic, because it edits the account's schema.
+          action: traits.ok || !config.twilio.memoryStoreId
+            ? undefined
+            : { label: 'Declare missing traits', path: '/api/memory/traits' },
+          values: Object.entries(DESIRED_TRAITS).map(([group, defs]) => ({
+            label: group,
+            value: Object.keys(defs).join(', '),
+          })),
+        },
         llm,
         {
           id: 'verify',
@@ -193,4 +219,20 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
       return report;
     }
   );
+
+  /**
+   * Declares the trait groups this app writes. Presenter-only and deliberately
+   * manual — it changes the account's memory schema, which outlives the event.
+   */
+  app.post('/api/memory/traits', { preHandler: requirePresenter }, async (request, reply) => {
+    if (!config.twilio.memoryStoreId) {
+      return reply.status(409).send({ error: 'memory store not configured' });
+    }
+    try {
+      return await ensureTraitGroups();
+    } catch (err: any) {
+      request.log.error({ err }, 'failed to declare memory traits');
+      return reply.status(502).send({ error: err?.message ?? 'trait declaration failed' });
+    }
+  });
 }

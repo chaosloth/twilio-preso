@@ -16,6 +16,9 @@ export function FeaturesTab({ sessionId }: { sessionId: string }) {
   const [report, setReport] = useState<FeatureReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /** Which action is in flight, and what the last one said. */
+  const [acting, setActing] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -32,6 +35,31 @@ export function FeaturesTab({ sessionId }: { sessionId: string }) {
       setLoading(false);
     }
   }, [sessionId]);
+
+  const runAction = useCallback(
+    async (id: string, path: string) => {
+      setActing(id);
+      setActionResult(null);
+      try {
+        const res = await presenterFetch(path, { method: 'POST' });
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(body?.error ?? `status ${res.status}`);
+        setActionResult(
+          Array.isArray(body?.created) && body.created.length > 0
+            ? `Declared ${body.created.join(', ')}.`
+            : 'Nothing left to do.'
+        );
+      } catch (err: any) {
+        setActionResult(err?.message ?? 'failed');
+      } finally {
+        setActing(null);
+        // The button's own answer is whatever the next check says, not what the
+        // POST returned — the control plane indexes asynchronously.
+        await load();
+      }
+    },
+    [load]
+  );
 
   useEffect(() => {
     void load();
@@ -77,8 +105,19 @@ export function FeaturesTab({ sessionId }: { sessionId: string }) {
               ))}
             </div>
           )}
+          {feature.action && (
+            <button
+              style={{ ...smallButton, marginTop: 10 }}
+              onClick={() => void runAction(feature.id, feature.action!.path)}
+              disabled={acting !== null}
+            >
+              {acting === feature.id ? 'working…' : feature.action.label}
+            </button>
+          )}
         </div>
       ))}
+
+      {actionResult && <p style={{ ...caption, marginBottom: 10 }}>{actionResult}</p>}
 
       {report && (
         <div style={panel}>

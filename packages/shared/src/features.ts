@@ -22,6 +22,13 @@ export interface FeatureStatus {
   detail: string;
   /** Configured values worth reading on stage — sids, numbers, model names. */
   values?: Array<{ label: string; value: string }>;
+  /**
+   * A one-click fix the HUD offers for this state. Present only when there is
+   * something safe and idempotent to do about it — creating the memory trait
+   * schema, say. The path is POSTed as the presenter; the report is re-read
+   * afterwards, so the button's own result is whatever the next check says.
+   */
+  action?: { label: string; path: string };
 }
 
 /** One pool number and the session holding it, if any. */
