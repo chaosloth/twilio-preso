@@ -100,7 +100,7 @@ export function NotesApp({ sessionId }: NotesAppProps) {
   } as const;
 
   return (
-    <div style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif", background: '#000d25', color: 'white', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif", background: '#000d25', color: 'white', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '16px 24px', borderBottom: '1px solid #1a2540', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <span style={{ fontSize: 13, opacity: 0.5, letterSpacing: 2, textTransform: 'uppercase' }}>
@@ -163,7 +163,13 @@ export function NotesApp({ sessionId }: NotesAppProps) {
         ))}
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
+      {/* `index.html` sets `overflow: hidden` on html/body for the 3D canvas, so
+          this pane is the only thing that can scroll — which needs the column
+          above it to be a bounded `height: 100vh`, not `minHeight`. With
+          minHeight the pane grew instead of scrolling and the Deck tab's lower
+          stages (and their Activate buttons) were unreachable. `minHeight: 0`
+          stops a long list from forcing the flex item taller than its track. */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 24 }}>
         {activeTab === 'notes' && (
           <NotesTab
             stages={stages}
