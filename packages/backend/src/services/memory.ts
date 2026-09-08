@@ -81,6 +81,38 @@ async function memoryFetch<T>(path: string, body?: unknown, method = 'POST'): Pr
  *  attendee the same person rather than a new profile. */
 const PHONE_ID_TYPE = 'phone';
 
+/**
+ * The same person, reachable two ways.
+ *
+ * Every attendee registers with a mobile number, and this talk then messages
+ * them over both SMS and WhatsApp — which are two different identifiers to
+ * Identity Resolution. Writing only `phone` means a WhatsApp inbound arrives as
+ * a stranger and gets a second profile; writing both is what merges them. The
+ * WhatsApp value carries its channel prefix (`whatsapp:+61…`), the phone one
+ * does not.
+ */
+function identifiersFor(phone: string): { idType: string; value: string }[] {
+  return [
+    { idType: PHONE_ID_TYPE, value: phone },
+    { idType: 'whatsapp', value: `whatsapp:${phone}` },
+  ];
+}
+
+/**
+ * Adds every identifier the profile should have, tolerating the ones it already
+ * does. Posting a duplicate identifier is the normal case for a returning
+ * attendee and must not be treated as a failure — the profile is already correct.
+ */
+async function ensureIdentifiers(profileId: string, phone: string): Promise<void> {
+  for (const identifier of identifiersFor(phone)) {
+    try {
+      await memoryFetch(`/Profiles/${profileId}/Identifiers`, identifier);
+    } catch (err) {
+      console.warn(`Could not add ${identifier.idType} identifier to ${profileId}:`, err);
+    }
+  }
+}
+
 /** The trait group every store ships with. Using it means a join works with no
  *  Console configuration at all. */
 const CONTACT_GROUP = 'Contact';
@@ -316,6 +348,9 @@ export async function upsertProfile(participant: Participant): Promise<string | 
     // Patching merges, so this adds what's new without clearing anything a
     // previous event learned about them.
     await memoryFetch(`/Profiles/${existing}`, { traits }, 'PATCH');
+    // A profile created before this app wrote WhatsApp identifiers has only the
+    // phone one, so they are topped up on every join rather than only at create.
+    await ensureIdentifiers(existing, participant.phone);
     await recordObservationFor(existing, participant);
     return existing;
   }
@@ -325,12 +360,9 @@ export async function upsertProfile(participant: Participant): Promise<string | 
   const profileId = created?.id;
   if (!profileId) return null;
 
-  // The identifier is what Identity Resolution matches on next time; the phone
+  // The identifiers are what Identity Resolution matches on next time; the phone
   // trait alone is not enough, though it does carry an `idTypePromotion`.
-  await memoryFetch(`/Profiles/${profileId}/Identifiers`, {
-    idType: PHONE_ID_TYPE,
-    value: participant.phone,
-  });
+  await ensureIdentifiers(profileId, participant.phone);
   await recordObservationFor(profileId, participant);
 
   return profileId;

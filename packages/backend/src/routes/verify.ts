@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { lookupPhone, startVerification, checkVerification } from '../services/verify.js';
+import type { VerifyChannel } from '../services/verify.js';
 
-interface StartBody { phone: string; }
+interface StartBody { phone: string; channel?: VerifyChannel; }
 interface CheckBody { phone: string; code: string; }
 
 export async function verifyRoutes(app: FastifyInstance): Promise<void> {
@@ -14,8 +15,11 @@ export async function verifyRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: 'Invalid phone number. Please include country code (e.g. +61...)' });
     }
 
-    await startVerification(lookup.formatted);
-    return { formatted: lookup.formatted };
+    // Anything but an explicit `sms` is WhatsApp: the default lives here as well
+    // as in the app, so a phone on a cached bundle still gets the new behaviour.
+    const requested: VerifyChannel = request.body.channel === 'sms' ? 'sms' : 'whatsapp';
+    const channel = await startVerification(lookup.formatted, requested);
+    return { formatted: lookup.formatted, channel };
   });
 
   app.post<{ Body: CheckBody }>('/api/verify/check', async (request, reply) => {

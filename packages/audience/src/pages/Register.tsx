@@ -10,6 +10,9 @@ interface RegisterProps {
 }
 
 type Step = 'phone' | 'otp' | 'name';
+/** How the code arrives. WhatsApp is the default — it is the channel the talk is
+ *  about, and the one the profile's WhatsApp identity is built from. */
+type Channel = 'whatsapp' | 'sms';
 
 export function Register({ sessionId, onRegistered }: RegisterProps) {
   const [step, setStep] = useState<Step>('phone');
@@ -17,6 +20,11 @@ export function Register({ sessionId, onRegistered }: RegisterProps) {
   const [localNumber, setLocalNumber] = useState('');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
+  const [channel, setChannel] = useState<Channel>('whatsapp');
+  /** What the backend actually sent on. WhatsApp falls back to SMS when the
+   *  Verify service cannot deliver on it, and the screen has to say so or the
+   *  attendee waits for a message in the wrong app. */
+  const [sentOn, setSentOn] = useState<Channel>('whatsapp');
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,7 +42,7 @@ export function Register({ sessionId, onRegistered }: RegisterProps) {
       const res = await fetch(`${BACKEND_URL}/api/verify/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: fullPhone }),
+        body: JSON.stringify({ phone: fullPhone, channel }),
       });
 
       if (!res.ok) {
@@ -42,6 +50,8 @@ export function Register({ sessionId, onRegistered }: RegisterProps) {
         throw new Error(err.error || 'Invalid phone number');
       }
 
+      const body = await res.json().catch(() => ({}));
+      setSentOn(body.channel === 'sms' ? 'sms' : 'whatsapp');
       setStep('otp');
     } catch (err: any) {
       setError(err.message);
@@ -139,6 +149,24 @@ export function Register({ sessionId, onRegistered }: RegisterProps) {
                 className="flex-1 px-4 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white placeholder-accent-2 focus:outline-none focus:border-twilio-red text-lg"
               />
             </div>
+            {/* Two channels, one tap apart. WhatsApp is preselected; SMS is
+                there because not everyone in the room uses WhatsApp. */}
+            <div className="flex gap-2">
+              {(['whatsapp', 'sms'] as Channel[]).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setChannel(option)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium border ${
+                    channel === option
+                      ? 'bg-twilio-red text-white border-twilio-red'
+                      : 'bg-white/5 text-accent-2 border-accent-3/30'
+                  }`}
+                >
+                  {option === 'whatsapp' ? 'Code on WhatsApp' : 'Code by SMS'}
+                </button>
+              ))}
+            </div>
             {error && <p className="text-twilio-red text-sm">{error}</p>}
             <button type="submit" disabled={loading} className="w-full py-3 rounded-lg bg-twilio-red text-white font-bold text-lg disabled:opacity-50">
               {loading ? 'Verifying...' : 'Continue'}
@@ -148,7 +176,9 @@ export function Register({ sessionId, onRegistered }: RegisterProps) {
 
         {step === 'otp' && (
           <form onSubmit={handleOtpSubmit} className="space-y-4">
-            <p className="text-accent-2 text-sm text-center">We sent a code to {phone}</p>
+            <p className="text-accent-2 text-sm text-center">
+              We sent a code to {phone} {sentOn === 'whatsapp' ? 'on WhatsApp' : 'by SMS'}
+            </p>
             <input
               type="text"
               inputMode="numeric"
