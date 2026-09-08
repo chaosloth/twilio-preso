@@ -64,7 +64,7 @@ export function buildCallerContext(
     choices: [
       { label: 'brand they are building for', value: live.brandName },
       { label: 'theme they chose', value: live.theme },
-      { label: 'passcode channel they prefer', value: live.otpMethod },
+      { label: 'passcode channel they prefer', value: live.preferredOTPChannel },
     ].filter((c): c is { label: string; value: string } => !!c.value),
     answers,
     observations: profile?.observations ?? [],

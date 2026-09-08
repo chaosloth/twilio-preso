@@ -113,7 +113,7 @@ export const DESIRED_TRAITS: Record<string, Record<string, { dataType: string; d
     role: { dataType: 'STRING', description: 'Job role the attendee gave at registration' },
     brandName: { dataType: 'STRING', description: 'Brand the attendee chose to build for' },
     theme: { dataType: 'STRING', description: 'Visual theme the attendee chose' },
-    otpMethod: { dataType: 'STRING', description: 'Channel the attendee chose for one-time passcodes' },
+    preferredOTPChannel: { dataType: 'STRING', description: 'Channel the attendee chose for one-time passcodes' },
   },
 };
 
@@ -126,7 +126,7 @@ export const DESIRED_TRAITS: Record<string, Record<string, { dataType: string; d
 export const RESPONSE_TRAITS: Record<string, string> = {
   'brand-poll': 'brandName',
   'theme-poll': 'theme',
-  'otp-poll': 'otpMethod',
+  'otp-poll': 'preferredOTPChannel',
 };
 
 /** Groups this app will create itself. `Contact` is Twilio's, not ours. */
