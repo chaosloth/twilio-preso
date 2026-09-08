@@ -4,6 +4,7 @@ import {
   RELAY_TOOLS,
   relayToolPrompt,
   resolveRelayConfig,
+  INTERRUPT_MODES,
 } from '../relayConfig.js';
 
 describe('resolveRelayConfig', () => {
@@ -49,5 +50,58 @@ describe('relayToolPrompt', () => {
     const prompt = relayToolPrompt(config);
     expect(prompt).toContain('[[end_call]]');
     expect(prompt).not.toContain('[[handoff_to_human]]');
+  });
+});
+
+describe('provider defaults', () => {
+  it('ships ElevenLabs TTS with the event voice and Deepgram ASR', () => {
+    expect(DEFAULT_RELAY_CONFIG.ttsProvider).toBe('ElevenLabs');
+    expect(DEFAULT_RELAY_CONFIG.voice).toBe('M7ya1YbaeFaPXljg9BpK');
+    expect(DEFAULT_RELAY_CONFIG.transcriptionProvider).toBe('Deepgram');
+  });
+
+  /**
+   * Twilio picks the right Deepgram model for the configured language
+   * (nova-3-general where it exists, nova-2-general elsewhere). Pinning one here
+   * would be us guessing on Twilio's behalf and is how a language change turns
+   * into an invalid provider/model pair that ends the session.
+   */
+  it('leaves the speech model to the provider', () => {
+    expect(DEFAULT_RELAY_CONFIG.speechModel).toBe('');
+  });
+});
+
+describe('interruption settings', () => {
+  it('lets the caller interrupt by speech or keypad out of the box', () => {
+    expect(DEFAULT_RELAY_CONFIG.interruptible).toBe('any');
+    expect(DEFAULT_RELAY_CONFIG.interruptSensitivity).toBe('high');
+    expect(DEFAULT_RELAY_CONFIG.ignoreBackchannel).toBe(true);
+  });
+
+  it('accepts every mode TwiML accepts', () => {
+    for (const mode of INTERRUPT_MODES) {
+      expect(resolveRelayConfig({ interruptible: mode }).interruptible).toBe(mode);
+    }
+  });
+
+  it('rejects a mode TwiML would refuse, rather than passing it into the TwiML', () => {
+    expect(resolveRelayConfig({ interruptible: 'sometimes' as never }).interruptible).toBe('any');
+  });
+
+  /**
+   * Sessions created before this was an enum hold a boolean. TwiML itself maps
+   * them this way for backward compatibility, so the stored value keeps meaning
+   * what the presenter chose instead of silently reverting to the default.
+   */
+  it('migrates the boolean a pre-enum session stored', () => {
+    expect(resolveRelayConfig({ interruptible: true as never }).interruptible).toBe('any');
+    expect(resolveRelayConfig({ interruptible: false as never }).interruptible).toBe('none');
+  });
+
+  it('clamps sensitivity to the three values TwiML allows', () => {
+    expect(resolveRelayConfig({ interruptSensitivity: 'low' }).interruptSensitivity).toBe('low');
+    expect(resolveRelayConfig({ interruptSensitivity: 'loud' as never }).interruptSensitivity).toBe(
+      DEFAULT_RELAY_CONFIG.interruptSensitivity
+    );
   });
 });

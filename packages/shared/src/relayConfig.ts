@@ -52,6 +52,54 @@ export const RELAY_TOOLS: RelayTool[] = [
   },
 ];
 
+/**
+ * The provider and mode values `<ConversationRelay>` actually accepts. They are
+ * exported because the HUD renders them as dropdowns: an invalid
+ * `ttsProvider`/`voice` or `transcriptionProvider`/`speechModel` pair is not a
+ * validation message, it is error 64106 and a call that ends mid-sentence — so a
+ * free-text field is the wrong control for any of them.
+ */
+export const TTS_PROVIDERS = ['ElevenLabs', 'Google', 'Amazon'] as const;
+export const TRANSCRIPTION_PROVIDERS = ['Deepgram', 'Google'] as const;
+
+/**
+ * Who may interrupt the agent, and how. TwiML takes booleans too, for backward
+ * compatibility, but only as aliases: `true` = `any`, `false` = `none`.
+ */
+export const INTERRUPT_MODES = ['any', 'speech', 'dtmf', 'none'] as const;
+export const INTERRUPT_SENSITIVITIES = ['high', 'medium', 'low'] as const;
+
+export type TtsProvider = (typeof TTS_PROVIDERS)[number];
+export type TranscriptionProvider = (typeof TRANSCRIPTION_PROVIDERS)[number];
+export type InterruptMode = (typeof INTERRUPT_MODES)[number];
+export type InterruptSensitivity = (typeof INTERRUPT_SENSITIVITIES)[number];
+
+/**
+ * The speech models each ASR provider offers, for the dropdown. `''` is first
+ * and is the recommended value: Twilio then picks the model that fits the
+ * configured language — `nova-3-general` where Deepgram supports it and
+ * `nova-2-general` where it does not — which a pinned value would get wrong the
+ * moment the language changes.
+ */
+export const SPEECH_MODELS: Record<TranscriptionProvider, readonly string[]> = {
+  Deepgram: ['', 'nova-3-general', 'nova-2-general', 'flux'],
+  Google: ['', 'telephony', 'long', 'short'],
+};
+
+/** Voices worth having one keypress away. Any other id can still be typed. */
+export const VOICE_PRESETS: Record<TtsProvider, readonly { id: string; label: string }[]> = {
+  ElevenLabs: [
+    { id: 'M7ya1YbaeFaPXljg9BpK', label: 'Event voice (default)' },
+    { id: 'UgBBYS2sOqTuMpoF3BR0', label: 'Twilio default' },
+  ],
+  Google: [
+    { id: 'en-AU-Neural2-B', label: 'Australian male' },
+    { id: 'en-AU-Neural2-A', label: 'Australian female' },
+    { id: 'en-US-Journey-O', label: 'US Journey' },
+  ],
+  Amazon: [{ id: 'Joanna-Neural', label: 'Joanna' }],
+};
+
 export interface RelayConfig {
   /** The agent's instructions. `{{context}}` is replaced with what is known
    *  about the caller; without the placeholder that block is appended. */
@@ -67,15 +115,25 @@ export interface RelayConfig {
   /** Read the durable Conversation Memory profile at setup. Off makes the agent
    *  see only this session's answers — worth being able to show. */
   useMemory: boolean;
-  /** TTS voice, e.g. `Google.en-AU-Neural2-B` or an ElevenLabs voice id. */
+  /** TTS voice: an ElevenLabs voice id, or a Google/Amazon voice name. */
   voice: string;
-  ttsProvider: string;
+  ttsProvider: TtsProvider;
   /** BCP-47. Sets both the speech-to-text and the text-to-speech language. */
   language: string;
-  transcriptionProvider: string;
-  /** Provider-specific ASR model. Empty means the provider's default. */
+  transcriptionProvider: TranscriptionProvider;
+  /** Provider-specific ASR model. Empty means the provider's default, which is
+   *  what should normally be used — see `SPEECH_MODELS`. */
   speechModel: string;
-  interruptible: boolean;
+  /** What stops the agent mid-sentence. Not a boolean: `dtmf` and `speech` are
+   *  separately useful, and a demo may want the agent unstoppable (`none`). */
+  interruptible: InterruptMode;
+  /** How readily speech counts as an interruption. `low` needs a longer, more
+   *  confident utterance — worth reaching for in a loud room, where `high` turns
+   *  the audience's own noise into a barge-in. */
+  interruptSensitivity: InterruptSensitivity;
+  /** Drop "yeah", "uh-huh", "okay" rather than treating them as interruptions.
+   *  On by default: on a stage the agent is talking over applause and agreement. */
+  ignoreBackchannel: boolean;
   dtmfDetection: boolean;
   /** Turns before the agent says goodbye. Inbound is longer on purpose: someone
    *  who chose to ring in is having a conversation, not watching a beat of a
@@ -103,12 +161,14 @@ Keep every reply SHORT — one or two sentences, because this is a phone call an
   staticGreeting:
     "Hi {{name}}! I'm the AI agent that was just built live on stage. What would you like to ask me?",
   useMemory: true,
-  voice: 'en-AU-Neural2-B',
-  ttsProvider: 'Google',
+  voice: 'M7ya1YbaeFaPXljg9BpK',
+  ttsProvider: 'ElevenLabs',
   language: 'en-AU',
-  transcriptionProvider: 'Google',
+  transcriptionProvider: 'Deepgram',
   speechModel: '',
-  interruptible: true,
+  interruptible: 'any',
+  interruptSensitivity: 'high',
+  ignoreBackchannel: true,
   dtmfDetection: true,
   maxTurnsInbound: 12,
   maxTurnsOutbound: 3,
@@ -133,6 +193,14 @@ export function resolveRelayConfig(stored?: Partial<RelayConfig> | null): RelayC
 
   const str = <K extends keyof RelayConfig>(key: K): string =>
     typeof source[key] === 'string' ? (source[key] as string) : (DEFAULT_RELAY_CONFIG[key] as string);
+  /**
+   * A stored value is only accepted when it is one of the values TwiML allows.
+   * Anything else falls back to the default rather than reaching the TwiML,
+   * where an unrecognised provider or mode is a 64101/64106 that ends the call.
+   */
+  const oneOf = <T extends string>(key: keyof RelayConfig, allowed: readonly T[], fallback: T): T =>
+    allowed.includes(source[key] as T) ? (source[key] as T) : fallback;
+
   const bool = <K extends keyof RelayConfig>(key: K): boolean =>
     typeof source[key] === 'boolean' ? (source[key] as boolean) : (DEFAULT_RELAY_CONFIG[key] as boolean);
   // A zero-turn agent greets and hangs up, which reads as a broken demo rather
@@ -149,11 +217,21 @@ export function resolveRelayConfig(stored?: Partial<RelayConfig> | null): RelayC
     staticGreeting: str('staticGreeting'),
     useMemory: bool('useMemory'),
     voice: str('voice'),
-    ttsProvider: str('ttsProvider'),
+    ttsProvider: oneOf('ttsProvider', TTS_PROVIDERS, DEFAULT_RELAY_CONFIG.ttsProvider),
     language: str('language'),
-    transcriptionProvider: str('transcriptionProvider'),
+    transcriptionProvider: oneOf(
+      'transcriptionProvider',
+      TRANSCRIPTION_PROVIDERS,
+      DEFAULT_RELAY_CONFIG.transcriptionProvider
+    ),
     speechModel: str('speechModel'),
-    interruptible: bool('interruptible'),
+    interruptible: interruptMode(source.interruptible),
+    interruptSensitivity: oneOf(
+      'interruptSensitivity',
+      INTERRUPT_SENSITIVITIES,
+      DEFAULT_RELAY_CONFIG.interruptSensitivity
+    ),
+    ignoreBackchannel: bool('ignoreBackchannel'),
     dtmfDetection: bool('dtmfDetection'),
     maxTurnsInbound: turns('maxTurnsInbound'),
     maxTurnsOutbound: turns('maxTurnsOutbound'),
@@ -161,6 +239,19 @@ export function resolveRelayConfig(stored?: Partial<RelayConfig> | null): RelayC
     model: str('model'),
     tools: mergeTools(source.tools),
   };
+}
+
+/**
+ * `interruptible` was a boolean before it was a mode, so a session stored one.
+ * TwiML's own aliases are used to read it — `true` = `any`, `false` = `none` —
+ * so an existing session keeps the behaviour the presenter chose rather than
+ * quietly reverting to the default.
+ */
+function interruptMode(stored: unknown): InterruptMode {
+  if (typeof stored === 'boolean') return stored ? 'any' : 'none';
+  return INTERRUPT_MODES.includes(stored as InterruptMode)
+    ? (stored as InterruptMode)
+    : DEFAULT_RELAY_CONFIG.interruptible;
 }
 
 /**
