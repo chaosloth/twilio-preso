@@ -5,6 +5,8 @@ dist
 .end.*
 *.local
 .git
+# The two browser bundles are never built in an image. The relay is: it has its
+# own Dockerfile and its own Fly app, and one .dockerignore covers both builds,
+# so excluding it here breaks that build rather than trimming this one.
 packages/presenter
 packages/audience
-packages/conversation-relay
