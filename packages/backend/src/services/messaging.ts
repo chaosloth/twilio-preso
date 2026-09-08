@@ -1,6 +1,8 @@
 import Twilio from 'twilio';
 import { config } from '../config.js';
+import { renderTemplate } from '@twilio-preso/shared';
 import type { Participant } from '@twilio-preso/shared';
+import { approvedContentSid, contentVariablesJson } from './content.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -17,6 +19,18 @@ const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
  */
 export async function sendSms(from: string, to: string, body: string): Promise<void> {
   await client.messages.create({ from, to, body });
+}
+
+/**
+ * One message, named by the content template it is written in.
+ *
+ * A body is never passed around any more: the SMS text is *rendered* from the
+ * same template the WhatsApp send uses, so the approved WhatsApp copy and the SMS
+ * copy cannot drift apart — and the values are the same list either way.
+ */
+export interface OutboundMessage {
+  template: string;
+  values: string[];
 }
 
 /**
@@ -60,16 +74,35 @@ export async function sendOnChannel(
   channel: MessageChannel,
   smsFrom: string,
   to: string,
-  body: string
+  message: OutboundMessage
 ): Promise<'whatsapp' | 'sms'> {
+  const body = renderTemplate(message.template, message.values);
   const whatsappFrom = config.twilio.whatsappFrom;
   if (channel === 'sms' || !whatsappFrom) {
     await sendSms(smsFrom, to, body);
     return 'sms';
   }
 
+  /**
+   * WhatsApp goes out as the approved template when there is one. Free-form text
+   * is only delivered inside the 24-hour customer service window, and an attendee
+   * who has never messaged this sender is outside it — so without a template the
+   * WhatsApp attempt is one that is expected to fail into the SMS below, and with
+   * one it reaches a phone that has never opened the chat.
+   */
+  const contentSid = approvedContentSid(message.template);
   try {
-    await client.messages.create({ from: whatsappFrom, to: `whatsapp:${to}`, body });
+    await client.messages.create(
+      contentSid
+        ? {
+            from: whatsappFrom,
+            to: `whatsapp:${to}`,
+            contentSid,
+            // A JSON-encoded string on the Messages API, not an object.
+            contentVariables: contentVariablesJson(message.values),
+          }
+        : { from: whatsappFrom, to: `whatsapp:${to}`, body }
+    );
     return 'whatsapp';
   } catch (err: any) {
     const code = err?.code;
@@ -90,10 +123,10 @@ export async function sendToAllOnChannel(
   channel: MessageChannel,
   smsFrom: string,
   participants: Participant[],
-  bodyFn: (p: Participant) => string
+  messageFn: (p: Participant) => OutboundMessage
 ): Promise<ChannelResult> {
   const results = await Promise.allSettled(
-    participants.map((p) => sendOnChannel(channel, smsFrom, p.phone, bodyFn(p)))
+    participants.map((p) => sendOnChannel(channel, smsFrom, p.phone, messageFn(p)))
   );
 
   const tally: ChannelResult = { whatsapp: 0, sms: 0, failed: 0 };
@@ -105,10 +138,6 @@ export async function sendToAllOnChannel(
 }
 
 export async function sendWelcomeSms(from: string, participant: Participant): Promise<void> {
-  await sendSms(
-    from,
-    participant.phone,
-    `Welcome to Wonder, ${participant.name}! You're now part of the live demo. Keep your phone handy — we'll be in touch.`
-  );
+  await sendSms(from, participant.phone, renderTemplate('welcome', [participant.name]));
 }
 

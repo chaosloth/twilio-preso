@@ -185,16 +185,18 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
 
       switch (kind) {
         case 'sms-patience': {
-          const sent = await sendToAllOnChannel(channel, from, participants, () =>
-            `You've been on hold for 7 minutes. Still waiting...\n\nThis is what your customers feel every day. — Wonder by Twilio`
-          );
+          const sent = await sendToAllOnChannel(channel, from, participants, () => ({
+            template: 'patience',
+            values: [],
+          }));
           return { ...sent, total: participants.length };
         }
 
         case 'sms-orchestrator': {
-          const sent = await sendToAllOnChannel(channel, from, participants, (p) =>
-            `Hey ${p.name}, following up from our earlier message. Notice how this conversation continued seamlessly across channels? That's Conversation Orchestrator. — Twilio`
-          );
+          const sent = await sendToAllOnChannel(channel, from, participants, (p) => ({
+            template: 'orchestrator',
+            values: [p.name],
+          }));
           return { ...sent, total: participants.length };
         }
 
@@ -216,18 +218,19 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
           );
 
           const sent = await sendToAllOnChannel(channel, from, participants, (p) => {
-            // A recalled observation is a sentence, not a phrase, so it is quoted
-            // as its own line rather than dropped into "you said \"…\"".
+            // A recalled observation is a sentence, not a phrase, so it gets its
+            // own line — a different template, since an approved WhatsApp body is
+            // fixed text and one body cannot be both shapes.
             const memory = recalled.get(p.id);
             if (memory) {
-              return `Hey ${p.name}, here's what we remember about you: ${memory}\n\nNo database lookup, no asking again. That's Conversation Memory. — Twilio`;
+              return { template: 'memory-recall', values: [p.name, memory] };
             }
             // Keyed by stage id, so reordering or omitting slides cannot make this
             // read a different stage's answer. Falls back to generic copy when the
             // word-cloud stage is absent from the deck — validateDeck warns about
             // that case in the HUD rather than blocking the trigger.
             const challenge = responseFor(p, 'customers-are')?.value || 'customer experience';
-            return `Hey ${p.name}, you said "${challenge}" was your biggest challenge. We remembered — no database lookup, no asking again. That's Conversation Memory. — Twilio`;
+            return { template: 'memory-answer', values: [p.name, challenge] };
           });
           return { sent: participants.length };
         }
@@ -290,9 +293,10 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
         }
 
         case 'sms-closing': {
-          const sent = await sendToAllOnChannel(channel, from, participants, (p) =>
-            `Thanks for joining us, ${p.name}! Want to explore the demo yourself? Check it out here: https://www.twilio.com/en-us/solutions/agent-productivity\n\nletsGoMichelangeloMode(); — Wonder by Twilio`
-          );
+          const sent = await sendToAllOnChannel(channel, from, participants, (p) => ({
+            template: 'closing',
+            values: [p.name],
+          }));
           return { ...sent, total: participants.length };
         }
 

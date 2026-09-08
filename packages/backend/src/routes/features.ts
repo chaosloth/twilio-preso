@@ -13,6 +13,7 @@ import {
   probeMemoryTraits,
 } from '../services/memory.js';
 import { probeLlm } from '../services/ai.js';
+import { describeContentTemplates, ensureContentTemplates } from '../services/content.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -39,7 +40,8 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const sessionId = request.query.sessionId;
 
-      const [sync, verify, messaging, memory, traits, llmProbe, pool, state] = await Promise.all([
+      const [sync, verify, messaging, memory, traits, llmProbe, templates, pool, state] =
+        await Promise.all([
         probe(async () => {
           const s = await client.sync.v1.services(config.twilio.syncServiceSid).fetch();
           return s.friendlyName || s.sid;
@@ -55,6 +57,10 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
         probeMemoryStore(),
         probeMemoryTraits(),
         probeLlm(),
+        // Best-effort like every other probe: an unreachable Content API must
+        // leave the rest of the report readable, and no templates simply means
+        // every WhatsApp send is plain text inside the 24-hour window.
+        describeContentTemplates().catch(() => []),
         describePoolUsage().catch(() => []),
         sessionId ? getPresentationState(sessionId).catch(() => null) : Promise.resolve(null),
       ]);
@@ -221,6 +227,34 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
           values: [{ label: 'Service', value: config.twilio.verifyServiceSid }],
         },
         {
+          id: 'whatsapp-templates',
+          label: 'WhatsApp content templates',
+          state: !config.twilio.whatsappFrom
+            ? 'off'
+            : templates.every((t) => t.status === 'approved')
+              ? 'ok'
+              : 'warn',
+          detail: !config.twilio.whatsappFrom
+            ? 'TWILIO_WHATSAPP_FROM unset — every trigger sends SMS, so no template is needed.'
+            : templates.every((t) => t.status === 'approved')
+              ? 'Every trigger can reach a phone that has never opened the chat.'
+              : templates.length === 0
+                ? 'No templates created yet. Without one, a WhatsApp send only lands inside the 24-hour window and otherwise falls back to SMS.'
+                : 'Some templates are not approved yet. Those triggers still send — as plain text inside the window, SMS outside it.',
+          // Creation is not idempotent on Twilio's side, so this creates only
+          // what is missing (matched by friendly name) and submits only what has
+          // never been submitted. Approval itself is Meta's, and takes minutes
+          // to hours — the status below is what to watch.
+          action:
+            config.twilio.whatsappFrom && !templates.every((t) => t.status === 'approved')
+              ? { label: 'Create & submit templates', path: '/api/content/templates' }
+              : undefined,
+          values: templates.map((t) => ({
+            label: t.key,
+            value: t.rejectionReason ? `${t.status} — ${t.rejectionReason}` : t.status,
+          })),
+        },
+        {
           id: 'webhooks',
           label: 'Webhook signatures',
           state: process.env.PUBLIC_BASE_URL ? 'ok' : 'warn',
@@ -240,6 +274,24 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
    * Declares the trait groups this app writes. Presenter-only and deliberately
    * manual — it changes the account's memory schema, which outlives the event.
    */
+  /**
+   * Creates any missing content template and submits it to Meta for approval.
+   *
+   * Safe to press twice — a template is matched by friendly name rather than
+   * created again, since Content API creation is not idempotent and two
+   * identical templates is the failure that leaves you guessing which sid the
+   * triggers use. Only an unsubmitted template is submitted, so a pending or
+   * rejected one is not resubmitted underneath Meta's review.
+   */
+  app.post('/api/content/templates', { preHandler: requirePresenter }, async (request, reply) => {
+    try {
+      return { templates: await ensureContentTemplates() };
+    } catch (err: any) {
+      request.log.error({ err }, 'failed to create content templates');
+      return reply.status(502).send({ error: err?.message ?? 'template creation failed' });
+    }
+  });
+
   app.post('/api/memory/traits', { preHandler: requirePresenter }, async (request, reply) => {
     if (!config.twilio.memoryStoreId) {
       return reply.status(409).send({ error: 'memory store not configured' });
