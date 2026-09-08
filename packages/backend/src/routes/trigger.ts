@@ -63,7 +63,7 @@ function relayUrl(): string | null {
  * is enabled and a number is known — an unconditional `<Dial>` would ring the
  * presenter at the end of every ordinary call.
  */
-function relayTwiml(session: SessionRecord | null, config: RelayConfig, url: string): string {
+export function relayTwiml(session: SessionRecord | null, config: RelayConfig, url: string): string {
   /**
    * `multi` is Twilio's automatic language detection — Deepgram detects what the
    * caller speaks, ElevenLabs what the agent writes. It is only valid on that
@@ -89,6 +89,15 @@ function relayTwiml(session: SessionRecord | null, config: RelayConfig, url: str
     `reportInputDuringAgentSpeech="${config.interruptible === 'none' ? 'none' : config.interruptible}"`,
   ];
   if (config.speechModel) attrs.push(`speechModel="${escapeXml(config.speechModel)}"`);
+  // Only ElevenLabs reads this; sending it beside a Google or Amazon voice
+  // describes a pairing that does not exist. Stated rather than left to the
+  // platform default, for the same reason every language states its ASR.
+  if (config.ttsProvider === 'ElevenLabs')
+    attrs.push(`elevenlabsTextNormalization="${escapeXml(config.textNormalization)}"`);
+  // Conversation Intelligence, when the account has a service. Omitted entirely
+  // when it does not — an empty attribute is a 64101, not an unused feature.
+  if (config.intelligenceService)
+    attrs.push(`intelligenceService="${escapeXml(config.intelligenceService)}"`);
   // Unfinalized prompts. Only asked for when the session wants them — the app
   // ignores `last: false` either way, so this cannot make the agent answer twice.
   if (config.partialPrompts) attrs.push('partialPrompts="true"');

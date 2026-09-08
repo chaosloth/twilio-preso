@@ -5,6 +5,7 @@ import {
   INTERRUPT_SENSITIVITIES,
   RELAY_TOOLS,
   SPEECH_MODELS,
+  TEXT_NORMALIZATION,
   TRANSCRIPTION_PROVIDERS,
   TTS_PROVIDERS,
   VOICE_PRESETS,
@@ -249,7 +250,23 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
           }))}
           onChange={(v) => set('speechModel', v)}
         />
+        {/* ElevenLabs only reads this, so it is only offered beside one. */}
+        {draft.ttsProvider === 'ElevenLabs' && (
+          <Select
+            label="Text normalization"
+            hint="speaks “$20.50” as words — costs latency on every turn"
+            value={draft.textNormalization}
+            options={TEXT_NORMALIZATION.map((v) => ({ value: v, label: NORMALIZATION_LABELS[v] }))}
+            onChange={(v) => set('textNormalization', v as RelayConfig['textNormalization'])}
+          />
+        )}
         <Field label="Model override" value={draft.model} onChange={(v) => set('model', v)} hint="blank uses VOICE_LLM_MODEL / LLM_MODEL" />
+        <Field
+          label="Conversation Intelligence service"
+          hint="sid or unique name — blank attaches nothing"
+          value={draft.intelligenceService}
+          onChange={(v) => set('intelligenceService', v)}
+        />
       </div>
 
 
@@ -386,6 +403,12 @@ const MODE_LABELS: Record<RelayConfig['interruptible'], string> = {
   speech: 'speech only',
   dtmf: 'keypad only',
   none: 'never — let it finish',
+};
+
+const NORMALIZATION_LABELS: Record<RelayConfig['textNormalization'], string> = {
+  off: 'off — fastest (default)',
+  auto: 'auto — where the model thinks it helps',
+  on: 'on — always normalize',
 };
 
 /**

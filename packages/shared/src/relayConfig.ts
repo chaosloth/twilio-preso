@@ -89,11 +89,19 @@ export const TRANSCRIPTION_PROVIDERS = ['Deepgram', 'Google'] as const;
  * compatibility, but only as aliases: `true` = `any`, `false` = `none`.
  */
 export const INTERRUPT_MODES = ['any', 'speech', 'dtmf', 'none'] as const;
+/**
+ * ElevenLabs text normalization: whether the TTS rewrites "$20.50" and "Dr." as
+ * the words a person would say. `on` always, `auto` where the model thinks it
+ * helps, `off` never — and `off` is both Twilio's default and the fastest, since
+ * normalization happens before a single word is spoken.
+ */
+export const TEXT_NORMALIZATION = ['off', 'auto', 'on'] as const;
 export const INTERRUPT_SENSITIVITIES = ['high', 'medium', 'low'] as const;
 
 export type TtsProvider = (typeof TTS_PROVIDERS)[number];
 export type TranscriptionProvider = (typeof TRANSCRIPTION_PROVIDERS)[number];
 export type InterruptMode = (typeof INTERRUPT_MODES)[number];
+export type TextNormalization = (typeof TEXT_NORMALIZATION)[number];
 export type InterruptSensitivity = (typeof INTERRUPT_SENSITIVITIES)[number];
 
 /**
@@ -164,6 +172,18 @@ export interface RelayConfig {
   speechModel: string;
   /** What stops the agent mid-sentence. Not a boolean: `dtmf` and `speech` are
    *  separately useful, and a demo may want the agent unstoppable (`none`). */
+  /**
+   * Whether ElevenLabs normalizes text before speaking it. Ignored by the other
+   * providers, so it is emitted only alongside an ElevenLabs voice.
+   */
+  textNormalization: TextNormalization;
+  /**
+   * A Conversation Intelligence service sid or unique name. Set it and Twilio
+   * attaches transcripts and operators to every call the agent takes — the
+   * observability half of Twilio's own best practices. Empty leaves the
+   * attribute off entirely: a blank one is a 64101, not a no-op.
+   */
+  intelligenceService: string;
   interruptible: InterruptMode;
   /** How readily speech counts as an interruption. `low` needs a longer, more
    *  confident utterance — worth reaching for in a loud room, where `high` turns
@@ -197,6 +217,8 @@ export const DEFAULT_RELAY_CONFIG: RelayConfig = {
 
 Use what you know: refer to something specific they actually said or do, in their words, rather than talking in generalities. Never invent a detail that is not listed above, and if you know nothing about them, ask rather than guess.
 
+Everything you write is spoken aloud, so write it the way it should sound: numbers, money and dates as words, not digits or symbols ("twenty dollars fifty", "March twenty-eighth"), abbreviations spelled out ("Doctor", "percent"), and an email or a code read out piece by piece. Punctuate for the pauses you want.
+
 Keep every reply SHORT — one or two sentences, because this is a phone call and they are standing in a room. Be warm and concrete. If they ask what you can do, say you are a ConversationRelay agent that handles real-time voice, reads a Twilio Conversation Memory customer profile, and can hand off to a human.`,
   generateGreeting: true,
   greetingInstruction:
@@ -224,6 +246,8 @@ Keep every reply SHORT — one or two sentences, because this is a phone call an
   autoDetectLanguage: true,
   transcriptionProvider: 'Deepgram',
   speechModel: '',
+  textNormalization: 'off',
+  intelligenceService: '',
   interruptible: 'any',
   interruptSensitivity: 'high',
   ignoreBackchannel: true,
@@ -286,6 +310,11 @@ export function resolveRelayConfig(stored?: Partial<RelayConfig> | null): RelayC
       DEFAULT_RELAY_CONFIG.transcriptionProvider
     ),
     speechModel: str('speechModel'),
+    textNormalization: oneOf('textNormalization', TEXT_NORMALIZATION, DEFAULT_RELAY_CONFIG.textNormalization),
+    // Trimmed: a sid pasted with a stray space becomes an attribute Twilio
+    // cannot resolve, and the call fails rather than the observability quietly
+    // not appearing.
+    intelligenceService: str('intelligenceService').trim(),
     interruptible: interruptMode(source.interruptible),
     interruptSensitivity: oneOf(
       'interruptSensitivity',

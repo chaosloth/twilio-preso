@@ -154,6 +154,29 @@ describe('language switching', () => {
   });
 });
 
+describe('text normalization and observability', () => {
+  /** Twilio's own default. Normalization costs latency on every turn, and this
+   *  is a live demo where the pause is the thing people notice. */
+  it('ships normalization off and takes the three values TwiML allows', () => {
+    expect(DEFAULT_RELAY_CONFIG.textNormalization).toBe('off');
+    for (const value of ['on', 'auto', 'off'] as const) {
+      expect(resolveRelayConfig({ textNormalization: value }).textNormalization).toBe(value);
+    }
+    expect(resolveRelayConfig({ textNormalization: 'yes' as never }).textNormalization).toBe('off');
+  });
+
+  it('has no intelligence service until one is named', () => {
+    expect(DEFAULT_RELAY_CONFIG.intelligenceService).toBe('');
+    expect(resolveRelayConfig({ intelligenceService: ' GA1 ' }).intelligenceService).toBe('GA1');
+  });
+
+  /** The model writes the words TTS reads, so normalization is also a prompt
+   *  concern — and the only one that works on Google and Amazon voices too. */
+  it('tells the model to write numbers and abbreviations as spoken words', () => {
+    expect(DEFAULT_RELAY_CONFIG.systemPrompt).toMatch(/words, not (digits|figures)/i);
+  });
+});
+
 describe('partial prompts', () => {
   /**
    * Unfinalized prompts arrive as extra `prompt` events with `last: false`. They
