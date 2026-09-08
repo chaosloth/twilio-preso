@@ -28,9 +28,7 @@ export const config = {
    * legitimate webhook.
    */
   publicBaseUrl:
-    process.env.PUBLIC_BASE_URL ||
-    process.env.BACKEND_URL ||
-    `http://localhost:${process.env.PORT || '3001'}`,
+    process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || '3001'}`,
   twilio: {
     accountSid: requireEnv('TWILIO_ACCOUNT_SID'),
     authToken: requireEnv('TWILIO_AUTH_TOKEN'),

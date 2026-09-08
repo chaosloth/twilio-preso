@@ -150,7 +150,8 @@ Because the deep link is a real path, static hosting needs a fallback: `packages
 - Backend env is validated at boot in `packages/backend/src/config.ts` (`requireEnv` throws on missing vars). See `.env.example` for the full list. `.env.regional` holds an alternate regional Twilio config.
 - `PRESENTER_JWT_SECRET` is required — the backend refuses to boot without it. Set it on Fly with `fly secrets set` before the next deploy.
 - Backend deploys to Fly.io in `syd` (`fly.toml`, `packages/backend/Dockerfile`). Presenter runs locally on the stage machine; audience is built to static files.
-- Presenter reads `VITE_BACKEND_URL` (defaults to `http://localhost:3001`).
+- `PUBLIC_BASE_URL` is the **single** server-side origin: every URL Twilio fetches or signs is built from it (`config.publicBaseUrl`) — signature validation, the inbound `voiceUrl` on a claimed number, and the mass-call TwiML. There is deliberately no second variable for this any more; a stale `BACKEND_URL` alongside it moved the signed origin and only failed once real calls went out. Its localhost default is for a backend nothing external calls, so set it to the tunnel origin whenever webhooks are involved.
+- `VITE_BACKEND_URL` is the unrelated *client* side of the same question — inlined into the presenter and audience bundles at build time, so it must exist for the Vercel **build** and a change needs a redeploy. Presenter defaults to `http://localhost:3001` (it sits beside a local backend); audience defaults to `''`, a same-origin `/api` path, which only works where something proxies `/api` — on Vercel it does not, so both projects set it explicitly. The presenter also needs `VITE_AUDIENCE_URL`, or the QR encodes a localhost join link.
 
 ## Visual design rules (presenter)
 
