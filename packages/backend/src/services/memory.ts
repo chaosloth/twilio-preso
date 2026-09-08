@@ -322,6 +322,22 @@ export function responseObservation(
 }
 
 /**
+ * A question the attendee asked the on-stage agent, as a recallable sentence.
+ *
+ * Worth storing for the same reason a poll answer is: it is what this person
+ * came to find out, and the voice agent recalling "you asked about cutting IVR
+ * wait times" later in the same talk is the whole point of the memory demo. The
+ * question goes in verbatim — `recall` is a semantic search over this text, so
+ * trimming or re-punctuating it only makes the match worse. Blank in, blank out,
+ * so a stray submit writes nothing.
+ */
+export function askedObservation(name: string, prompt: string): string {
+  const question = prompt.trim();
+  if (!question) return '';
+  return `${name} asked the live AI agent: "${question}"`;
+}
+
+/**
  * The profile an identifier already points at, or null.
  *
  * Lookup takes **one identifier per request** — `{idType, value}` — and answers

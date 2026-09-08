@@ -44,11 +44,7 @@ export function FeaturesTab({ sessionId }: { sessionId: string }) {
         const res = await presenterFetch(path, { method: 'POST' });
         const body = await res.json().catch(() => null);
         if (!res.ok) throw new Error(body?.error ?? `status ${res.status}`);
-        setActionResult(
-          Array.isArray(body?.created) && body.created.length > 0
-            ? `Declared ${body.created.join(', ')}.`
-            : 'Nothing left to do.'
-        );
+        setActionResult(describeActionResult(body));
       } catch (err: any) {
         setActionResult(err?.message ?? 'failed');
       } finally {
@@ -64,6 +60,7 @@ export function FeaturesTab({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+
 
   return (
     <div>
@@ -167,6 +164,29 @@ const STATE_LABEL: Record<FeatureState, string> = {
   warn: 'CHECK',
   error: 'BROKEN',
 };
+
+/**
+ * What an action actually did, in its own terms.
+ *
+ * Each of these routes reports a different shape — trait groups answer with what
+ * they declared, content templates with every template's approval status — and a
+ * generic "done" is useless for the templates in particular: creating them is
+ * instant, Meta approving them is not, so the only thing worth showing is which
+ * ones are still waiting.
+ */
+function describeActionResult(body: any): string {
+  if (Array.isArray(body?.templates)) {
+    const pending = body.templates.filter((t: any) => t.status !== 'approved');
+    if (pending.length === 0) return 'Every template is approved.';
+    return `Submitted. Awaiting WhatsApp approval: ${pending
+      .map((t: any) => `${t.key} (${t.status})`)
+      .join(', ')}.`;
+  }
+  if (Array.isArray(body?.created) && body.created.length > 0) {
+    return `Declared ${body.created.join(', ')}.`;
+  }
+  return 'Nothing left to do.';
+}
 
 function Badge({ state }: { state: FeatureState }) {
   return (

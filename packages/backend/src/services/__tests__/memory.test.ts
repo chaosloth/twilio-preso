@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Participant } from '@twilio-preso/shared';
-import { refreshTraitSchema, upsertProfile } from '../memory.js';
+import { askedObservation, refreshTraitSchema, upsertProfile } from '../memory.js';
 
 /**
  * Registration must never mint a second profile for someone the store already
@@ -95,5 +95,23 @@ describe('upsertProfile', () => {
 
     expect(a).toBe(b);
     expect(calls.filter((c) => c.path === '/Profiles' && c.method === 'POST')).toHaveLength(1);
+  });
+});
+
+describe('askedObservation', () => {
+  it('reads back as a question the person asked, with their name', () => {
+    expect(askedObservation('Ada', 'How do I cut IVR wait times?')).toBe(
+      'Ada asked the live AI agent: "How do I cut IVR wait times?"'
+    );
+  });
+
+  it('keeps the question whole when it already ends in punctuation', () => {
+    // Recall is a semantic search over this sentence, so a doubled "??" or a
+    // truncated question is a worse match — the text goes in verbatim.
+    expect(askedObservation('Ada', 'Why WhatsApp?')).toContain('"Why WhatsApp?"');
+  });
+
+  it('is empty for a blank question, so nothing is written', () => {
+    expect(askedObservation('Ada', '   ')).toBe('');
   });
 });

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { getParticipant, publishEvent } from '../services/sync.js';
 import { streamAiResponse } from '../services/ai.js';
 import { requireLiveSession, stagesFor } from '../services/sessionContext.js';
+import { askedObservation, recordObservation } from '../services/memory.js';
 import type { AiPromptPendingEvent, AiPromptResponseEvent } from '@twilio-preso/shared';
 
 interface AiPromptBody {
@@ -107,6 +108,24 @@ export async function aiPromptRoutes(app: FastifyInstance): Promise<void> {
       response,
       timestamp: Date.now(),
     };
+
+    /**
+     * The question itself belongs in the attendee's durable profile.
+     *
+     * What someone chose to ask is the strongest signal this talk collects — the
+     * voice agent recalling it later in the same hour is the memory demo — and
+     * it is stored as an *observation* rather than a trait because a free-text
+     * question has no schema and only observations are semantically indexed for
+     * recall. Written whether or not the model answered: an outage should not
+     * lose what the room wanted to know. Best-effort, like every memory write on
+     * a request path — the phone already has its answer by now.
+     */
+    if (participant?.memoryProfileId) {
+      void recordObservation(
+        participant.memoryProfileId,
+        askedObservation(participant.name || participantName, prompt)
+      ).catch((err) => app.log.warn({ err, participantId }, 'failed to record the question in memory'));
+    }
 
     // Broadcast to the presenter screen after the phone has its answer — on
     // failure too, so the slide stops thinking and the room is not left watching
