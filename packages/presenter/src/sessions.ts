@@ -1,4 +1,4 @@
-import { resolveDeck } from '@twilio-preso/shared';
+import { resolveDeck, resolveRelayConfig } from '@twilio-preso/shared';
 import type {
   Deck,
   DeckWarning,
@@ -73,10 +73,16 @@ export async function saveDeck(id: string, deck: Deck): Promise<SessionWithWarni
  * The session's voice-agent settings, resolved: defaults merged in, so the HUD
  * edits real values rather than blanks and never has to know which fields the
  * record happens to carry.
+ *
+ * Resolved again *here* rather than trusting the cast. The backend resolves it
+ * too, but the two are deployed separately: a presenter bundle carrying a field
+ * the running backend has never heard of gets `undefined` back, and the tab dies
+ * on the first `.join()`. Merging locally makes a lagging backend a stale default
+ * instead of a white screen.
  */
 export async function fetchRelayConfig(id: string): Promise<RelayConfig> {
   const { relay } = await json(await presenterFetch(`/api/sessions/${id}/relay`));
-  return relay as RelayConfig;
+  return resolveRelayConfig(relay);
 }
 
 export async function saveRelayConfig(id: string, relay: RelayConfig): Promise<RelayConfig> {
@@ -86,7 +92,7 @@ export async function saveRelayConfig(id: string, relay: RelayConfig): Promise<R
       body: JSON.stringify({ relay }),
     })
   );
-  return result.relay as RelayConfig;
+  return resolveRelayConfig(result.relay);
 }
 
 /** Places one real call into the agent, so the settings above can be heard
