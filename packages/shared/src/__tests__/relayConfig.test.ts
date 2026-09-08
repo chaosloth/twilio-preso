@@ -5,6 +5,8 @@ import {
   relayToolPrompt,
   resolveRelayConfig,
   INTERRUPT_MODES,
+  supportsAutoLanguageDetection,
+  resolvedLanguages,
 } from '../relayConfig.js';
 
 describe('resolveRelayConfig', () => {
@@ -103,5 +105,64 @@ describe('interruption settings', () => {
     expect(resolveRelayConfig({ interruptSensitivity: 'loud' as never }).interruptSensitivity).toBe(
       DEFAULT_RELAY_CONFIG.interruptSensitivity
     );
+  });
+});
+
+describe('language switching', () => {
+  it('offers the caller a language switch out of the box', () => {
+    const config = resolveRelayConfig();
+    expect(config.tools.find((t) => t.id === 'switch_language')?.enabled).toBe(true);
+  });
+
+  /**
+   * Automatic detection is only available on the Deepgram/ElevenLabs pair.
+   * Sending `multi` with any other provider is not a validation message — the
+   * session errors and the call ends — so the capability is derived from the
+   * providers rather than trusted from the stored flag.
+   */
+  it('only supports auto-detection on Deepgram ASR with ElevenLabs TTS', () => {
+    expect(supportsAutoLanguageDetection(resolveRelayConfig())).toBe(true);
+    expect(
+      supportsAutoLanguageDetection(resolveRelayConfig({ transcriptionProvider: 'Google' }))
+    ).toBe(false);
+    expect(supportsAutoLanguageDetection(resolveRelayConfig({ ttsProvider: 'Google' }))).toBe(false);
+  });
+
+  it('resolves the primary language first and never repeats it', () => {
+    const config = resolveRelayConfig({ language: 'fr-FR', languages: ['fr-FR', 'ja-JP'] });
+    expect(resolvedLanguages(config)).toEqual(['fr-FR', 'ja-JP']);
+  });
+
+  it('drops a language that is not a plausible BCP-47 tag', () => {
+    const config = resolveRelayConfig({ languages: ['ja-JP', 'nonsense language', ''] as never });
+    expect(resolvedLanguages(config)).toEqual([DEFAULT_RELAY_CONFIG.language, 'ja-JP']);
+  });
+
+  it('tells the model which languages it may switch to', () => {
+    const config = resolveRelayConfig({ language: 'en-AU', languages: ['ja-JP'] });
+    const prompt = relayToolPrompt(config);
+    expect(prompt).toContain('[[switch_language:ja-JP]]');
+    expect(prompt).toContain('ja-JP');
+  });
+
+  it('says nothing about switching when the tool is off', () => {
+    const config = resolveRelayConfig({
+      tools: RELAY_TOOLS.map((t) => ({ ...t, enabled: t.id !== 'switch_language' })),
+    });
+    expect(relayToolPrompt(config)).not.toContain('switch_language');
+  });
+});
+
+describe('partial prompts', () => {
+  /**
+   * Unfinalized prompts arrive as extra `prompt` events with `last: false`. They
+   * shorten the gap before the agent can start thinking, but they also mean the
+   * app sees each turn several times — so this ships off, and turning it on is a
+   * deliberate choice made per session.
+   */
+  it('ships off, and is a boolean', () => {
+    expect(DEFAULT_RELAY_CONFIG.partialPrompts).toBe(false);
+    expect(resolveRelayConfig({ partialPrompts: true }).partialPrompts).toBe(true);
+    expect(resolveRelayConfig({ partialPrompts: 'yes' as never }).partialPrompts).toBe(false);
   });
 });

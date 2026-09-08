@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   INTERRUPT_MODES,
+  LANGUAGE_PRESETS,
   INTERRUPT_SENSITIVITIES,
   RELAY_TOOLS,
   SPEECH_MODELS,
@@ -8,6 +9,7 @@ import {
   TTS_PROVIDERS,
   VOICE_PRESETS,
   resolveRelayConfig,
+  supportsAutoLanguageDetection,
 } from '@twilio-preso/shared';
 import type { RelayConfig, RelayToolId } from '@twilio-preso/shared';
 import { fetchRelayConfig, placeTestCall, saveRelayConfig } from '../../sessions';
@@ -202,7 +204,42 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
           options={VOICE_PRESETS[draft.ttsProvider].map((v) => ({ value: v.id, label: `${v.label} · ${v.id}` }))}
           onChange={(v) => set('voice', v)}
         />
-        <Field label="Language (BCP-47)" value={draft.language} onChange={(v) => set('language', v)} hint="en-AU · en-GB · fr-FR · ja-JP" />
+        <Select
+          label="Primary language (BCP-47)"
+          hint="or type any tag"
+          value={draft.language}
+          freeText
+          options={LANGUAGE_PRESETS.map((l) => ({ value: l, label: l }))}
+          onChange={(v) => set('language', v)}
+        />
+        <Field
+          label="Other languages the call may switch to"
+          hint="comma-separated BCP-47 tags"
+          value={draft.languages.join(', ')}
+          onChange={(v) =>
+            set(
+              'languages',
+              v.split(',').map((l) => l.trim()).filter(Boolean)
+            )
+          }
+        />
+        <label style={{ fontSize: 13, display: 'block', marginBottom: 10 }}>
+          <input
+            type="checkbox"
+            checked={draft.autoDetectLanguage}
+            disabled={!supportsAutoLanguageDetection(draft)}
+            onChange={(e) => set('autoDetectLanguage', e.target.checked)}
+          />{' '}
+          Detect the language automatically
+          {!supportsAutoLanguageDetection(draft) && (
+            <span style={{ color: '#7e869c' }}> — needs Deepgram ASR with ElevenLabs TTS</span>
+          )}
+        </label>
+        <p style={{ ...caption, textTransform: 'none', letterSpacing: 0, marginBottom: 10 }}>
+          Every language listed becomes a <code>&lt;Language&gt;</code> on the call, and the agent’s
+          <code> switch_language</code> tool can move between them mid-conversation. A tag that is
+          not listed cannot be switched to.
+        </p>
         <Select
           label="Transcription provider"
           value={draft.transcriptionProvider}
@@ -256,6 +293,10 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
           <label style={{ fontSize: 13 }}>
             <input type="checkbox" checked={draft.useMemory} onChange={(e) => set('useMemory', e.target.checked)} />{' '}
             Read Conversation Memory
+          </label>
+          <label style={{ fontSize: 13 }} title="Twilio sends the turn as the caller is still speaking. The agent still only answers the finalized one.">
+            <input type="checkbox" checked={draft.partialPrompts} onChange={(e) => set('partialPrompts', e.target.checked)} />{' '}
+            Partial prompts
           </label>
         </Row>
         <Row style={{ justifyContent: 'flex-start' }}>

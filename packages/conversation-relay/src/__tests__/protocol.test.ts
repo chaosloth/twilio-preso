@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { endMessage, errorDescription, textMessage, trimToInterrupt, turnTail } from '../protocol.js';
-import { SentinelSafeStream } from '../protocol.js';
+import {
+  SentinelSafeStream,
+  endMessage,
+  errorDescription,
+  extractSentinels,
+  languageMessage,
+  textMessage,
+  trimToInterrupt,
+  turnTail,
+} from '../protocol.js';
 
 describe('textMessage', () => {
   /**
@@ -143,5 +151,65 @@ describe('turnTail', () => {
     expect(turnTail(false, '', 'Sorry, could you say that again?')).toBe(
       'Sorry, could you say that again?'
     );
+  });
+});
+
+describe('languageMessage', () => {
+  it('switches both directions at once', () => {
+    expect(languageMessage({ tts: 'fr-FR', transcription: 'fr-FR' })).toEqual({
+      type: 'language',
+      ttsLanguage: 'fr-FR',
+      transcriptionLanguage: 'fr-FR',
+    });
+  });
+
+  /** Twilio needs at least one of the two, and rejects the message outright if
+   *  it carries a key it did not expect — so an absent side is omitted. */
+  it('omits the side that is not changing', () => {
+    expect(languageMessage({ tts: 'ja-JP' })).toEqual({ type: 'language', ttsLanguage: 'ja-JP' });
+    expect(languageMessage({ transcription: 'ja-JP' })).toEqual({
+      type: 'language',
+      transcriptionLanguage: 'ja-JP',
+    });
+  });
+
+  it('is nothing at all when neither side is given', () => {
+    expect(languageMessage({})).toBeNull();
+  });
+});
+
+describe('extractSentinels', () => {
+  it('finds a bare tool call and strips it from what is spoken', () => {
+    const { text, calls } = extractSentinels('Goodbye! [[end_call]]', ['end_call']);
+    expect(text).toBe('Goodbye!');
+    expect(calls).toEqual([{ id: 'end_call', arg: '' }]);
+  });
+
+  it('reads the argument off a parameterised call', () => {
+    const { text, calls } = extractSentinels('Bien sûr. [[switch_language:fr-FR]]', [
+      'switch_language',
+    ]);
+    expect(text).toBe('Bien sûr.');
+    expect(calls).toEqual([{ id: 'switch_language', arg: 'fr-FR' }]);
+  });
+
+  it('leaves a tool that is not enabled in the text rather than acting on it', () => {
+    const { calls } = extractSentinels('[[end_call]]', ['switch_language']);
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('SentinelSafeStream with an argument', () => {
+  /** The argument arrives in its own chunks, so the hold-back has to survive a
+   *  sentinel split across them — otherwise the caller hears the tag read out. */
+  it('never speaks a parameterised sentinel, however it is chunked', () => {
+    const stream = new SentinelSafeStream();
+    let spoken = '';
+    for (const chunk of ['Of course. ', '[[switch', '_language:', 'fr-FR]]']) {
+      spoken += stream.push(chunk);
+    }
+    spoken += stream.flush();
+    expect(spoken.trim()).toBe('Of course.');
+    expect(stream.text()).toContain('[[switch_language:fr-FR]]');
   });
 });

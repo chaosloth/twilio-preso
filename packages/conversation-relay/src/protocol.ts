@@ -39,6 +39,63 @@ export function endMessage(reason: string): EndMessage {
   return { type: 'end', handoffData: JSON.stringify({ reason }) };
 }
 
+export interface LanguageMessage {
+  type: 'language';
+  ttsLanguage?: string;
+  transcriptionLanguage?: string;
+}
+
+/**
+ * Switch the language mid-call.
+ *
+ * The two directions are separate on purpose — the caller's speech and the
+ * agent's voice can legitimately be different languages — and Twilio needs at
+ * least one of them. An absent side is omitted rather than sent empty: an
+ * attribute the schema does not expect gets the whole message discarded.
+ */
+export function languageMessage(options: {
+  tts?: string;
+  transcription?: string;
+}): LanguageMessage | null {
+  if (!options.tts && !options.transcription) return null;
+  const message: LanguageMessage = { type: 'language' };
+  if (options.tts) message.ttsLanguage = options.tts;
+  if (options.transcription) message.transcriptionLanguage = options.transcription;
+  return message;
+}
+
+/** A tool call the model wrote inline, with its argument if it takes one. */
+export interface SentinelCall {
+  id: string;
+  arg: string;
+}
+
+/**
+ * Pulls the tool sentinels out of a reply.
+ *
+ * Only the ids passed in are recognised: a token for a tool this session has
+ * switched off stays in the text, where it is visible in a transcript, rather
+ * than silently performing an action the presenter disabled. `switch_language`
+ * is why the argument exists — the tag travels in the sentinel itself.
+ */
+export function extractSentinels(
+  reply: string,
+  ids: readonly string[]
+): { text: string; calls: SentinelCall[] } {
+  const calls: SentinelCall[] = [];
+  let text = reply;
+
+  for (const id of ids) {
+    const pattern = new RegExp(`\\[\\[${id}(?::([^\\]]*))?\\]\\]`, 'g');
+    text = text.replace(pattern, (_match, arg?: string) => {
+      calls.push({ id, arg: (arg ?? '').trim() });
+      return ' ';
+    });
+  }
+
+  return { text: text.replace(/\s{2,}/g, ' ').trim(), calls };
+}
+
 /** Twilio's error field is `description`. Reading `errorMessage` logs undefined. */
 export function errorDescription(event: { description?: string }): string {
   return event.description ?? '(no description sent)';
@@ -76,7 +133,7 @@ export function turnTail(spokeAlready: boolean, tail: string, fallback: string):
 /** A completed clause: what is safe to hand to TTS before the rest arrives. */
 const SENTENCE_END = /^[\s\S]*[.!?…]["')\]]?(\s+|$)/;
 /** A tool sentinel, or the start of one. */
-const SENTINEL = /\[\[[a-z_]*\]?\]?/gi;
+const SENTINEL = /\[\[[a-z_]*(?::[^\]]*)?\]?\]?/gi;
 
 /**
  * Turns an LLM token stream into speakable chunks.

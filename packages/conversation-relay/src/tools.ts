@@ -1,6 +1,7 @@
 import Twilio from 'twilio';
-import { enabledRelayTools, relayToolToken } from '@twilio-preso/shared';
+import { enabledRelayTools } from '@twilio-preso/shared';
 import type { RelayConfig, RelayToolId, SessionRecord } from '@twilio-preso/shared';
+import { extractSentinels } from './protocol.js';
 import { config as env } from './config.js';
 
 const client = Twilio(env.twilio.accountSid, env.twilio.authToken);
@@ -16,22 +17,18 @@ const client = Twilio(env.twilio.accountSid, env.twilio.authToken);
 export interface ToolInvocation {
   /** The reply with every token removed and whitespace tidied. */
   text: string;
+  /** The tools called, in the order they appeared, each with its argument —
+   *  empty for every tool but `switch_language`. */
+  calls: { id: RelayToolId; arg: string }[];
+  /** Ids only, for the common "was this called at all" check. */
   called: RelayToolId[];
 }
 
 export function extractToolCalls(reply: string, config: RelayConfig): ToolInvocation {
-  const called: RelayToolId[] = [];
-  let text = reply;
-
-  for (const tool of enabledRelayTools(config)) {
-    const token = relayToolToken(tool.id);
-    if (text.includes(token)) {
-      called.push(tool.id);
-      text = text.split(token).join(' ');
-    }
-  }
-
-  return { text: text.replace(/\s{2,}/g, ' ').trim(), called };
+  const ids = enabledRelayTools(config).map((t) => t.id);
+  const { text, calls } = extractSentinels(reply, ids);
+  const typed = calls as { id: RelayToolId; arg: string }[];
+  return { text, calls: typed, called: typed.map((c) => c.id) };
 }
 
 /**

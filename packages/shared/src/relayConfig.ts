@@ -24,7 +24,11 @@
  * That works identically on every provider, and a model that ignores the
  * convention just produces a normal reply rather than a broken turn.
  */
-export type RelayToolId = 'end_call' | 'handoff_to_human' | 'send_followup_sms';
+export type RelayToolId =
+  | 'end_call'
+  | 'handoff_to_human'
+  | 'send_followup_sms'
+  | 'switch_language';
 
 export interface RelayTool {
   id: RelayToolId;
@@ -50,7 +54,41 @@ export const RELAY_TOOLS: RelayTool[] = [
     enabled: false,
     whenToUse: 'the caller asks for something in writing — a link, a summary, a next step',
   },
+  /**
+   * The one tool that takes an argument: the sentinel carries the language tag,
+   * `[[switch_language:fr-FR]]`. On by default — a caller who answers in French
+   * should be answered in French, and the alternative is an agent that hears
+   * them fine and replies in the wrong language for the rest of the call.
+   */
+  {
+    id: 'switch_language',
+    enabled: true,
+    whenToUse:
+      'the caller speaks, or asks to continue in, one of the other supported languages — switch, then reply in that language',
+  },
 ];
+
+/** Languages worth one keypress in the HUD. Any BCP-47 tag can still be typed. */
+export const LANGUAGE_PRESETS = [
+  'en-AU',
+  'en-US',
+  'en-GB',
+  'fr-FR',
+  'es-ES',
+  'de-DE',
+  'it-IT',
+  'pt-BR',
+  'ja-JP',
+  'ko-KR',
+  'zh-CN',
+  'hi-IN',
+  'id-ID',
+  'th-TH',
+] as const;
+
+/** `language`/`ttsLanguage`/`transcriptionLanguage` all accept a BCP-47 tag; a
+ *  free-text box is how a typo becomes a 64101 on a ringing phone. */
+const BCP47 = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 
 /**
  * The provider and mode values `<ConversationRelay>` actually accepts. They are
@@ -120,6 +158,15 @@ export interface RelayConfig {
   ttsProvider: TtsProvider;
   /** BCP-47. Sets both the speech-to-text and the text-to-speech language. */
   language: string;
+  /** Every other language the call may turn into. Each becomes a `<Language>`
+   *  child of `<ConversationRelay>` — that is what makes a mid-call switch
+   *  possible at all, since the switch selects an already-configured language
+   *  rather than introducing one. */
+  languages: string[];
+  /** Let Deepgram detect the spoken language and ElevenLabs the written one,
+   *  rather than pinning both to `language`. This is TwiML's `multi`, and it is
+   *  only valid on that provider pair — see `supportsAutoLanguageDetection`. */
+  autoDetectLanguage: boolean;
   transcriptionProvider: TranscriptionProvider;
   /** Provider-specific ASR model. Empty means the provider's default, which is
    *  what should normally be used — see `SPEECH_MODELS`. */
@@ -135,6 +182,11 @@ export interface RelayConfig {
    *  On by default: on a stage the agent is talking over applause and agreement. */
   ignoreBackchannel: boolean;
   dtmfDetection: boolean;
+  /** Ask Twilio for unfinalized prompts (`last: false`) as the caller is still
+   *  talking, so the agent can start on the turn a beat earlier. Off by default:
+   *  it multiplies the `prompt` events an app has to reason about, and a demo
+   *  that double-answers is worse than one that waits. */
+  partialPrompts: boolean;
   /** Turns before the agent says goodbye. Inbound is longer on purpose: someone
    *  who chose to ring in is having a conversation, not watching a beat of a
    *  presentation. */
@@ -164,12 +216,15 @@ Keep every reply SHORT — one or two sentences, because this is a phone call an
   voice: 'M7ya1YbaeFaPXljg9BpK',
   ttsProvider: 'ElevenLabs',
   language: 'en-AU',
+  languages: ['en-US', 'fr-FR', 'es-ES', 'ja-JP', 'hi-IN', 'zh-CN'],
+  autoDetectLanguage: true,
   transcriptionProvider: 'Deepgram',
   speechModel: '',
   interruptible: 'any',
   interruptSensitivity: 'high',
   ignoreBackchannel: true,
   dtmfDetection: true,
+  partialPrompts: false,
   maxTurnsInbound: 12,
   maxTurnsOutbound: 3,
   handoffNumber: '',
@@ -219,6 +274,8 @@ export function resolveRelayConfig(stored?: Partial<RelayConfig> | null): RelayC
     voice: str('voice'),
     ttsProvider: oneOf('ttsProvider', TTS_PROVIDERS, DEFAULT_RELAY_CONFIG.ttsProvider),
     language: str('language'),
+    languages: languageList(source.languages),
+    autoDetectLanguage: bool('autoDetectLanguage'),
     transcriptionProvider: oneOf(
       'transcriptionProvider',
       TRANSCRIPTION_PROVIDERS,
@@ -233,12 +290,37 @@ export function resolveRelayConfig(stored?: Partial<RelayConfig> | null): RelayC
     ),
     ignoreBackchannel: bool('ignoreBackchannel'),
     dtmfDetection: bool('dtmfDetection'),
+    partialPrompts: bool('partialPrompts'),
     maxTurnsInbound: turns('maxTurnsInbound'),
     maxTurnsOutbound: turns('maxTurnsOutbound'),
     handoffNumber: str('handoffNumber'),
     model: str('model'),
     tools: mergeTools(source.tools),
   };
+}
+
+/** Only tags TwiML would accept survive; the rest are dropped rather than
+ *  reaching a `<Language code>` where they end the session. */
+function languageList(stored: unknown): string[] {
+  if (!Array.isArray(stored)) return [...DEFAULT_RELAY_CONFIG.languages];
+  return [...new Set(stored.filter((l): l is string => typeof l === 'string' && BCP47.test(l)))];
+}
+
+/**
+ * Whether `multi` may be sent at all.
+ *
+ * Twilio's automatic detection is Deepgram for speech-to-text and ElevenLabs for
+ * text-to-speech; on any other pair the session errors and the call ends. So the
+ * capability is derived from the providers and the stored flag can only turn a
+ * supported setup off, never turn an unsupported one on.
+ */
+export function supportsAutoLanguageDetection(config: RelayConfig): boolean {
+  return config.transcriptionProvider === 'Deepgram' && config.ttsProvider === 'ElevenLabs';
+}
+
+/** Every language the call may be conducted in, primary first. */
+export function resolvedLanguages(config: RelayConfig): string[] {
+  return [...new Set([config.language, ...config.languages])].filter((l) => BCP47.test(l));
 }
 
 /**
@@ -287,6 +369,18 @@ export function relayToolToken(id: RelayToolId): string {
 export function relayToolPrompt(config: RelayConfig): string {
   const tools = enabledRelayTools(config);
   if (tools.length === 0) return '';
-  const lines = tools.map((t) => `- ${relayToolToken(t.id)} — use when ${t.whenToUse}.`);
+  const lines = tools.map((t) => {
+    // The switch tool is the only one with an argument, and the argument is a
+    // closed set: naming the tags inline is what stops the model inventing one
+    // the TwiML never declared.
+    if (t.id === 'switch_language') {
+      const others = resolvedLanguages(config).slice(1);
+      const examples = others.length ? others : [config.language];
+      return `- ${relayToolToken(t.id)} with a language tag, for example ${examples
+        .map((l) => `[[switch_language:${l}]]`)
+        .join(' or ')} — use when ${t.whenToUse}. Only these tags are available: ${examples.join(', ')}.`;
+    }
+    return `- ${relayToolToken(t.id)} — use when ${t.whenToUse}.`;
+  });
   return `\n\nYou have tools. To use one, include its exact token anywhere in your reply; the caller never hears the token itself:\n${lines.join('\n')}`;
 }

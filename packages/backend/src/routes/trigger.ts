@@ -5,7 +5,13 @@ import { getAllParticipants, getParticipant, isSessionLive } from '../services/s
 import { sendToAllOnChannel } from '../services/messaging.js';
 import type { MessageChannel } from '../services/messaging.js';
 import { initiateAgentCall } from '../services/voice.js';
-import { enabledRelayTools, resolveRelayConfig, responseFor } from '@twilio-preso/shared';
+import {
+  enabledRelayTools,
+  resolveRelayConfig,
+  resolvedLanguages,
+  responseFor,
+  supportsAutoLanguageDetection,
+} from '@twilio-preso/shared';
 import type { Participant, RelayConfig, SessionRecord } from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
 import { requireTwilioSignature } from '../services/twilioSignature.js';
@@ -58,11 +64,20 @@ function relayUrl(): string | null {
  * presenter at the end of every ordinary call.
  */
 function relayTwiml(session: SessionRecord | null, config: RelayConfig, url: string): string {
+  /**
+   * `multi` is Twilio's automatic language detection — Deepgram detects what the
+   * caller speaks, ElevenLabs what the agent writes. It is only valid on that
+   * provider pair, so the capability is derived rather than trusted: on any
+   * other pair the primary language is pinned instead of ending the session.
+   */
+  const auto = config.autoDetectLanguage && supportsAutoLanguageDetection(config);
+  const languages = resolvedLanguages(config);
+
   const attrs: string[] = [
     `url="${escapeXml(url)}"`,
     `voice="${escapeXml(config.voice)}"`,
     `ttsProvider="${escapeXml(config.ttsProvider)}"`,
-    `language="${escapeXml(config.language)}"`,
+    `language="${escapeXml(auto ? 'multi' : config.language)}"`,
     `transcriptionProvider="${escapeXml(config.transcriptionProvider)}"`,
     `dtmfDetection="${config.dtmfDetection}"`,
     `interruptible="${config.interruptible}"`,
@@ -74,6 +89,19 @@ function relayTwiml(session: SessionRecord | null, config: RelayConfig, url: str
     `reportInputDuringAgentSpeech="${config.interruptible === 'none' ? 'none' : config.interruptible}"`,
   ];
   if (config.speechModel) attrs.push(`speechModel="${escapeXml(config.speechModel)}"`);
+  // Unfinalized prompts. Only asked for when the session wants them — the app
+  // ignores `last: false` either way, so this cannot make the agent answer twice.
+  if (config.partialPrompts) attrs.push('partialPrompts="true"');
+
+  /**
+   * One `<Language>` per language the call may turn into. This is what makes the
+   * agent's `[[switch_language:…]]` possible at all: the switch message selects
+   * a language that was declared here, and one that was not ends the session.
+   * The parent's voice and providers are inherited, so each child is just a code.
+   */
+  const languageChildren = languages
+    .map((code) => `\n      <Language code="${escapeXml(code)}" />`)
+    .join('');
 
   const parameter = session
     ? `\n      <Parameter name="sessionId" value="${escapeXml(session.id)}" />`
@@ -87,7 +115,7 @@ function relayTwiml(session: SessionRecord | null, config: RelayConfig, url: str
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <ConversationRelay ${attrs.join(' ')}>${parameter}
+    <ConversationRelay ${attrs.join(' ')}>${parameter}${languageChildren}
     </ConversationRelay>
   </Connect>${dial}
 </Response>`;

@@ -9,12 +9,13 @@ import { extractToolCalls, sendFollowupSms } from './tools.js';
 import {
   SentinelSafeStream,
   endMessage,
+  languageMessage,
   errorDescription,
   textMessage,
   trimToInterrupt,
   turnTail,
 } from './protocol.js';
-import { resolveRelayConfig } from '@twilio-preso/shared';
+import { resolveRelayConfig, resolvedLanguages } from '@twilio-preso/shared';
 import type { RelayConfig, SessionRecord } from '@twilio-preso/shared';
 
 interface ConversationRelayEvent {
@@ -27,6 +28,12 @@ interface ConversationRelayEvent {
   customParameters?: Record<string, string>;
   callSid?: string;
   digit?: string;
+  /** Prompt only: false while the caller is still speaking, when the session
+   *  asked for partial prompts. */
+  last?: boolean;
+  /** Prompt only: the language Twilio transcribed. In `multi` mode this is the
+   *  primary tag alone — `en`, not `en-US`. */
+  lang?: string;
   /** Interrupt only: how much of the agent's line the caller actually heard. */
   utteranceUntilInterrupt?: string;
   /** Error only. Twilio calls it `description`; there is no `errorMessage`. */
@@ -143,6 +150,18 @@ async function handleEvent(
     }
 
     case 'prompt': {
+      /**
+       * With `partialPrompts` on, Twilio sends the turn several times as the
+       * caller is still speaking. Only the finalized one is answered: replying to
+       * a partial is how an agent talks over the second half of a question. The
+       * flag is off by default, so this branch is normally never taken — it is
+       * here so that turning it on cannot make the agent answer twice.
+       */
+      if (event.last === false) {
+        console.log(`Partial prompt: "${event.voicePrompt ?? ''}"`);
+        return;
+      }
+
       const userMessage = event.voicePrompt || '';
       state.exchangeCount++;
 
@@ -208,11 +227,34 @@ async function handleEvent(
        * spoken words, so a later turn is not conditioned on a token the model
        * would then copy.
        */
-      const { text: response, called } = extractToolCalls(stream.text(), state.config);
+      const { text: response, called, calls } = extractToolCalls(stream.text(), state.config);
       ws.send(JSON.stringify(textMessage(turnTail(spoke, stream.flush(), STUMBLE), { last: true })));
 
       state.conversationHistory.push({ role: 'user', content: userMessage });
       state.conversationHistory.push({ role: 'assistant', content: response || STUMBLE });
+
+      /**
+       * A language switch takes effect for the *next* turn — the reply that
+       * asked for it has already been sent to TTS in the old language, which is
+       * right: the model writes that sentence in the new language itself and
+       * ElevenLabs is in `multi` mode for exactly this. Only a language the
+       * TwiML declared is accepted; anything else is a `<Language>` that does
+       * not exist and a session that ends.
+       */
+      for (const call of calls) {
+        if (call.id !== 'switch_language') continue;
+        const allowed = resolvedLanguages(state.config);
+        const target = allowed.find((l) => l.toLowerCase() === call.arg.toLowerCase());
+        if (!target) {
+          console.warn(`Model asked for unsupported language "${call.arg}" — staying on ${state.config.language}`);
+          continue;
+        }
+        const message = languageMessage({ tts: target, transcription: target });
+        if (message) {
+          ws.send(JSON.stringify(message));
+          console.log(`Switched language to ${target}`);
+        }
+      }
 
       if (called.includes('send_followup_sms')) {
         void sendFollowupSms(state.session, state.callerPhone, response);
