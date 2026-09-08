@@ -66,6 +66,12 @@ function relayTwiml(session: SessionRecord | null, config: RelayConfig, url: str
     `transcriptionProvider="${escapeXml(config.transcriptionProvider)}"`,
     `dtmfDetection="${config.dtmfDetection}"`,
     `interruptible="${config.interruptible}"`,
+    `interruptSensitivity="${config.interruptSensitivity}"`,
+    `ignoreBackchannel="${config.ignoreBackchannel}"`,
+    // The agent's own turns stream in as several `text` messages, so speech
+    // arriving mid-turn has to be reported or an interruption can only land
+    // between clauses — which is the one place the caller does not need it.
+    `reportInputDuringAgentSpeech="${config.interruptible === 'none' ? 'none' : config.interruptible}"`,
   ];
   if (config.speechModel) attrs.push(`speechModel="${escapeXml(config.speechModel)}"`);
 

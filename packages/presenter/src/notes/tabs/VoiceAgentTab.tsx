@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RELAY_TOOLS, resolveRelayConfig } from '@twilio-preso/shared';
+import {
+  INTERRUPT_MODES,
+  INTERRUPT_SENSITIVITIES,
+  RELAY_TOOLS,
+  SPEECH_MODELS,
+  TRANSCRIPTION_PROVIDERS,
+  TTS_PROVIDERS,
+  VOICE_PRESETS,
+  resolveRelayConfig,
+} from '@twilio-preso/shared';
 import type { RelayConfig, RelayToolId } from '@twilio-preso/shared';
 import { fetchRelayConfig, placeTestCall, saveRelayConfig } from '../../sessions';
 import { ErrorText, Row, caption, heading, panel, smallButton, textInput } from '../ui';
@@ -176,20 +185,69 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
 
       <div style={panel}>
         <div style={heading}>Voice &amp; language</div>
-        <Field label="TTS voice" value={draft.voice} onChange={(v) => set('voice', v)} />
-        <Field label="TTS provider" value={draft.ttsProvider} onChange={(v) => set('ttsProvider', v)} hint="Google · Amazon · ElevenLabs" />
+        {/* Provider first: it decides which voice ids and speech models are even
+            valid, and a mismatched pair is not a validation error — it is a call
+            that ends mid-sentence. */}
+        <Select
+          label="TTS provider"
+          value={draft.ttsProvider}
+          options={TTS_PROVIDERS.map((p) => ({ value: p, label: p }))}
+          onChange={(v) => set('ttsProvider', v as RelayConfig['ttsProvider'])}
+        />
+        <Select
+          label="TTS voice"
+          hint="or type any voice id the provider knows"
+          value={draft.voice}
+          freeText
+          options={VOICE_PRESETS[draft.ttsProvider].map((v) => ({ value: v.id, label: `${v.label} · ${v.id}` }))}
+          onChange={(v) => set('voice', v)}
+        />
         <Field label="Language (BCP-47)" value={draft.language} onChange={(v) => set('language', v)} hint="en-AU · en-GB · fr-FR · ja-JP" />
-        <Field label="Transcription provider" value={draft.transcriptionProvider} onChange={(v) => set('transcriptionProvider', v)} hint="Google · Deepgram" />
-        <Field label="Speech model" value={draft.speechModel} onChange={(v) => set('speechModel', v)} hint="blank uses the provider default" />
+        <Select
+          label="Transcription provider"
+          value={draft.transcriptionProvider}
+          options={TRANSCRIPTION_PROVIDERS.map((p) => ({ value: p, label: p }))}
+          onChange={(v) => set('transcriptionProvider', v as RelayConfig['transcriptionProvider'])}
+        />
+        <Select
+          label="Speech model"
+          hint="leave on the provider default unless you have a reason"
+          value={draft.speechModel}
+          options={SPEECH_MODELS[draft.transcriptionProvider].map((m) => ({
+            value: m,
+            label: m || 'provider default (recommended)',
+          }))}
+          onChange={(v) => set('speechModel', v)}
+        />
         <Field label="Model override" value={draft.model} onChange={(v) => set('model', v)} hint="blank uses VOICE_LLM_MODEL / LLM_MODEL" />
       </div>
 
       <div style={panel}>
         <div style={heading}>Call behaviour</div>
+        <Row style={{ justifyContent: 'flex-start', alignItems: 'flex-start', gap: 16, marginBottom: 12 }}>
+          <div style={{ flex: 1 }}>
+            <Select
+              label="Interruptible"
+              hint="what stops the agent mid-sentence"
+              value={draft.interruptible}
+              options={INTERRUPT_MODES.map((m) => ({ value: m, label: MODE_LABELS[m] }))}
+              onChange={(v) => set('interruptible', v as RelayConfig['interruptible'])}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <Select
+              label="Interrupt sensitivity"
+              hint="lower it in a loud room"
+              value={draft.interruptSensitivity}
+              options={INTERRUPT_SENSITIVITIES.map((s) => ({ value: s, label: s }))}
+              onChange={(v) => set('interruptSensitivity', v as RelayConfig['interruptSensitivity'])}
+            />
+          </div>
+        </Row>
         <Row style={{ justifyContent: 'flex-start', gap: 20, marginBottom: 12 }}>
           <label style={{ fontSize: 13 }}>
-            <input type="checkbox" checked={draft.interruptible} onChange={(e) => set('interruptible', e.target.checked)} />{' '}
-            Interruptible
+            <input type="checkbox" checked={draft.ignoreBackchannel} onChange={(e) => set('ignoreBackchannel', e.target.checked)} />{' '}
+            Ignore backchannel (“yeah”, “uh-huh”)
           </label>
           <label style={{ fontSize: 13 }}>
             <input type="checkbox" checked={draft.dtmfDetection} onChange={(e) => set('dtmfDetection', e.target.checked)} />{' '}
@@ -223,6 +281,76 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
         {status && <span style={{ fontSize: 12, color: '#babecc' }}>{status}</span>}
       </Row>
       {error && <ErrorText>{error}</ErrorText>}
+    </div>
+  );
+}
+
+const MODE_LABELS: Record<RelayConfig['interruptible'], string> = {
+  any: 'speech or keypad',
+  speech: 'speech only',
+  dtmf: 'keypad only',
+  none: 'never — let it finish',
+};
+
+/**
+ * A dropdown over the values Twilio actually accepts.
+ *
+ * `freeText` adds a datalist instead of restricting to the list: a voice id is
+ * an open set — ElevenLabs has thousands — while a provider or an interrupt mode
+ * is closed, and offering a free-text box for a closed set is how an unaccepted
+ * value reaches the TwiML.
+ */
+function Select({
+  label,
+  value,
+  options,
+  hint,
+  freeText,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  hint?: string;
+  freeText?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const listId = `${label.replace(/\W+/g, '-')}-options`;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={caption}>
+        {label}
+        {hint && <span style={{ textTransform: 'none', letterSpacing: 0 }}> · {hint}</span>}
+      </div>
+      {freeText ? (
+        <>
+          <input
+            style={{ ...textInput, width: '100%', marginTop: 4 }}
+            list={listId}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <datalist id={listId}>
+            {options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </datalist>
+        </>
+      ) : (
+        <select
+          style={{ ...textInput, width: '100%', marginTop: 4 }}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value} style={{ background: '#000d25' }}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }
