@@ -95,7 +95,7 @@ export function Join({ initialCode, onJoined }: JoinProps) {
   }
 
   return (
-    <Shell title="Wonder — Twilio Live Demo">
+    <Shell title="Twilio Live Demo">
       <form
         className="space-y-4"
         onSubmit={(e) => {
