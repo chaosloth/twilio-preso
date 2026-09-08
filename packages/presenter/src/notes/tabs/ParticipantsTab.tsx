@@ -2,7 +2,7 @@ import type { AdminApi } from '../useAdminApi';
 import { Empty, Row, dangerButton, heading, smallButton } from '../ui';
 
 export function ParticipantsTab({ api }: { api: AdminApi }) {
-  const { participants, removeParticipant, resetSession } = api;
+  const { participants, removeParticipant, resetSession, fireTrigger } = api;
 
   return (
     <div>
@@ -30,9 +30,23 @@ export function ParticipantsTab({ api }: { api: AdminApi }) {
                   {p.phone} {p.company && `· ${p.company}`}
                 </div>
               </div>
-              <button style={smallButton} onClick={() => void removeParticipant(p.id)}>
-                Remove
-              </button>
+              <Row style={{ gap: 6, flex: '0 0 auto' }}>
+                {/* The only way to fire `voice-agent-connect`: it calls one
+                    volunteer, so it needs the participant a button row can name. */}
+                <button
+                  style={smallButton}
+                  onClick={() => {
+                    if (confirm(`Call ${p.name} on ${p.phone} with the voice agent?`)) {
+                      void fireTrigger('voice-agent-connect', p.id);
+                    }
+                  }}
+                >
+                  Call
+                </button>
+                <button style={smallButton} onClick={() => void removeParticipant(p.id)}>
+                  Remove
+                </button>
+              </Row>
             </Row>
           ))}
         </div>

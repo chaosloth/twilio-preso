@@ -104,10 +104,10 @@ export function useAdminApi(sessionId: string) {
   }, [sessionId]);
 
   const fireTrigger = useCallback(
-    async (triggerId: string) => {
+    async (triggerId: string, targetParticipantId?: string) => {
       await presenterFetch('/api/trigger', {
         method: 'POST',
-        body: JSON.stringify({ sessionId, triggerId }),
+        body: JSON.stringify({ sessionId, triggerId, targetParticipantId }),
       });
     },
     [sessionId]

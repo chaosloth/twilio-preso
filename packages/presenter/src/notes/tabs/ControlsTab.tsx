@@ -1,13 +1,15 @@
+import { DEMO_TRIGGER_IDS } from '@twilio-preso/shared';
 import type { AdminApi } from '../useAdminApi';
 import { Row, heading, panel, smallButton } from '../ui';
 
-const MANUAL_TRIGGERS = [
-  'sms-patience',
-  'sms-orchestrator',
-  'sms-memory',
-  'voice-mass-outbound',
-  'sms-closing',
-] as const;
+/**
+ * Every trigger the backend implements, derived rather than listed: a hardcoded
+ * subset here silently hid the whole WhatsApp half of the demo from the HUD.
+ *
+ * `voice-agent-connect` is the one exception — it calls one volunteer, so it
+ * needs a participant and is fired from their row in the Participants tab.
+ */
+const MANUAL_TRIGGERS = DEMO_TRIGGER_IDS.filter((id) => id !== 'voice-agent-connect');
 
 interface ControlsTabProps {
   api: AdminApi;
