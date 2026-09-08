@@ -1,4 +1,4 @@
-app = "twilio-horizons-preso-backend"
+app = "twilio-horizon-preso-backend"
 primary_region = "syd"
 
 [build]
