@@ -162,6 +162,27 @@ export async function generateResponse(
 }
 
 /**
+ * The same turn, streamed.
+ *
+ * A buffered completion means the caller hears nothing until the model has
+ * written its last token — which is what "slow in turn taking" was. Streaming
+ * hands the first clause to TTS while the rest is still being generated, so the
+ * pause after they stop speaking is one clause long instead of one reply long.
+ */
+export function streamResponse(
+  ctx: CallerContext,
+  config: RelayConfig,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+  userMessage: string
+): AsyncIterable<string> {
+  return llmFor(config.model).stream({
+    system: systemPrompt(ctx, config),
+    maxTokens: 150,
+    messages: [...conversationHistory, { role: 'user' as const, content: userMessage }],
+  });
+}
+
+/**
  * The opening line, written for this caller.
  *
  * Generated rather than templated so it can open on something they said — which

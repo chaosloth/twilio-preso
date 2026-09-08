@@ -1,11 +1,19 @@
 import type { WebSocket } from 'ws';
 import { lookupParticipantByPhone } from './participant.js';
 import { resolveSession } from './session.js';
-import { buildCallerContext, generateResponse, generateGreeting } from './llm.js';
+import { buildCallerContext, generateGreeting, streamResponse } from './llm.js';
 import type { CallerContext } from './llm.js';
 import { fetchProfileContext, lookupProfileByPhone, recallForProfile } from './memory.js';
 import { fetchSessionConfig } from './relayConfig.js';
 import { extractToolCalls, sendFollowupSms } from './tools.js';
+import {
+  SentinelSafeStream,
+  endMessage,
+  errorDescription,
+  textMessage,
+  trimToInterrupt,
+  turnTail,
+} from './protocol.js';
 import { resolveRelayConfig } from '@twilio-preso/shared';
 import type { RelayConfig, SessionRecord } from '@twilio-preso/shared';
 
@@ -19,8 +27,15 @@ interface ConversationRelayEvent {
   customParameters?: Record<string, string>;
   callSid?: string;
   digit?: string;
-  errorMessage?: string;
+  /** Interrupt only: how much of the agent's line the caller actually heard. */
+  utteranceUntilInterrupt?: string;
+  /** Error only. Twilio calls it `description`; there is no `errorMessage`. */
+  description?: string;
 }
+
+/** What a turn says when the model gives nothing usable. A stumble is
+ *  recoverable; silence on a live call is not. */
+const STUMBLE = "Sorry, I'm having trouble thinking straight for a moment. Could you say that again?";
 
 interface SessionState {
   /** Which presentation this call belongs to. Null if it could not be resolved. */
@@ -139,7 +154,8 @@ async function handleEvent(
         const farewell = `It was great chatting with you${name}! We can't wait to see what you build with Twilio. Goodbye!`;
         state.conversationHistory.push({ role: 'user', content: userMessage });
         state.conversationHistory.push({ role: 'assistant', content: farewell });
-        sendResponse(ws, farewell, true);
+        sendResponse(ws, farewell);
+        hangUp(ws, state);
         return;
       }
 
@@ -149,31 +165,54 @@ async function handleEvent(
        * agent having hung up — the caller is left holding silence. A dead model
        * or an expired key (the local smoke run hit exactly that) should sound
        * like a stumble, not a dropped call.
+       *
+       * The reply is streamed clause by clause so the caller hears the first
+       * sentence while the model is still writing the rest. `SentinelSafeStream`
+       * is what makes that safe: a tool sentinel is plain text in the stream, and
+       * flushing eagerly would have the agent read out its own tool call.
        */
-      let reply: string;
+      const stream = new SentinelSafeStream();
+      let spoke = false;
       try {
-        reply = await generateResponse(
+        for await (const chunk of streamResponse(
           state.caller,
           state.config,
           state.conversationHistory,
           userMessage
-        );
+        )) {
+          const speakable = stream.push(chunk);
+          if (speakable) {
+            spoke = true;
+            ws.send(JSON.stringify(textMessage(speakable, { last: false })));
+          }
+        }
       } catch (err) {
         console.error('Response generation failed:', err);
-        sendResponse(ws, "Sorry, I'm having trouble thinking straight for a moment. Could you say that again?");
+        // Whatever was already spoken has to be closed off before the apology,
+        // or Twilio is still waiting on the tail of the previous turn.
+        ws.send(
+          JSON.stringify(
+            textMessage(
+              turnTail(spoke, stream.flush(), STUMBLE),
+              { last: true }
+            )
+          )
+        );
+        if (spoke) ws.send(JSON.stringify(textMessage(STUMBLE, { last: true })));
         return;
       }
 
       /**
-       * Tools, before anything is spoken. The tokens are stripped from the text
+       * Tools, before the tail is spoken. The tokens are stripped from the text
        * either way — the caller must never hear one — and the history keeps the
        * spoken words, so a later turn is not conditioned on a token the model
        * would then copy.
        */
-      const { text: response, called } = extractToolCalls(reply, state.config);
+      const { text: response, called } = extractToolCalls(stream.text(), state.config);
+      ws.send(JSON.stringify(textMessage(turnTail(spoke, stream.flush(), STUMBLE), { last: true })));
 
       state.conversationHistory.push({ role: 'user', content: userMessage });
-      state.conversationHistory.push({ role: 'assistant', content: response });
+      state.conversationHistory.push({ role: 'assistant', content: response || STUMBLE });
 
       if (called.includes('send_followup_sms')) {
         void sendFollowupSms(state.session, state.callerPhone, response);
@@ -181,19 +220,25 @@ async function handleEvent(
 
       if (called.includes('handoff_to_human')) {
         // Ending the relay session returns control to TwiML, where the `<Dial>`
-        // the backend emitted after `</Connect>` connects the human. Saying the
-        // line first, so the transfer is not silent.
-        sendResponse(ws, response);
-        ws.send(JSON.stringify({ type: 'end', handoffData: JSON.stringify({ reason: 'handoff_to_human' }) }));
+        // the backend emitted after `</Connect>` connects the human.
+        ws.send(JSON.stringify(endMessage('handoff_to_human')));
         return;
       }
 
-      sendResponse(ws, response, called.includes('end_call'));
+      if (called.includes('end_call')) {
+        hangUp(ws, state);
+      }
       break;
     }
 
     case 'interrupt': {
-      console.log('User interrupted');
+      // Keep only what the caller heard. The rest of that sentence was never
+      // spoken, and a model conditioned on it answers a question nobody asked.
+      state.conversationHistory = trimToInterrupt(
+        state.conversationHistory,
+        event.utteranceUntilInterrupt ?? ''
+      );
+      console.log(`Interrupted after: "${event.utteranceUntilInterrupt ?? ''}"`);
       break;
     }
 
@@ -203,22 +248,27 @@ async function handleEvent(
     }
 
     case 'error': {
-      console.error('ConversationRelay error:', event.errorMessage);
+      console.error('ConversationRelay error:', errorDescription(event));
       break;
     }
   }
 }
 
-function sendResponse(ws: WebSocket, text: string, hangup = false): void {
-  const message: Record<string, unknown> = {
-    type: 'text',
-    token: text,
-    last: true,
-  };
+function sendResponse(ws: WebSocket, text: string): void {
+  ws.send(JSON.stringify(textMessage(text, { last: true })));
+}
 
-  if (hangup) {
-    message.handoff = { type: 'hangup' };
-  }
-
-  ws.send(JSON.stringify(message));
+/**
+ * End the call after the last line has been spoken.
+ *
+ * An `end` sent immediately cuts the goodbye off mid-word — Twilio stops the
+ * session, not the TTS queue — so it waits for roughly as long as the words take
+ * to say. Rough is fine: overshooting is a beat of silence, undershooting is a
+ * severed farewell.
+ */
+function hangUp(ws: WebSocket, state: SessionState): void {
+  const spoken = state.conversationHistory[state.conversationHistory.length - 1]?.content ?? '';
+  const words = spoken.split(/\s+/).filter(Boolean).length;
+  const ms = Math.min(15000, 1500 + words * 400);
+  setTimeout(() => ws.send(JSON.stringify(endMessage('end_call'))), ms);
 }
