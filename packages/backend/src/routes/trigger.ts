@@ -6,12 +6,39 @@ import { sendToAllOnChannel } from '../services/messaging.js';
 import type { MessageChannel } from '../services/messaging.js';
 import { initiateAgentCall } from '../services/voice.js';
 import { responseFor } from '@twilio-preso/shared';
+import type { Participant } from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
 import { requireTwilioSignature } from '../services/twilioSignature.js';
 import { requireLiveSession } from '../services/sessionContext.js';
 import { recall } from '../services/memory.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
+
+/**
+ * The origin every URL Twilio fetches must be built from. Twilio's signature
+ * covers the full URL, so TwiML served from an origin other than
+ * `publicBaseUrl` is rejected on arrival — silently, and only for real calls.
+ */
+function twimlBase(): string {
+  return config.publicBaseUrl.replace(/\/$/, '');
+}
+
+/**
+ * Rings every phone in the room with the same TwiML. `allSettled`, because one
+ * unreachable handset must not cost the rest of the room the finale.
+ */
+async function callEveryone(
+  participants: Participant[],
+  from: string,
+  url: string
+): Promise<number> {
+  const calls = await Promise.allSettled(
+    participants.map((p) =>
+      client.calls.create({ to: p.phone, from, machineDetection: 'Enable', url })
+    )
+  );
+  return calls.filter((c) => c.status === 'fulfilled').length;
+}
 
 /** TwiML is built as a string here, so anything interpolated into an attribute
  *  is escaped. Session ids are uuids, but the escape is where it belongs. */
@@ -125,28 +152,33 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
           return { callSid };
         }
 
+        /**
+         * The scripted finale: every phone rings and hears the static bot. It
+         * deliberately never uses ConversationRelay — `voice-mass-relay` is the
+         * live-agent version of the same room-wide call, and a talk may show
+         * either or both, so neither may change under the other.
+         */
         case 'voice-mass-outbound': {
-          const useRelay = !!process.env.CONVERSATION_RELAY_URL;
-          // The same origin the inbound webhook and signature validation use:
-          // Twilio's signature covers the full URL, so TwiML fetched from a
-          // different origin than `publicBaseUrl` is rejected on arrival.
-          const base = config.publicBaseUrl.replace(/\/$/, '');
-          const twimlUrl = useRelay
-            ? `${base}/api/voice/conversation-relay?sessionId=${encodeURIComponent(session.id)}`
-            : `${base}/api/voice/demo-bot`;
+          const called = await callEveryone(participants, from, `${twimlBase()}/api/voice/demo-bot`);
+          return { called, total: participants.length, mode: 'static-twiml' };
+        }
 
-          const calls = await Promise.allSettled(
-            participants.map((p) =>
-              client.calls.create({
-                to: p.phone,
-                from,
-                machineDetection: 'Enable',
-                url: twimlUrl,
-              })
-            )
-          );
-          const succeeded = calls.filter((c) => c.status === 'fulfilled').length;
-          return { called: succeeded, total: participants.length, mode: useRelay ? 'conversation-relay' : 'static-twiml' };
+        /**
+         * The same call, answered by the live agent — which resolves each caller
+         * to their profile and greets them by name. Refuses when no relay is
+         * configured rather than silently placing scripted calls: a finale that
+         * quietly degrades to the other trigger's behaviour is worse on stage
+         * than one that says it is not wired up.
+         */
+        case 'voice-mass-relay': {
+          if (!process.env.CONVERSATION_RELAY_URL) {
+            return reply
+              .status(409)
+              .send({ error: 'CONVERSATION_RELAY_URL is not set — use voice-mass-outbound for the scripted bot' });
+          }
+          const url = `${twimlBase()}/api/voice/conversation-relay?sessionId=${encodeURIComponent(session.id)}`;
+          const called = await callEveryone(participants, from, url);
+          return { called, total: participants.length, mode: 'conversation-relay' };
         }
 
         case 'sms-closing': {

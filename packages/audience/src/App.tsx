@@ -15,6 +15,7 @@ import { TextInput } from './pages/TextInput';
 import { Trigger } from './pages/Trigger';
 import { Sentiment } from './pages/Sentiment';
 import { AIPrompt } from './pages/AIPrompt';
+import { ContactCta } from './pages/ContactCta';
 
 type AppState = 'join' | 'register' | 'waiting' | 'interaction';
 
@@ -156,6 +157,12 @@ export function App() {
         return <Trigger interaction={activeInteraction} onSubmit={handleResponse} />;
       case 'sentiment':
         return <Sentiment interaction={activeInteraction} onSubmit={handleResponse} />;
+      // No response to publish: what these produce is a real call or WhatsApp
+      // message arriving over Twilio, not a value on the Sync bus.
+      case 'call-cta':
+        return <ContactCta interaction={activeInteraction} phoneNumber={session.phoneNumber} channel="call" />;
+      case 'whatsapp-cta':
+        return <ContactCta interaction={activeInteraction} phoneNumber={session.phoneNumber} channel="whatsapp" />;
       case 'llm-prompt':
         return <AIPrompt interaction={activeInteraction} stageIndex={activeStageIndex} sessionId={session.sessionId} participantId={participantId} name={name} />;
       default:

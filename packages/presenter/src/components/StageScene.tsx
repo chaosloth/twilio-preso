@@ -25,11 +25,16 @@ const stageComponents: Record<string, React.LazyExoticComponent<ComponentType>> 
   memory: lazy(() => import('../stages/Stage13Memory')),
   intelligence: lazy(() => import('../stages/Stage14Intelligence')),
   'agent-connect': lazy(() => import('../stages/Stage15AgentConnect')),
+  'call-in': lazy(() => import('../stages/Stage20CallIn')),
+  'whatsapp-invite': lazy(() => import('../stages/Stage21WhatsAppInvite')),
   'mcp-server': lazy(() => import('../stages/Stage16MCPServer')),
   'ai-playground': lazy(() => import('../stages/Stage16AIPlayground')),
   innovation: lazy(() => import('../stages/Stage16Innovation')),
   'never-easier': lazy(() => import('../stages/Stage17NeverEasier')),
   'mass-call': lazy(() => import('../stages/Stage18MassCall')),
+  // The live-agent finale reuses the scripted finale's scene: same room-wide
+  // call on screen, different thing answering the phone.
+  'mass-call-agent': lazy(() => import('../stages/Stage18MassCall')),
   closing: lazy(() => import('../stages/Stage19Closing')),
   // 'canvas' has no component on purpose: a blank canvas slide is only ever the
   // elements the presenter placed on it.

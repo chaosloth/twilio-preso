@@ -33,10 +33,22 @@ export interface PublicSession {
   sessionId: string;
   title: string;
   status: SessionStatus;
+  /**
+   * The session's claimed pool number, in E.164. Public on purpose: the call-in
+   * and WhatsApp stages invite the room to contact it, and a phone cannot build
+   * a `tel:` or `wa.me` link for a number it has not been told. It is a Twilio
+   * number owned by the event, never a person's.
+   */
+  phoneNumber: string;
 }
 
 export function toPublicSession(session: SessionRecord): PublicSession {
-  return { sessionId: session.id, title: session.title, status: session.status };
+  return {
+    sessionId: session.id,
+    title: session.title,
+    status: session.status,
+    phoneNumber: session.phoneNumber,
+  };
 }
 
 /** A presenter permitted to sign in. Keyed by E.164 phone. */

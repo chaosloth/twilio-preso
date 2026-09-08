@@ -31,7 +31,21 @@ export interface ParticipantResponse {
 }
 
 // --- Interactions ---
-export type InteractionType = 'poll' | 'text' | 'trigger' | 'sentiment' | 'llm-prompt';
+/**
+ * `call-cta` and `whatsapp-cta` are the inbound half of the demo: instead of
+ * collecting an answer, the phone shows a button that opens a call or a WhatsApp
+ * chat to the session's own claimed number. They publish no response — what they
+ * produce is a real inbound conversation, which arrives over Twilio rather than
+ * over Sync.
+ */
+export type InteractionType =
+  | 'poll'
+  | 'text'
+  | 'trigger'
+  | 'sentiment'
+  | 'llm-prompt'
+  | 'call-cta'
+  | 'whatsapp-cta';
 
 export interface InteractionConfig {
   /** Id of the stage this interaction belongs to. Stable across reordering. */

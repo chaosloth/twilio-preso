@@ -142,6 +142,7 @@ export function App() {
       setStoreSession({
         sessionId: picked.id,
         joinCode: picked.joinCode,
+        phoneNumber: picked.phoneNumber,
         stages: stagesFor(picked),
       });
       setSession(picked);

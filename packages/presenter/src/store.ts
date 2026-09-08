@@ -6,6 +6,9 @@ interface PresenterStore {
    *  Sync object name and API call is derived from it. */
   sessionId: string;
   joinCode: string;
+  /** The session's claimed pool number, in E.164 — the number the call-in and
+   *  WhatsApp stages put on screen and the room dials. */
+  phoneNumber: string;
   /** The session's own resolved deck. There is no module-level deck any more:
    *  what this presenter shows comes from the session record. */
   stages: ResolvedStage[];
@@ -19,7 +22,12 @@ interface PresenterStore {
   pendingAiPrompts: AiPromptPendingEvent[];
   isLive: boolean;
 
-  setSession: (session: { sessionId: string; joinCode: string; stages: ResolvedStage[] }) => void;
+  setSession: (session: {
+    sessionId: string;
+    joinCode: string;
+    phoneNumber: string;
+    stages: ResolvedStage[];
+  }) => void;
   /** Adopt a deck edited in the HUD without jumping the presenter off the slide
    *  they are on — only clamped if the deck got shorter. */
   setStages: (stages: ResolvedStage[]) => void;
@@ -38,6 +46,7 @@ interface PresenterStore {
 export const usePresenterStore = create<PresenterStore>((set) => ({
   sessionId: '',
   joinCode: '',
+  phoneNumber: '',
   stages: [],
   currentStageIndex: 0,
   totalParticipants: 0,
@@ -50,8 +59,8 @@ export const usePresenterStore = create<PresenterStore>((set) => ({
 
   // Clamped against the session's own deck length, not a module constant — two
   // sessions in one browser can have different running orders.
-  setSession: ({ sessionId, joinCode, stages }) =>
-    set({ sessionId, joinCode, stages, currentStageIndex: 0 }),
+  setSession: ({ sessionId, joinCode, phoneNumber, stages }) =>
+    set({ sessionId, joinCode, phoneNumber, stages, currentStageIndex: 0 }),
   setStages: (stages) =>
     set((s) => ({
       stages,

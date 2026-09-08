@@ -21,6 +21,11 @@ export const DEMO_TRIGGER_IDS = [
   'intelligence-analysis',
   'voice-agent-connect',
   'voice-mass-outbound',
+  // The same room-wide call, answered by the ConversationRelay agent instead of
+  // the scripted bot. A separate id rather than a flag on `voice-mass-outbound`:
+  // both are experiences the talk demonstrates, so a deck has to be able to hold
+  // one, the other, or both, and the scripted version must never change under it.
+  'voice-mass-relay',
   'sms-closing',
 ] as const;
 
@@ -360,6 +365,38 @@ const templates: StageTemplate[] = [
     ],
   },
   {
+    id: 'call-in',
+    title: 'Call the Agent',
+    act: 3,
+    notes: 'Read the number off the screen. Every phone also gets a Call now button — the agent answers knowing their name, their poll answers and anything a previous event learned about them.',
+    interaction: {
+      stageId: 'call-in',
+      type: 'call-cta',
+      prompt: 'Call our AI agent — it already knows who you are 👇',
+    },
+    slots: [
+      { key: 'headline', label: 'Headline', kind: 'text', default: 'Call the Agent' },
+      { key: 'subhead', label: 'Subhead', kind: 'text', default: 'It knows who you are before you say a word' },
+      { key: 'image', label: 'Image URL', kind: 'image', default: '' },
+    ],
+  },
+  {
+    id: 'whatsapp-invite',
+    title: 'Message Us on WhatsApp',
+    act: 3,
+    notes: 'Same number, different channel. Scanning the QR opens WhatsApp with the conversation already addressed — nothing to type, nothing to save as a contact.',
+    interaction: {
+      stageId: 'whatsapp-invite',
+      type: 'whatsapp-cta',
+      prompt: 'Start a WhatsApp chat with us 👇',
+    },
+    slots: [
+      { key: 'headline', label: 'Headline', kind: 'text', default: 'Message Us on WhatsApp' },
+      { key: 'subhead', label: 'Subhead', kind: 'text', default: 'Scan to open a chat — no number to save' },
+      { key: 'image', label: 'Image URL', kind: 'image', default: '' },
+    ],
+  },
+  {
     id: 'mcp-server',
     title: 'Twilio MCP Server',
     act: 3,
@@ -427,6 +464,18 @@ const templates: StageTemplate[] = [
     demoTrigger: 'voice-mass-outbound',
     slots: [
       { key: 'headline', label: 'Headline', kind: 'multiline', default: 'Imagine being able to speak to all of your customers at once...' },
+      { key: 'image', label: 'Image URL', kind: 'image', default: '' },
+    ],
+  },
+  {
+    id: 'mass-call-agent',
+    title: 'Mass Outbound — Live Agent',
+    act: 4,
+    notes: 'The same room-wide call, but every phone is answered by the live agent rather than a script — it greets each person by name and can hold a conversation. Needs CONVERSATION_RELAY_URL set, or the trigger refuses rather than quietly falling back.',
+    interaction: null,
+    demoTrigger: 'voice-mass-relay',
+    slots: [
+      { key: 'headline', label: 'Headline', kind: 'multiline', default: '...and have every one of them answered personally.' },
       { key: 'image', label: 'Image URL', kind: 'image', default: '' },
     ],
   },
