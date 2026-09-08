@@ -321,18 +321,54 @@ export function responseObservation(
     : `${participant.name} answered "${response.value}".`;
 }
 
-async function lookupByPhone(phone: string): Promise<string | null> {
-  // `profiles` is an array of profile id strings, not of objects.
-  const result = await memoryFetch<{ profiles?: string[] }>('/Profiles/Lookup', {
-    idType: PHONE_ID_TYPE,
-    value: phone,
-  });
-  return result?.profiles?.[0] ?? null;
+/**
+ * The profile an identifier already points at, or null.
+ *
+ * Lookup takes **one identifier per request** — `{idType, value}` — and answers
+ * `{normalizedValue, profiles}` where `profiles` is an array of profile *ids*,
+ * not objects, earliest first when profiles have been merged.
+ */
+async function lookupIdentifier(idType: string, value: string): Promise<string | null> {
+  try {
+    const result = await memoryFetch<{ profiles?: string[] }>('/Profiles/Lookup', { idType, value });
+    return result?.profiles?.[0] ?? null;
+  } catch (err) {
+    console.warn(`Memory lookup by ${idType} failed:`, err);
+    return null;
+  }
 }
 
 /**
- * Resolves the participant to a Customer Profile, creating one if this phone has
- * never attended before. Lookup first: a returning attendee must land on their
+ * Every identifier this app writes, tried in turn.
+ *
+ * Looking up only `phone` is how duplicates appear: an attendee whose first
+ * contact with this account was a WhatsApp message has a profile carrying the
+ * `whatsapp:` identifier and no `phone` one, so a phone-only lookup misses it and
+ * registration mints a second profile for the same person. A miss on one
+ * identifier is not a miss on the person.
+ */
+async function lookupProfile(phone: string): Promise<string | null> {
+  for (const { idType, value } of identifiersFor(phone)) {
+    const found = await lookupIdentifier(idType, value);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * In-flight upserts, keyed by phone.
+ *
+ * Registration fires this without awaiting it, and the audience app retries a
+ * failed join — so two upserts for one phone can overlap, both miss the lookup,
+ * and both create. The identifiers would eventually merge them, but not before
+ * the voice agent has read the wrong half. One promise per phone makes the second
+ * caller wait for the first one's answer instead.
+ */
+const inFlight = new Map<string, Promise<string | null>>();
+
+/**
+ * Resolves the participant to a Customer Profile, creating one if none of their
+ * identifiers is known. Lookup first: a returning attendee must land on their
  * existing profile, or the memory demo is just an echo of this session.
  *
  * Returns the profile id to store on the participant, or `null` when memory is
@@ -341,9 +377,18 @@ async function lookupByPhone(phone: string): Promise<string | null> {
 export async function upsertProfile(participant: Participant): Promise<string | null> {
   if (!isMemoryEnabled()) return null;
 
+  const pending = inFlight.get(participant.phone);
+  if (pending) return pending;
+
+  const work = resolveProfile(participant).finally(() => inFlight.delete(participant.phone));
+  inFlight.set(participant.phone, work);
+  return work;
+}
+
+async function resolveProfile(participant: Participant): Promise<string | null> {
   const traits = await traitPayload(participant);
 
-  const existing = await lookupByPhone(participant.phone);
+  const existing = await lookupProfile(participant.phone);
   if (existing) {
     // Patching merges, so this adds what's new without clearing anything a
     // previous event learned about them.
@@ -355,10 +400,16 @@ export async function upsertProfile(participant: Participant): Promise<string | 
     return existing;
   }
 
+  // Create bare, then PATCH the traits — the same write the returning-attendee
+  // path uses. A create carrying traits is the one call whose failure mode is a
+  // profile that exists with nothing on it and no second attempt; splitting it
+  // means the traits are written by code that already runs on every join.
   // Create answers with `{id, message}` — not `sid`, and not the profile body.
-  const created = await memoryFetch<{ id?: string }>('/Profiles', { traits });
+  const created = await memoryFetch<{ id?: string }>('/Profiles', {});
   const profileId = created?.id;
   if (!profileId) return null;
+
+  await memoryFetch(`/Profiles/${profileId}`, { traits }, 'PATCH');
 
   // The identifiers are what Identity Resolution matches on next time; the phone
   // trait alone is not enough, though it does carry an `idTypePromotion`.

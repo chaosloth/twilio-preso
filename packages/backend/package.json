@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc --build",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",
@@ -25,6 +26,7 @@
     "@types/node": "^25.6.2",
     "@vercel/node": "^3.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
   }
 }
