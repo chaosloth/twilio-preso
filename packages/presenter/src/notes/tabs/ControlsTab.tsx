@@ -1,4 +1,4 @@
-import { DEMO_TRIGGER_IDS } from '@twilio-preso/shared';
+import { DEFAULT_VERIFY_CHANNEL, DEMO_TRIGGER_IDS, VERIFY_CHANNELS, verifyChannelFor } from '@twilio-preso/shared';
 import type { AdminApi } from '../useAdminApi';
 import { Row, heading, panel, smallButton } from '../ui';
 
@@ -18,7 +18,8 @@ interface ControlsTabProps {
 }
 
 export function ControlsTab({ api, joinCode, onToggleDemo }: ControlsTabProps) {
-  const { demoEnabled, fireTrigger } = api;
+  const { demoEnabled, fireTrigger, session, setVerifyChannel } = api;
+  const channel = session ? verifyChannelFor(session) : DEFAULT_VERIFY_CHANNEL;
 
   return (
     <div>
@@ -67,6 +68,32 @@ export function ControlsTab({ api, joinCode, onToggleDemo }: ControlsTabProps) {
               {trigger}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* The door, not the demo: which channel carries the passcode decides
+          whether anyone gets in at all, so it is a per-session switch rather than
+          a build-time default. */}
+      <div style={panel}>
+        <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Registration passcode</div>
+        <Row style={{ justifyContent: 'flex-start', gap: 8 }}>
+          {VERIFY_CHANNELS.map((option) => (
+            <button
+              key={option}
+              style={{
+                ...smallButton,
+                border: `1px solid ${channel === option ? '#ef223a' : '#4d5777'}`,
+                color: channel === option ? '#ef223a' : '#babecc',
+              }}
+              onClick={() => void setVerifyChannel(option)}
+            >
+              {option === 'whatsapp' ? 'WhatsApp' : 'SMS'}
+            </button>
+          ))}
+        </Row>
+        <div style={{ fontSize: 12, color: '#7e869c', marginTop: 8 }}>
+          What every phone is offered first. An attendee can still switch on their own screen, and a
+          WhatsApp code that fails to send falls back to SMS per phone.
         </div>
       </div>
 

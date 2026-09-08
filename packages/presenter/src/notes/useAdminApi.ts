@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Deck, DeckWarning, ResolvedStage, SessionRecord } from '@twilio-preso/shared';
+import type { Deck, DeckWarning, ResolvedStage, SessionRecord, VerifyChannel } from '@twilio-preso/shared';
 import { presenterFetch } from '../auth';
 import { fetchSession, saveDeck, stagesFor } from '../sessions';
 
@@ -113,6 +113,20 @@ export function useAdminApi(sessionId: string) {
     [sessionId]
   );
 
+  /** Which channel the registration screen offers first. Session-scoped because a
+   *  room whose WhatsApp sender is not approved yet needs SMS on the door. */
+  const setVerifyChannel = useCallback(
+    async (verifyChannel: VerifyChannel) => {
+      const res = await presenterFetch(`/api/sessions/${sessionId}/verify-channel`, {
+        method: 'PUT',
+        body: JSON.stringify({ verifyChannel }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.session) setSession(data.session as SessionRecord);
+    },
+    [sessionId]
+  );
+
   const commitDeck = useCallback(
     async (deck: Deck) => {
       const result = await saveDeck(sessionId, deck);
@@ -133,6 +147,7 @@ export function useAdminApi(sessionId: string) {
     removeParticipant,
     resetSession,
     fireTrigger,
+    setVerifyChannel,
     commitDeck,
     reloadSession,
   };

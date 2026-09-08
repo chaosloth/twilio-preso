@@ -141,7 +141,13 @@ export function App() {
   }
 
   if (state === 'register') {
-    return <Register sessionId={session.sessionId} onRegistered={handleRegistered} />;
+    return (
+      <Register
+        sessionId={session.sessionId}
+        defaultChannel={session.verifyChannel}
+        onRegistered={handleRegistered}
+      />
+    );
   }
 
   const content = (() => {

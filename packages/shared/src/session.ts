@@ -3,6 +3,15 @@ import type { RelayConfig } from './relayConfig.js';
 
 export type SessionStatus = 'draft' | 'live' | 'ended';
 
+/** How the registration passcode reaches a phone. */
+export type VerifyChannel = 'whatsapp' | 'sms';
+
+export const VERIFY_CHANNELS: readonly VerifyChannel[] = ['whatsapp', 'sms'];
+
+/** WhatsApp — it is the channel this talk is about, and the identity the
+ *  attendee's profile is built from. */
+export const DEFAULT_VERIFY_CHANNEL: VerifyChannel = 'whatsapp';
+
 /**
  * One presentation. Stored in the `sessions` control-plane SyncMap, keyed by
  * `joinCode` — the value the audience actually types, so a join is one map
@@ -29,6 +38,13 @@ export interface SessionRecord {
    * default. Absent means "everything default".
    */
   relay?: Partial<RelayConfig>;
+  /**
+   * Which channel registration offers first for the one-time passcode. A room
+   * whose WhatsApp sender is not ready needs SMS, and that is a property of the
+   * event rather than of the build — so it is stored here and the phone is told.
+   * Absent means the default.
+   */
+  verifyChannel?: VerifyChannel;
   /** Claimed from `TWILIO_PHONE_POOL` at creation, released on end. */
   phoneNumber: string;
   status: SessionStatus;
@@ -48,6 +64,19 @@ export interface PublicSession {
    * number owned by the event, never a person's.
    */
   phoneNumber: string;
+  /** Which channel the registration screen offers first. */
+  verifyChannel: VerifyChannel;
+}
+
+/**
+ * Resolved rather than read: the field is optional on the record, and a
+ * hand-edited session must not be able to ask Verify for a channel it does not
+ * have — an unrecognised value is the default, not an error at the door.
+ */
+export function verifyChannelFor(session: SessionRecord): VerifyChannel {
+  return VERIFY_CHANNELS.includes(session.verifyChannel as VerifyChannel)
+    ? (session.verifyChannel as VerifyChannel)
+    : DEFAULT_VERIFY_CHANNEL;
 }
 
 export function toPublicSession(session: SessionRecord): PublicSession {
@@ -56,6 +85,7 @@ export function toPublicSession(session: SessionRecord): PublicSession {
     title: session.title,
     status: session.status,
     phoneNumber: session.phoneNumber,
+    verifyChannel: verifyChannelFor(session),
   };
 }
 

@@ -6,25 +6,29 @@ interface RegisterProps {
   /** The session being joined. Registration is session-scoped: the backend
    *  rejects anything that is not a live session. */
   sessionId: string;
+  /** Which channel this event offers first, from the session record. The phone
+   *  can still switch — this is the default, not a restriction. */
+  defaultChannel: Channel;
   onRegistered: (participantId: string, name: string) => void;
 }
 
 type Step = 'phone' | 'otp' | 'name';
-/** How the code arrives. WhatsApp is the default — it is the channel the talk is
- *  about, and the one the profile's WhatsApp identity is built from. */
+/** How the code arrives. WhatsApp is the usual default — it is the channel the
+ *  talk is about, and the one the profile's WhatsApp identity is built from — but
+ *  the event decides, since a room whose sender is not approved needs SMS. */
 type Channel = 'whatsapp' | 'sms';
 
-export function Register({ sessionId, onRegistered }: RegisterProps) {
+export function Register({ sessionId, defaultChannel, onRegistered }: RegisterProps) {
   const [step, setStep] = useState<Step>('phone');
   const [countryCode, setCountryCode] = useState('+61');
   const [localNumber, setLocalNumber] = useState('');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
-  const [channel, setChannel] = useState<Channel>('whatsapp');
+  const [channel, setChannel] = useState<Channel>(defaultChannel);
   /** What the backend actually sent on. WhatsApp falls back to SMS when the
    *  Verify service cannot deliver on it, and the screen has to say so or the
    *  attendee waits for a message in the wrong app. */
-  const [sentOn, setSentOn] = useState<Channel>('whatsapp');
+  const [sentOn, setSentOn] = useState<Channel>(defaultChannel);
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
   const [loading, setLoading] = useState(false);
@@ -42,7 +46,7 @@ export function Register({ sessionId, onRegistered }: RegisterProps) {
       const res = await fetch(`${BACKEND_URL}/api/verify/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: fullPhone, channel }),
+        body: JSON.stringify({ phone: fullPhone, channel, sessionId }),
       });
 
       if (!res.ok) {

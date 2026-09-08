@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { resolveRelayConfig, toPublicSession, validateDeck } from '@twilio-preso/shared';
-import type { Deck, RelayConfig } from '@twilio-preso/shared';
+import { VERIFY_CHANNELS, resolveRelayConfig, toPublicSession, validateDeck } from '@twilio-preso/shared';
+import type { Deck, RelayConfig, VerifyChannel } from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
 import {
   PhonePoolExhaustedError,
@@ -13,6 +13,7 @@ import {
   setSessionDeck,
   setSessionRelay,
   setSessionStatus,
+  setSessionVerifyChannel,
 } from '../services/sessions.js';
 import { getAllParticipants } from '../services/sync.js';
 import { buildSnapshot, snapshotFilename, toCsv } from '../services/export.js';
@@ -130,6 +131,21 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const session = await setSessionStatus(request.params.id, status);
+      if (!session) return reply.status(404).send({ error: 'Session not found' });
+      return { session };
+    }
+  );
+
+  /** The registration channel. Its own endpoint rather than part of the relay
+   *  config: it governs the door, not the voice agent. */
+  app.put<{ Params: { id: string }; Body: { verifyChannel?: string } }>(
+    '/api/sessions/:id/verify-channel',
+    async (request, reply) => {
+      const channel = request.body?.verifyChannel;
+      if (!VERIFY_CHANNELS.includes(channel as VerifyChannel)) {
+        return reply.status(400).send({ error: "verifyChannel must be 'whatsapp' or 'sms'" });
+      }
+      const session = await setSessionVerifyChannel(request.params.id, channel as VerifyChannel);
       if (!session) return reply.status(404).send({ error: 'Session not found' });
       return { session };
     }

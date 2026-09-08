@@ -10,6 +10,7 @@ import type {
   PresenterRecord,
   SessionRecord,
   SessionStatus,
+  VerifyChannel,
 } from '@twilio-preso/shared';
 import { config } from '../config.js';
 import { initSessionSync, teardownSessionSync } from './sync.js';
@@ -317,6 +318,16 @@ export async function setSessionDeck(
   const session = await getSessionById(sessionId);
   if (!session) return null;
   return updateSession(session, { deck });
+}
+
+/** Which channel registration offers first for the passcode. */
+export async function setSessionVerifyChannel(
+  sessionId: string,
+  verifyChannel: VerifyChannel
+): Promise<SessionRecord | null> {
+  const session = await getSessionById(sessionId);
+  if (!session) return null;
+  return updateSession(session, { verifyChannel });
 }
 
 /**
