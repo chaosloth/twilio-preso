@@ -15,7 +15,7 @@ import {
   trimToInterrupt,
   turnTail,
 } from './protocol.js';
-import { resolveRelayConfig, resolvedLanguages } from '@twilio-preso/shared';
+import { languageCodes, resolveRelayConfig } from '@twilio-preso/shared';
 import type { RelayConfig, SessionRecord } from '@twilio-preso/shared';
 
 interface ConversationRelayEvent {
@@ -243,7 +243,7 @@ async function handleEvent(
        */
       for (const call of calls) {
         if (call.id !== 'switch_language') continue;
-        const allowed = resolvedLanguages(state.config);
+        const allowed = languageCodes(state.config);
         const target = allowed.find((l) => l.toLowerCase() === call.arg.toLowerCase());
         if (!target) {
           console.warn(`Model asked for unsupported language "${call.arg}" — staying on ${state.config.language}`);

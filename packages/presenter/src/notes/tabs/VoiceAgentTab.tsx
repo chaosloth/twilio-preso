@@ -8,10 +8,12 @@ import {
   TRANSCRIPTION_PROVIDERS,
   TTS_PROVIDERS,
   VOICE_PRESETS,
+  languageLabel,
   resolveRelayConfig,
   supportsAutoLanguageDetection,
+  withLanguageDefaults,
 } from '@twilio-preso/shared';
-import type { RelayConfig, RelayToolId } from '@twilio-preso/shared';
+import type { LanguageVoice, RelayConfig, RelayToolId } from '@twilio-preso/shared';
 import { fetchRelayConfig, placeTestCall, saveRelayConfig } from '../../sessions';
 import { ErrorText, Row, caption, heading, panel, smallButton, textInput } from '../ui';
 
@@ -53,6 +55,13 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
     setDraft((d) =>
       d ? { ...d, tools: d.tools.map((t) => (t.id === id ? { ...t, ...patch } : t)) } : d
     );
+    setStatus('');
+  }
+
+  /** One row's code/provider/voice. Replaced whole rather than patched, so a code
+   *  change can carry that language's own default voice with it. */
+  function setLanguage(index: number, next: LanguageVoice) {
+    setDraft((d) => (d ? { ...d, languages: d.languages.map((l, i) => (i === index ? next : l)) } : d));
     setStatus('');
   }
 
@@ -209,19 +218,8 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
           hint="or type any tag"
           value={draft.language}
           freeText
-          options={LANGUAGE_PRESETS.map((l) => ({ value: l, label: l }))}
+          options={LANGUAGE_PRESETS.map((l) => ({ value: l, label: `${languageLabel(l)} · ${l}` }))}
           onChange={(v) => set('language', v)}
-        />
-        <Field
-          label="Other languages the call may switch to"
-          hint="comma-separated BCP-47 tags"
-          value={draft.languages.join(', ')}
-          onChange={(v) =>
-            set(
-              'languages',
-              v.split(',').map((l) => l.trim()).filter(Boolean)
-            )
-          }
         />
         <label style={{ fontSize: 13, display: 'block', marginBottom: 10 }}>
           <input
@@ -235,11 +233,6 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
             <span style={{ color: '#7e869c' }}> — needs Deepgram ASR with ElevenLabs TTS</span>
           )}
         </label>
-        <p style={{ ...caption, textTransform: 'none', letterSpacing: 0, marginBottom: 10 }}>
-          Every language listed becomes a <code>&lt;Language&gt;</code> on the call, and the agent’s
-          <code> switch_language</code> tool can move between them mid-conversation. A tag that is
-          not listed cannot be switched to.
-        </p>
         <Select
           label="Transcription provider"
           value={draft.transcriptionProvider}
@@ -257,6 +250,68 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
           onChange={(v) => set('speechModel', v)}
         />
         <Field label="Model override" value={draft.model} onChange={(v) => set('model', v)} hint="blank uses VOICE_LLM_MODEL / LLM_MODEL" />
+      </div>
+
+
+      {/* Per-language voices. A tag on its own is not enough: `<Language>`
+          inherits the parent's voice, so French offered without a French voice is
+          the English voice reading French. Twilio's own default voice per language
+          is filled in on add, and can be overridden here. */}
+      <div style={panel}>
+        <div style={heading}>Languages the call may switch to</div>
+        <p style={{ ...caption, textTransform: 'none', letterSpacing: 0, marginBottom: 10 }}>
+          Each row becomes a <code>&lt;Language&gt;</code> on the call, and the agent’s
+          <code> switch_language</code> tool can move between them mid-conversation. A language that
+          is not listed cannot be switched to. Leave a provider blank to inherit the agent’s own.
+        </p>
+        {draft.languages.map((lang, i) => (
+          <Row key={`${lang.code}:${i}`} style={{ justifyContent: 'flex-start', alignItems: 'flex-end', gap: 8, marginBottom: 8 }}>
+            <div style={{ width: 150 }}>
+              <Select
+                label="Language"
+                value={lang.code}
+                freeText
+                options={LANGUAGE_PRESETS.map((l) => ({ value: l, label: `${languageLabel(l)} · ${l}` }))}
+                onChange={(v) => setLanguage(i, withLanguageDefaults({ code: v }))}
+              />
+            </div>
+            <div style={{ width: 120 }}>
+              <Select
+                label="TTS provider"
+                value={lang.ttsProvider ?? ''}
+                options={[{ value: '', label: 'inherit' }, ...TTS_PROVIDERS.map((p) => ({ value: p, label: p }))]}
+                onChange={(v) => setLanguage(i, { ...lang, ttsProvider: (v || undefined) as LanguageVoice['ttsProvider'] })}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <Select
+                label="Voice"
+                value={lang.voice ?? ''}
+                freeText
+                options={VOICE_PRESETS[lang.ttsProvider ?? draft.ttsProvider].map((v) => ({ value: v.id, label: `${v.label} · ${v.id}` }))}
+                onChange={(v) => setLanguage(i, { ...lang, voice: v || undefined })}
+              />
+            </div>
+            <button style={smallButton} onClick={() => set('languages', draft.languages.filter((_, j) => j !== i))}>
+              Remove
+            </button>
+          </Row>
+        ))}
+        <button
+          style={smallButton}
+          onClick={() =>
+            set('languages', [
+              ...draft.languages,
+              withLanguageDefaults({
+                code:
+                  LANGUAGE_PRESETS.find((l) => l !== draft.language && !draft.languages.some((x) => x.code === l)) ??
+                  'en-US',
+              }),
+            ])
+          }
+        >
+          Add language
+        </button>
       </div>
 
       <div style={panel}>

@@ -97,10 +97,22 @@ function relayTwiml(session: SessionRecord | null, config: RelayConfig, url: str
    * One `<Language>` per language the call may turn into. This is what makes the
    * agent's `[[switch_language:…]]` possible at all: the switch message selects
    * a language that was declared here, and one that was not ends the session.
-   * The parent's voice and providers are inherited, so each child is just a code.
+   *
+   * Each child carries its *own* voice. A `<Language>` inherits the parent's
+   * otherwise, which means an English voice reading Tamil — worse than not
+   * offering Tamil at all. Only the fields the session actually set are emitted,
+   * so an inherited provider stays inherited rather than being pinned here.
    */
   const languageChildren = languages
-    .map((code) => `\n      <Language code="${escapeXml(code)}" />`)
+    .map((lang) => {
+      const langAttrs = [`code="${escapeXml(lang.code)}"`];
+      if (lang.ttsProvider) langAttrs.push(`ttsProvider="${escapeXml(lang.ttsProvider)}"`);
+      if (lang.voice) langAttrs.push(`voice="${escapeXml(lang.voice)}"`);
+      if (lang.transcriptionProvider)
+        langAttrs.push(`transcriptionProvider="${escapeXml(lang.transcriptionProvider)}"`);
+      if (lang.speechModel) langAttrs.push(`speechModel="${escapeXml(lang.speechModel)}"`);
+      return `\n      <Language ${langAttrs.join(' ')} />`;
+    })
     .join('');
 
   const parameter = session

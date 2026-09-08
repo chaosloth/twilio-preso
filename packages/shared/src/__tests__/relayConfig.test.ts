@@ -6,6 +6,7 @@ import {
   resolveRelayConfig,
   INTERRUPT_MODES,
   supportsAutoLanguageDetection,
+  languageCodes,
   resolvedLanguages,
 } from '../relayConfig.js';
 
@@ -129,17 +130,17 @@ describe('language switching', () => {
   });
 
   it('resolves the primary language first and never repeats it', () => {
-    const config = resolveRelayConfig({ language: 'fr-FR', languages: ['fr-FR', 'ja-JP'] });
-    expect(resolvedLanguages(config)).toEqual(['fr-FR', 'ja-JP']);
+    const config = resolveRelayConfig({ language: 'fr-FR', languages: ['fr-FR', 'ja-JP'] as never });
+    expect(languageCodes(config)).toEqual(['fr-FR', 'ja-JP']);
   });
 
   it('drops a language that is not a plausible BCP-47 tag', () => {
     const config = resolveRelayConfig({ languages: ['ja-JP', 'nonsense language', ''] as never });
-    expect(resolvedLanguages(config)).toEqual([DEFAULT_RELAY_CONFIG.language, 'ja-JP']);
+    expect(languageCodes(config)).toEqual([DEFAULT_RELAY_CONFIG.language, 'ja-JP']);
   });
 
   it('tells the model which languages it may switch to', () => {
-    const config = resolveRelayConfig({ language: 'en-AU', languages: ['ja-JP'] });
+    const config = resolveRelayConfig({ language: 'en-AU', languages: ['ja-JP'] as never });
     const prompt = relayToolPrompt(config);
     expect(prompt).toContain('[[switch_language:ja-JP]]');
     expect(prompt).toContain('ja-JP');
@@ -164,5 +165,64 @@ describe('partial prompts', () => {
     expect(DEFAULT_RELAY_CONFIG.partialPrompts).toBe(false);
     expect(resolveRelayConfig({ partialPrompts: true }).partialPrompts).toBe(true);
     expect(resolveRelayConfig({ partialPrompts: 'yes' as never }).partialPrompts).toBe(false);
+  });
+});
+
+describe('per-language voices', () => {
+  /**
+   * The languages the talk actually needs. Mandarin is the interesting one: it is
+   * the only default that is not an ElevenLabs voice, because Twilio's ElevenLabs
+   * table has no Mandarin entry.
+   */
+  it('ships the languages the talk needs, each with a voice', () => {
+    const codes = languageCodes(resolveRelayConfig());
+    for (const wanted of ['en-AU', 'en-US', 'zh-CN', 'it-IT', 'id-ID', 'ta-IN', 'hi-IN']) {
+      expect(codes).toContain(wanted);
+    }
+    for (const entry of resolvedLanguages(resolveRelayConfig())) {
+      expect(entry.voice).toBeTruthy();
+      expect(entry.ttsProvider).toBeTruthy();
+    }
+  });
+
+  it('gives Mandarin a Google voice, since ElevenLabs has none', () => {
+    const mandarin = resolvedLanguages(resolveRelayConfig()).find((l) => l.code === 'zh-CN');
+    expect(mandarin?.ttsProvider).toBe('Google');
+    expect(mandarin?.transcriptionProvider).toBe('Google');
+  });
+
+  /** A session stored before per-language voices existed holds bare tags. It has
+   *  to come back as rows with voices, not as rows that inherit an English one. */
+  it('migrates a stored list of bare tags to voiced rows', () => {
+    const config = resolveRelayConfig({ languages: ['fr-FR', 'ta-IN'] as never });
+    const tamil = config.languages.find((l) => l.code === 'ta-IN');
+    expect(tamil?.ttsProvider).toBe('ElevenLabs');
+    expect(tamil?.voice).toBeTruthy();
+    expect(tamil?.voice).not.toBe(DEFAULT_RELAY_CONFIG.voice);
+  });
+
+  it('keeps a voice the presenter chose', () => {
+    const config = resolveRelayConfig({
+      languages: [{ code: 'fr-FR', voice: 'my-own-voice', ttsProvider: 'ElevenLabs' }],
+    });
+    expect(config.languages[0].voice).toBe('my-own-voice');
+  });
+
+  /** The primary language is a `<Language>` too, and it speaks with the parent's
+   *  own voice — not the table's default for that tag. */
+  it('resolves the primary language with the agent voice', () => {
+    const config = resolveRelayConfig({ language: 'en-AU', voice: 'chosen', ttsProvider: 'ElevenLabs' });
+    expect(resolvedLanguages(config)[0]).toMatchObject({
+      code: 'en-AU',
+      voice: 'chosen',
+      ttsProvider: 'ElevenLabs',
+    });
+  });
+
+  it('drops a row whose tag TwiML would reject', () => {
+    const config = resolveRelayConfig({
+      languages: [{ code: 'ja-JP' }, { code: 'nonsense language' }, { code: '' }] as never,
+    });
+    expect(languageCodes(config)).toEqual([DEFAULT_RELAY_CONFIG.language, 'ja-JP']);
   });
 });
