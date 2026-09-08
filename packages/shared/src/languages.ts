@@ -67,22 +67,29 @@ export const LANGUAGE_VOICE_DEFAULTS: Record<
   'vi-VN': { label: 'Vietnamese', ttsProvider: 'ElevenLabs', voice: 'foH7s9fX31wFFH2yqrFa' },
   /**
    * Mandarin is the one language Twilio's ElevenLabs table does not cover, and a
-   * talk in Singapore needs it — so it comes from Google instead. Google's own
-   * code for Mandarin is `cmn-CN`, which is why the voice id does not begin with
-   * the `zh-CN` tag Twilio wants in `code`.
+   * talk in Singapore needs it — so the *voice* comes from Google instead. Google
+   * names the language `cmn-CN` for TTS and `cmn-Hans-CN` for STT, neither of
+   * which is the `zh-CN` tag Twilio wants in `code` — which is why the voice id
+   * does not begin with the tag, and why transcription is left inherited
+   * (`GOOGLE_STT_UNSUPPORTED` below).
    *
    * Consequences worth knowing: this language cannot take part in `multi`
    * automatic detection (that needs ElevenLabs throughout), and it is the one row
    * here not copied from a Twilio table — check it in the Console against the
    * account's available voices before a talk depends on it.
    */
-  'zh-CN': {
-    label: 'Mandarin',
-    ttsProvider: 'Google',
-    voice: 'cmn-CN-Wavenet-A',
-    transcriptionProvider: 'Google',
-  },
+  'zh-CN': { label: 'Mandarin', ttsProvider: 'Google', voice: 'cmn-CN-Wavenet-A' },
 };
+
+/**
+ * Tags Google speech-to-text does not publish, so `transcriptionProvider="Google"`
+ * on one of these is invalid TwiML — Twilio rejects the pair it builds from the
+ * row (`google/zh-CN/`, error 64101) and the whole call fails before a word is
+ * spoken. It is the *tag* that is wrong, not the language: Google STT v2 calls
+ * Mandarin `cmn-Hans-CN`, while `code` here has to be the BCP-47 tag TTS and the
+ * agent's switch tool use. Deepgram accepts `zh-CN`, so these inherit it.
+ */
+const GOOGLE_STT_UNSUPPORTED = new Set(['zh-CN']);
 
 /** Tags the HUD offers, most-likely first. Any other BCP-47 tag may be typed. */
 export const LANGUAGE_PRESETS = Object.keys(LANGUAGE_VOICE_DEFAULTS);
@@ -100,10 +107,17 @@ export function languageLabel(code: string): string {
 export function withLanguageDefaults(entry: LanguageVoice): LanguageVoice {
   const preset = LANGUAGE_VOICE_DEFAULTS[entry.code];
   if (!preset) return { ...entry };
+  const transcriptionProvider = entry.transcriptionProvider ?? preset.transcriptionProvider;
   return {
     ...entry,
     ttsProvider: entry.ttsProvider ?? preset.ttsProvider,
     voice: entry.voice ?? preset.voice,
-    transcriptionProvider: entry.transcriptionProvider ?? preset.transcriptionProvider,
+    // Dropped rather than kept, and dropped on read rather than on write: a
+    // session created while Mandarin defaulted to Google ASR holds that in its
+    // record, where it stays a call-ending 64101 until something removes it.
+    transcriptionProvider:
+      transcriptionProvider === 'Google' && GOOGLE_STT_UNSUPPORTED.has(entry.code)
+        ? undefined
+        : transcriptionProvider,
   };
 }

@@ -185,10 +185,29 @@ describe('per-language voices', () => {
     }
   });
 
-  it('gives Mandarin a Google voice, since ElevenLabs has none', () => {
+  /**
+   * Mandarin needs a Google *voice* and must not ask for Google *transcription*.
+   * TTS and ASR are separate choices, and Google STT v2 publishes Mandarin as
+   * `cmn-Hans-CN` — there is no `zh-CN` there. Sending the pair Twilio built from
+   * this row (`google/zh-CN/`) is a 64101 that fails the whole call, so the row
+   * inherits Deepgram, which does accept `zh-CN`.
+   */
+  it('gives Mandarin a Google voice but leaves transcription inherited', () => {
     const mandarin = resolvedLanguages(resolveRelayConfig()).find((l) => l.code === 'zh-CN');
     expect(mandarin?.ttsProvider).toBe('Google');
-    expect(mandarin?.transcriptionProvider).toBe('Google');
+    expect(mandarin?.voice).toBe('cmn-CN-Wavenet-A');
+    expect(mandarin?.transcriptionProvider).toBeUndefined();
+  });
+
+  /** A session created while the Google-ASR default shipped holds it in its
+   *  record, where it stays invalid. Migrated on read, like the interruptible
+   *  boolean — otherwise the fix needs a presenter to clear a dropdown by hand. */
+  it('migrates a stored Mandarin row that asked for Google transcription', () => {
+    const config = resolveRelayConfig({
+      languages: [{ code: 'zh-CN', ttsProvider: 'Google', voice: 'cmn-CN-Wavenet-A', transcriptionProvider: 'Google' }],
+    });
+    expect(config.languages[0].transcriptionProvider).toBeUndefined();
+    expect(config.languages[0].voice).toBe('cmn-CN-Wavenet-A');
   });
 
   /** A session stored before per-language voices existed holds bare tags. It has
