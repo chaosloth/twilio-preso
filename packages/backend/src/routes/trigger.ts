@@ -127,7 +127,10 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
 
         case 'voice-mass-outbound': {
           const useRelay = !!process.env.CONVERSATION_RELAY_URL;
-          const base = process.env.BACKEND_URL || 'http://localhost:3001';
+          // The same origin the inbound webhook and signature validation use:
+          // Twilio's signature covers the full URL, so TwiML fetched from a
+          // different origin than `publicBaseUrl` is rejected on arrival.
+          const base = config.publicBaseUrl.replace(/\/$/, '');
           const twimlUrl = useRelay
             ? `${base}/api/voice/conversation-relay?sessionId=${encodeURIComponent(session.id)}`
             : `${base}/api/voice/demo-bot`;
