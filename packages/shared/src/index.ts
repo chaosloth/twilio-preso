@@ -13,3 +13,4 @@ export * from './phone.js';
 export * from './relayConfig.js';
 export * from './languages.js';
 export * from './contentTemplates.js';
+export * from './roomContext.js';

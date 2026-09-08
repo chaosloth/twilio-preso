@@ -166,6 +166,40 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
         </p>
       </div>
 
+      {/* The room's collective answers. Individual answers are already in the
+          instructions via {{context}}; this is the other half — what the
+          majority chose, which is what the demo actually built. */}
+      <div style={panel}>
+        <div style={heading}>What the room decided</div>
+        <label style={{ fontSize: 13, display: 'block', marginBottom: 10 }}>
+          <input
+            type="checkbox"
+            checked={draft.roomContext}
+            onChange={(e) => set('roomContext', e.target.checked)}
+          />{' '}
+          Tell the agent the aggregate answers, not only this caller’s
+        </label>
+        <div style={caption}>How to use the majority</div>
+        <textarea
+          style={{
+            ...textInput,
+            width: '100%',
+            minHeight: 80,
+            resize: 'vertical',
+            marginTop: 6,
+            opacity: draft.roomContext ? 1 : 0.5,
+          }}
+          value={draft.outcomeInstruction}
+          disabled={!draft.roomContext}
+          onChange={(e) => set('outcomeInstruction', e.target.value)}
+        />
+        <p style={{ ...caption, textTransform: 'none', letterSpacing: 0, marginTop: 8 }}>
+          Every question the audience answered is tallied and handed to the agent with its counts —
+          a poll added to the deck needs nothing here. Where the caller’s own answer lost, the agent
+          is told so, which is what lets it say what was built and still acknowledge their pick.
+        </p>
+      </div>
+
       <div style={panel}>
         <div style={heading}>Tools</div>
         {draft.tools.map((tool) => (

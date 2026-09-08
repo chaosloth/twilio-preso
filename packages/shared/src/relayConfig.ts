@@ -198,6 +198,22 @@ export interface RelayConfig {
    *  it multiplies the `prompt` events an app has to reason about, and a demo
    *  that double-answers is worse than one that waits. */
   partialPrompts: boolean;
+  /**
+   * Tell the agent what the *room* answered, not only what this caller did.
+   *
+   * Individual answers are personal and live on the caller's memory profile; the
+   * aggregate is what the presentation actually built from, and a majority can
+   * differ from any one attendee. On by default — the finale's whole line is
+   * "here is what we built, and here is what you picked". Off is a deliberate
+   * demo choice: the agent working from one person's answers alone.
+   */
+  roomContext: boolean;
+  /**
+   * How the agent should use that aggregate. Editable because what the majority
+   * *means* is a property of the talk, not of this code: today the brand poll
+   * decides a storefront, next month it decides something else.
+   */
+  outcomeInstruction: string;
   /** Turns before the agent says goodbye. Inbound is longer on purpose: someone
    *  who chose to ring in is having a conversation, not watching a beat of a
    *  presentation. */
@@ -253,6 +269,9 @@ Keep every reply SHORT — one or two sentences, because this is a phone call an
   ignoreBackchannel: true,
   dtmfDetection: true,
   partialPrompts: false,
+  roomContext: true,
+  outcomeInstruction:
+    "What the room chose is what we actually built — the majority decides, not any one person. Say what was built from those answers, in the caller's own terms, and if their pick lost, acknowledge it warmly rather than glossing over it.",
   maxTurnsInbound: 12,
   maxTurnsOutbound: 3,
   handoffNumber: '',
@@ -324,6 +343,8 @@ export function resolveRelayConfig(stored?: Partial<RelayConfig> | null): RelayC
     ignoreBackchannel: bool('ignoreBackchannel'),
     dtmfDetection: bool('dtmfDetection'),
     partialPrompts: bool('partialPrompts'),
+    roomContext: bool('roomContext'),
+    outcomeInstruction: str('outcomeInstruction'),
     maxTurnsInbound: turns('maxTurnsInbound'),
     maxTurnsOutbound: turns('maxTurnsOutbound'),
     handoffNumber: str('handoffNumber'),

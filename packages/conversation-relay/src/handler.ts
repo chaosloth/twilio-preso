@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws';
-import { lookupParticipantByPhone } from './participant.js';
+import { findParticipantByPhone, listParticipants } from './participant.js';
 import { resolveSession } from './session.js';
 import { buildCallerContext, generateGreeting, streamResponse } from './llm.js';
 import type { CallerContext } from './llm.js';
@@ -15,8 +15,8 @@ import {
   trimToInterrupt,
   turnTail,
 } from './protocol.js';
-import { languageCodes, resolveRelayConfig } from '@twilio-preso/shared';
-import type { RelayConfig, SessionRecord } from '@twilio-preso/shared';
+import { languageCodes, resolveRelayConfig, tallyRoom } from '@twilio-preso/shared';
+import type { RelayConfig, RoomTally, SessionRecord } from '@twilio-preso/shared';
 
 interface ConversationRelayEvent {
   type: 'setup' | 'prompt' | 'interrupt' | 'dtmf' | 'error';
@@ -101,12 +101,18 @@ async function handleEvent(
       // still gets greeted rather than met with silence.
       const call = await resolveSession(event);
       let participant = null;
+      // What the room answered as a whole. Read here, from the same list the
+      // caller is found in: the aggregate is what the presentation built from,
+      // and a majority can differ from the person on the line.
+      let room: RoomTally[] = [];
       if (!call) {
         console.warn(`Call from ${event.from} to ${event.to} matched no session — greeting generically`);
       } else {
         state.sessionId = call.sessionId;
+        const participants = await listParticipants(call.sessionId);
+        room = tallyRoom(participants);
         if (call.participantPhone) {
-          participant = await lookupParticipantByPhone(call.sessionId, call.participantPhone);
+          participant = findParticipantByPhone(participants, call.participantPhone);
         }
         console.log(
           `Call connected: ${call.participantPhone} in session ${call.sessionId} -> ${participant?.name || 'unknown'}`
@@ -140,7 +146,7 @@ async function handleEvent(
         ),
       ]);
 
-      state.caller = buildCallerContext(participant, profile, inbound);
+      state.caller = buildCallerContext(participant, profile, inbound, room);
       state.caller.recall = recall;
 
       const greeting = await generateGreeting(state.caller, state.config);

@@ -13,22 +13,30 @@ const syncService = client.sync.v1.services(config.twilio.syncServiceSid);
  * greeted with the answers it gave at the event it is currently on the phone
  * about, and a number registered at neither is simply unknown.
  */
-export async function lookupParticipantByPhone(
-  sessionId: string,
-  phone: string
-): Promise<Participant | null> {
+export async function listParticipants(sessionId: string): Promise<Participant[]> {
   try {
     const mapName = syncNames(sessionId).participants;
     const items = await syncService.syncMaps(mapName).syncMapItems.list({ limit: 500 });
-    const normalized = normalizePhone(phone);
-    const match = items.find(
-      (item) => normalizePhone((item.data as Participant).phone) === normalized
-    );
-    return match ? (match.data as Participant) : null;
+    return items.map((item) => item.data as Participant);
   } catch (err) {
-    console.error(`Failed to look up participant in session ${sessionId}:`, err);
-    return null;
+    console.error(`Failed to read participants in session ${sessionId}:`, err);
+    return [];
   }
+}
+
+/**
+ * The caller, out of a room already in hand.
+ *
+ * Takes the list rather than fetching one, because setup needs the whole room
+ * anyway — the aggregate answers are what the finale talks about — and a second
+ * list of five hundred items is latency on a ringing phone for data already read.
+ */
+export function findParticipantByPhone(
+  participants: Participant[],
+  phone: string
+): Participant | null {
+  const normalized = normalizePhone(phone);
+  return participants.find((p) => normalizePhone(p.phone) === normalized) ?? null;
 }
 
 function normalizePhone(phone: string): string {

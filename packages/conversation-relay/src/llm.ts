@@ -1,7 +1,7 @@
 import { createLlmClient, llmConfigFromEnv } from '@twilio-preso/llm';
 import type { LlmClient } from '@twilio-preso/llm';
 import { STAGE_LIBRARY, relayToolPrompt } from '@twilio-preso/shared';
-import type { Participant, RelayConfig } from '@twilio-preso/shared';
+import type { Participant, RelayConfig, RoomTally } from '@twilio-preso/shared';
 import type { ProfileContext } from './memory.js';
 
 /**
@@ -40,8 +40,15 @@ export interface CallerContext {
   /** The mandatory poll choices, from the durable profile's traits — so a caller
    *  who chose them at a previous event is still known by them today. */
   choices: Array<{ label: string; value: string }>;
-  /** This session's answers, as question/answer pairs. */
-  answers: Array<{ question: string | null; answer: string }>;
+  /** This session's answers. The stage id is carried so the room's collective
+   *  answer to the same question can be compared with theirs. */
+  answers: Array<{ stageId: string; question: string | null; answer: string }>;
+  /**
+   * What the whole room answered, question by question. Separate from `answers`
+   * because they mean different things and the agent must not conflate them:
+   * `answers` is what this person said, `room` is what the presentation built.
+   */
+  room: RoomTally[];
   /** Recent observations from the durable profile, newest first. */
   observations: string[];
   /** A semantic recall, which may surface something older than the recent list. */
@@ -62,7 +69,8 @@ export interface CallerContext {
 export function buildCallerContext(
   participant: Participant | null,
   profile: ProfileContext | null,
-  inbound: boolean
+  inbound: boolean,
+  room: RoomTally[] = []
 ): CallerContext {
   const contact = profile?.traits?.Contact ?? {};
   const live = profile?.traits?.['live-presentation'] ?? {};
@@ -71,6 +79,7 @@ export function buildCallerContext(
   const answers = Object.values(participant?.responses ?? {})
     .filter((r) => r.value && r.type !== 'llm-prompt')
     .map((r) => ({
+      stageId: r.stageId,
       question: STAGE_LIBRARY[r.stageId]?.interaction?.prompt ?? null,
       answer: r.value,
     }));
@@ -87,6 +96,7 @@ export function buildCallerContext(
     answers,
     observations: profile?.observations ?? [],
     recall: null,
+    room,
     inbound,
   };
 }
@@ -94,7 +104,14 @@ export function buildCallerContext(
 /** True when there is something specific enough to personalise on. Drives the
  *  choice between an LLM greeting and the generic one. */
 export function hasContext(ctx: CallerContext): boolean {
-  return !!(ctx.name || ctx.answers.length || ctx.choices.length || ctx.observations.length || ctx.recall);
+  return !!(
+    ctx.name ||
+    ctx.answers.length ||
+    ctx.choices.length ||
+    ctx.observations.length ||
+    ctx.room.length ||
+    ctx.recall
+  );
 }
 
 /** The context as prompt text. Empty when nothing is known. */
@@ -123,6 +140,44 @@ function describeContext(ctx: CallerContext): string {
 }
 
 /**
+ * What the room decided, as prompt text.
+ *
+ * Every tally is rendered, whatever question produced it — a poll added to the
+ * deck next month reaches the agent through this with no change here. The counts
+ * go in because "twelve of nineteen" is a different thing to say than "just
+ * over half", and a tie is stated as a tie: an agent that announces a winner a
+ * coin-toss picked is worse than one that says the room was split.
+ *
+ * Where the caller's own answer differs from the room's, that is said outright.
+ * It is the sentence the finale is built on — what we built follows the majority,
+ * and this caller may have voted the other way.
+ */
+function describeRoom(ctx: CallerContext): string {
+  if (!ctx.room.length) return '';
+
+  const lines = ctx.room.map((tally) => {
+    const question = tally.question ?? tally.stageId;
+    const mine = ctx.answers.find((a) => a.stageId === tally.stageId)?.answer;
+
+    const verdict = tally.tie
+      ? `the room was split — ${tally.counts
+          .filter((c) => c.count === tally.winnerCount)
+          .map((c) => `"${c.value}"`)
+          .join(' and ')} tied on ${tally.winnerCount} each`
+      : `the room chose "${tally.winner}" (${tally.winnerCount} of ${tally.total})`;
+
+    if (!mine) return `"${question}" — ${verdict}.`;
+
+    const agrees = mine.trim().toLowerCase() === tally.winner.toLowerCase();
+    return agrees
+      ? `"${question}" — ${verdict}, which is what they chose too.`
+      : `"${question}" — ${verdict}, but they chose "${mine}", so their own choice differs from the room's.`;
+  });
+
+  return `\nWhat the whole room answered, and therefore what we built:\n- ${lines.join('\n- ')}`;
+}
+
+/**
  * The instructions, assembled from the session's own editable prompt.
  *
  * The caller block is substituted into `{{context}}` where the presenter put it,
@@ -131,9 +186,14 @@ function describeContext(ctx: CallerContext): string {
  * is the whole demo. The tool section and the direction line are always the
  * app's own: both describe mechanics the presenter cannot change by typing.
  */
-function systemPrompt(ctx: CallerContext, config: RelayConfig): string {
+export function systemPromptFor(ctx: CallerContext, config: RelayConfig): string {
   const name = ctx.name || 'someone whose name you do not know';
-  const context = `You are speaking with ${name}.${describeContext(ctx)}`;
+  // The room's block and the instruction for reading it travel together: the
+  // instruction alone is advice about data the agent was not given, and the data
+  // alone leaves it guessing what a majority is for.
+  const room = config.roomContext ? describeRoom(ctx) : '';
+  const outcome = room && config.outcomeInstruction ? `\n\n${config.outcomeInstruction}` : '';
+  const context = `You are speaking with ${name}.${describeContext(ctx)}${room}${outcome}`;
 
   const base = config.systemPrompt.includes('{{context}}')
     ? config.systemPrompt.replace('{{context}}', context)
@@ -153,7 +213,7 @@ export async function generateResponse(
   userMessage: string
 ): Promise<string> {
   const text = await llmFor(config.model).complete({
-    system: systemPrompt(ctx, config),
+    system: systemPromptFor(ctx, config),
     maxTokens: 150,
     messages: [...conversationHistory, { role: 'user' as const, content: userMessage }],
   });
@@ -176,7 +236,7 @@ export function streamResponse(
   userMessage: string
 ): AsyncIterable<string> {
   return llmFor(config.model).stream({
-    system: systemPrompt(ctx, config),
+    system: systemPromptFor(ctx, config),
     maxTokens: 150,
     messages: [...conversationHistory, { role: 'user' as const, content: userMessage }],
   });
@@ -200,7 +260,7 @@ export async function generateGreeting(
 
   try {
     const text = await llmFor(config.model).complete({
-      system: systemPrompt(ctx, config),
+      system: systemPromptFor(ctx, config),
       maxTokens: 80,
       messages: [
         {
