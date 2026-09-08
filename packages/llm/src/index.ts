@@ -28,9 +28,9 @@ export function createLlmClient(config: LlmConfig): LlmClient {
  * Build LLM config from the environment. Every server package uses this so the
  * provider and model are swappable without code changes:
  *
- *   LLM_PROVIDER   anthropic | openai            (default: anthropic)
+ *   LLM_PROVIDER   anthropic | openai            (default: openai)
  *   LLM_MODEL      provider model id             (default: per-provider above)
- *   LLM_API_KEY    key; falls back to ANTHROPIC_API_KEY / OPENAI_API_KEY
+ *   LLM_API_KEY    key; falls back to OPENAI_API_KEY / ANTHROPIC_API_KEY
  *   LLM_BASE_URL   optional API host override — with provider=openai this
  *                  targets any OpenAI-compatible endpoint (OpenRouter, Groq,
  *                  Together, vLLM, Ollama, …)
@@ -46,7 +46,10 @@ export function llmConfigFromEnv(
   const read = (name: string): string | undefined =>
     (prefix ? env[`${prefix}${name}`] : undefined) ?? env[name];
 
-  const provider = (read('LLM_PROVIDER') || 'anthropic') as LlmProviderName;
+  // OpenAI is the default: every experience — the AI-prompt slide and the voice
+  // agent alike — runs on the one OpenAI credential unless a deployment says
+  // otherwise. Set LLM_PROVIDER=anthropic to go back.
+  const provider = (read('LLM_PROVIDER') || 'openai') as LlmProviderName;
   if (!PROVIDERS[provider]) {
     throw new Error(
       `Invalid LLM_PROVIDER "${provider}". Supported: ${Object.keys(PROVIDERS).join(', ')}`

@@ -161,7 +161,7 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
           label: 'Voice agent (ConversationRelay)',
           state: relayUrl ? 'ok' : 'off',
           detail: relayUrl
-            ? 'Calls are answered by the live Claude agent.'
+            ? 'Calls are answered by the live voice agent.'
             : 'CONVERSATION_RELAY_URL unset — calls fall back to the static TwiML bot.',
           values: [
             ...(relayUrl

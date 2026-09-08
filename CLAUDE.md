@@ -33,7 +33,7 @@ pnpm monorepo, five packages under `packages/`:
 | `presenter` | React 19 + React Three Fiber + GSAP + Zustand | 3D stage visuals on the big screen |
 | `audience` | React 19 + Tailwind | Mobile web app for audience participation |
 | `backend` | Fastify 5 + Twilio SDK | API, Twilio Sync setup, SMS/Voice orchestration |
-| `conversation-relay` | `ws` + Anthropic Claude | AI voice agent via Twilio ConversationRelay |
+| `conversation-relay` | `ws` + `@twilio-preso/llm` | AI voice agent via Twilio ConversationRelay |
 
 ### The stage model — library + deck
 
@@ -87,7 +87,7 @@ The inbound direction has its own two stages rather than a trigger, since the au
 
 ### ConversationRelay voice agent
 
-`packages/conversation-relay` is a standalone WebSocket server that Twilio ConversationRelay connects to. On `setup` it resolves the session, looks the caller up in that session's participants map, and greets them by name; `prompt` events are answered by Claude (`llm.ts`) with running conversation history. TwiML that points calls at it is served from the backend (`/api/voice/conversation-relay`).
+`packages/conversation-relay` is a standalone WebSocket server that Twilio ConversationRelay connects to. On `setup` it resolves the session, looks the caller up in that session's participants map, and greets them by name; `prompt` events are answered by the configured LLM (`llm.ts`) with running conversation history. TwiML that points calls at it is served from the backend (`/api/voice/conversation-relay`).
 
 Setup assembles a `CallerContext` (`src/llm.ts`) from three distinct sources: this session's Sync answers, the profile's declared **traits** (name, company, role) and its recent **observations** — fetched directly via `GET /Profiles/{id}` and `/Observations`, because unlike `Recall` they are readable the moment they are written, which matters when the call lands seconds after the poll. `Recall` sits on top, since it can surface something older. The greeting is generated from that context, but `staticGreeting` is always computed first and returned whenever the model gives nothing usable — a dead model on the opening turn is silence on a ringing phone.
 
@@ -159,6 +159,7 @@ Because the deep link is a real path, static hosting needs a fallback: `packages
 
 - Backend env is validated at boot in `packages/backend/src/config.ts` (`requireEnv` throws on missing vars). See `.env.example` for the full list. `.env.regional` holds an alternate regional Twilio config.
 - **Environments are whole Twilio accounts, not flags.** Each one owns its own Sync/Verify/Messaging services, API key, number pool, memory store and `PRESENTER_JWT_SECRET` — a token or a Sync object from one is meaningless in another, which is the point. `horizon` is the second: `.env.horizon` + `fly.horizon.toml` (`fly deploy -c fly.horizon.toml`, app `twilio-horizon-preso-backend`), audience at `audience.twilio.solutions`, presenter at `presenter.twilio.solutions`. Adding another is: create the four Twilio resources, write `.env.<name>`, copy `fly.toml` with a new `app`, `fly secrets import`, then point that environment's two Vercel projects at the new backend.
+- **One LLM credential serves every experience.** `llmConfigFromEnv` (`packages/llm`) is the only place a provider is chosen, and it defaults to **`openai`**, so the AI-prompt slide and the voice agent both run on `OPENAI_API_KEY` unless `LLM_PROVIDER`/`LLM_MODEL` say otherwise. The relay's own `VOICE_`-prefixed vars are overrides, not a second configuration — unset, it inherits the same `LLM_*`, which is what keeps the stage and the phone on one key. A per-session `model` in the voice tab overrides only the model, never the provider or key.
 - `PRESENTER_JWT_SECRET` is required — the backend refuses to boot without it. Set it on Fly with `fly secrets set` before the next deploy.
 - Backend deploys to Fly.io in `syd` (`fly.toml`, `packages/backend/Dockerfile`). Presenter runs locally on the stage machine; audience is built to static files.
 - `PUBLIC_BASE_URL` is the **single** server-side origin: every URL Twilio fetches or signs is built from it (`config.publicBaseUrl`) — signature validation, the inbound `voiceUrl` on a claimed number, and the mass-call TwiML. There is deliberately no second variable for this any more; a stale `BACKEND_URL` alongside it moved the signed origin and only failed once real calls went out. Its localhost default is for a backend nothing external calls, so set it to the tunnel origin whenever webhooks are involved.
