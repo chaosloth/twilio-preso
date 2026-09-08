@@ -5,12 +5,13 @@ import { getAllParticipants, getParticipant, isSessionLive } from '../services/s
 import { sendToAllOnChannel } from '../services/messaging.js';
 import type { MessageChannel } from '../services/messaging.js';
 import { initiateAgentCall } from '../services/voice.js';
-import { responseFor } from '@twilio-preso/shared';
-import type { Participant } from '@twilio-preso/shared';
+import { enabledRelayTools, resolveRelayConfig, responseFor } from '@twilio-preso/shared';
+import type { Participant, RelayConfig, SessionRecord } from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
 import { requireTwilioSignature } from '../services/twilioSignature.js';
 import { requireLiveSession } from '../services/sessionContext.js';
 import { recall } from '../services/memory.js';
+import { getSessionById } from '../services/sessions.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -38,6 +39,52 @@ async function callEveryone(
     )
   );
   return calls.filter((c) => c.status === 'fulfilled').length;
+}
+
+/** The relay's WebSocket URL, or null when the voice agent is not deployed. */
+function relayUrl(): string | null {
+  return process.env.CONVERSATION_RELAY_URL || null;
+}
+
+/**
+ * The `<ConversationRelay>` TwiML for a session, built from that session's own
+ * voice settings rather than from env vars — voice, language, ASR and the
+ * handoff are per-presentation, edited in the HUD.
+ *
+ * The `<Dial>` after `</Connect>` is how the `handoff_to_human` tool actually
+ * reaches a person: ending the relay session hands control back to TwiML, so the
+ * verb after the `<Connect>` is what runs next. It is emitted only when the tool
+ * is enabled and a number is known — an unconditional `<Dial>` would ring the
+ * presenter at the end of every ordinary call.
+ */
+function relayTwiml(session: SessionRecord | null, config: RelayConfig, url: string): string {
+  const attrs: string[] = [
+    `url="${escapeXml(url)}"`,
+    `voice="${escapeXml(config.voice)}"`,
+    `ttsProvider="${escapeXml(config.ttsProvider)}"`,
+    `language="${escapeXml(config.language)}"`,
+    `transcriptionProvider="${escapeXml(config.transcriptionProvider)}"`,
+    `dtmfDetection="${config.dtmfDetection}"`,
+    `interruptible="${config.interruptible}"`,
+  ];
+  if (config.speechModel) attrs.push(`speechModel="${escapeXml(config.speechModel)}"`);
+
+  const parameter = session
+    ? `\n      <Parameter name="sessionId" value="${escapeXml(session.id)}" />`
+    : '';
+
+  const handoffTo = enabledRelayTools(config).some((t) => t.id === 'handoff_to_human')
+    ? config.handoffNumber || session?.ownerPhone || ''
+    : '';
+  const dial = handoffTo ? `\n  <Dial>${escapeXml(handoffTo)}</Dial>` : '';
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Connect>
+    <ConversationRelay ${attrs.join(' ')}>${parameter}
+    </ConversationRelay>
+  </Connect>${dial}
+</Response>`;
 }
 
 /** TwiML is built as a string here, so anything interpolated into an attribute
@@ -147,9 +194,24 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
           if (!participant) {
             return reply.status(404).send({ error: 'participant not found' });
           }
+          /**
+           * The live agent when it is deployed, the scripted Say/Dial handoff
+           * when it is not: this trigger is fired at one volunteer with the room
+           * watching, so it must place *a* call either way rather than refusing.
+           * (The mass version does refuse — a whole-room finale that silently
+           * becomes a recording is worse than a visible error.)
+           */
+          if (relayUrl()) {
+            const call = await client.calls.create({
+              to: participant.phone,
+              from,
+              url: `${twimlBase()}/api/voice/conversation-relay?sessionId=${encodeURIComponent(session.id)}`,
+            });
+            return { callSid: call.sid, mode: 'conversation-relay' };
+          }
           const presenterPhone = process.env.PRESENTER_PHONE || '+61400000000';
           const callSid = await initiateAgentCall(from, participant.phone, presenterPhone);
-          return { callSid };
+          return { callSid, mode: 'static-twiml' };
         }
 
         /**
@@ -171,7 +233,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
          * than one that says it is not wired up.
          */
         case 'voice-mass-relay': {
-          if (!process.env.CONVERSATION_RELAY_URL) {
+          if (!relayUrl()) {
             return reply
               .status(409)
               .send({ error: 'CONVERSATION_RELAY_URL is not set — use voice-mass-outbound for the scripted bot' });
@@ -194,30 +256,68 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
-  // TwiML endpoint for ConversationRelay mode
-  app.post<{ Querystring: { sessionId?: string } }>('/api/voice/conversation-relay', { preHandler: requireTwilioSignature }, async (request, reply) => {
-    const conversationRelayUrl = process.env.CONVERSATION_RELAY_URL || 'wss://localhost:3003';
-    const voice = process.env.TWILIO_VOICE || 'Google.en-AU-Neural2-B';
-    /**
-     * Tell the relay which session this call belongs to rather than making it
-     * infer one from the number. It can fall back to the `phone-pool-claims`
-     * reverse lookup, but that only holds while the claim is live — an outbound
-     * call placed here already knows the answer, so it says so.
-     */
-    const sessionId = request.query.sessionId;
-    const parameter = sessionId
-      ? `\n      <Parameter name="sessionId" value="${escapeXml(sessionId)}" />`
-      : '';
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+  /**
+   * The TwiML a call is answered with. Session-scoped through the query string,
+   * which the signature covers, so it needs no change to validation: the
+   * session's own voice settings decide every attribute, and the relay is told
+   * which presentation it is on rather than inferring it from the number.
+   */
+  app.post<{ Querystring: { sessionId?: string } }>(
+    '/api/voice/conversation-relay',
+    { preHandler: requireTwilioSignature },
+    async (request, reply) => {
+      const url = relayUrl();
+      const session = request.query.sessionId
+        ? await getSessionById(request.query.sessionId)
+        : null;
+      reply.header('Content-Type', 'text/xml');
+      if (!url) {
+        // A call is already ringing, so say something rather than dropping it.
+        return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Connect>
-    <ConversationRelay url="${conversationRelayUrl}" voice="${voice}" dtmfDetection="true" interruptible="true">${parameter}
-    </ConversationRelay>
-  </Connect>
+  <Say>The voice agent is not configured for this event. Goodbye.</Say>
+  <Hangup/>
 </Response>`;
-    reply.header('Content-Type', 'text/xml');
-    return twiml;
-  });
+      }
+      return relayTwiml(session, resolveRelayConfig(session?.relay), url);
+    }
+  );
+
+  /**
+   * One end-to-end call, on demand: the presenter's own phone, straight into the
+   * agent with this session's settings. It is the only way to hear a prompt or a
+   * voice change before an audience does.
+   *
+   * Calling *your own* number is allowed in rehearsal — that is the entire point
+   * — but any other number is real outbound traffic and stays behind `isLive`,
+   * so this cannot become the one route that texts a room from a draft.
+   */
+  app.post<{ Body: { sessionId?: string; to?: string } }>(
+    '/api/voice/test-call',
+    { preHandler: [requirePresenter, requireLiveSession] },
+    async (request, reply) => {
+      const session = request.session!;
+      const url = relayUrl();
+      if (!url) {
+        return reply.status(409).send({ error: 'CONVERSATION_RELAY_URL is not set — nothing to call into' });
+      }
+
+      const presenterPhone = request.presenter!.phone;
+      const to = (request.body?.to || presenterPhone).trim();
+      if (to !== presenterPhone && !(await isSessionLive(session.id))) {
+        return reply.status(409).send({
+          error: 'Rehearsal only calls your own number — arm the session to test-call anyone else',
+        });
+      }
+
+      const call = await client.calls.create({
+        to,
+        from: session.phoneNumber,
+        url: `${twimlBase()}/api/voice/conversation-relay?sessionId=${encodeURIComponent(session.id)}`,
+      });
+      return { callSid: call.sid, to, from: session.phoneNumber };
+    }
+  );
 
   // TwiML endpoint for static fallback bot
   app.post('/api/voice/demo-bot', { preHandler: requireTwilioSignature }, async (request, reply) => {

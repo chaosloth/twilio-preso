@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import Twilio from 'twilio';
 import { DEFAULT_DECK, allocateJoinCode, isValidJoinCode, normalizeJoinCode } from '@twilio-preso/shared';
+import type { RelayConfig } from '@twilio-preso/shared';
 import type {
   Deck,
   PhonePoolClaim,
@@ -316,6 +317,20 @@ export async function setSessionDeck(
   const session = await getSessionById(sessionId);
   if (!session) return null;
   return updateSession(session, { deck });
+}
+
+/**
+ * Voice-agent settings. Stored as the partial the presenter edited rather than a
+ * resolved config, so a field added later still arrives as its new default
+ * instead of frozen at whatever shipped the day the session was created.
+ */
+export async function setSessionRelay(
+  sessionId: string,
+  relay: Partial<RelayConfig>
+): Promise<SessionRecord | null> {
+  const session = await getSessionById(sessionId);
+  if (!session) return null;
+  return updateSession(session, { relay });
 }
 
 /**

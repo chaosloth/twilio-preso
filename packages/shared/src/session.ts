@@ -1,4 +1,5 @@
 import type { Deck } from './deck.js';
+import type { RelayConfig } from './relayConfig.js';
 
 export type SessionStatus = 'draft' | 'live' | 'ended';
 
@@ -21,6 +22,13 @@ export interface SessionRecord {
    * default deck must not retroactively change what a past session showed.
    */
   deck: Deck;
+  /**
+   * Voice-agent settings for this presentation, as a **partial**: only what the
+   * presenter changed in the HUD. Read through `resolveRelayConfig`, never
+   * directly, so a session created before a field existed still gets its
+   * default. Absent means "everything default".
+   */
+  relay?: Partial<RelayConfig>;
   /** Claimed from `TWILIO_PHONE_POOL` at creation, released on end. */
   phoneNumber: string;
   status: SessionStatus;

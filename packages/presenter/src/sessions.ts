@@ -4,6 +4,7 @@ import type {
   DeckWarning,
   PhonePoolUsage,
   Presenter,
+  RelayConfig,
   ResolvedStage,
   SessionRecord,
 } from '@twilio-preso/shared';
@@ -64,6 +65,40 @@ export async function saveDeck(id: string, deck: Deck): Promise<SessionWithWarni
     await presenterFetch(`/api/sessions/${id}/deck`, {
       method: 'PUT',
       body: JSON.stringify({ deck }),
+    })
+  );
+}
+
+/**
+ * The session's voice-agent settings, resolved: defaults merged in, so the HUD
+ * edits real values rather than blanks and never has to know which fields the
+ * record happens to carry.
+ */
+export async function fetchRelayConfig(id: string): Promise<RelayConfig> {
+  const { relay } = await json(await presenterFetch(`/api/sessions/${id}/relay`));
+  return relay as RelayConfig;
+}
+
+export async function saveRelayConfig(id: string, relay: RelayConfig): Promise<RelayConfig> {
+  const result = await json(
+    await presenterFetch(`/api/sessions/${id}/relay`, {
+      method: 'PUT',
+      body: JSON.stringify({ relay }),
+    })
+  );
+  return result.relay as RelayConfig;
+}
+
+/** Places one real call into the agent, so the settings above can be heard
+ *  before an audience hears them. Own number in rehearsal, anyone once armed. */
+export async function placeTestCall(
+  sessionId: string,
+  to?: string
+): Promise<{ callSid: string; to: string; from: string }> {
+  return json(
+    await presenterFetch('/api/voice/test-call', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, to: to || undefined }),
     })
   );
 }

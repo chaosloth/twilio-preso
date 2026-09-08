@@ -1,11 +1,29 @@
-import { createLlmClientFromEnv } from '@twilio-preso/llm';
-import { STAGE_LIBRARY } from '@twilio-preso/shared';
-import type { Participant } from '@twilio-preso/shared';
+import { createLlmClient, llmConfigFromEnv } from '@twilio-preso/llm';
+import type { LlmClient } from '@twilio-preso/llm';
+import { STAGE_LIBRARY, relayToolPrompt } from '@twilio-preso/shared';
+import type { Participant, RelayConfig } from '@twilio-preso/shared';
 import type { ProfileContext } from './memory.js';
 
-// VOICE_-prefixed env vars override the shared LLM_* config, so the voice agent
-// can run on a lower-latency model than the on-screen agent if you want.
-const llm = createLlmClientFromEnv(process.env, 'VOICE_');
+/**
+ * VOICE_-prefixed env vars override the shared LLM_* config, so the voice agent
+ * can run on a lower-latency model than the on-screen agent — and a session may
+ * override the model again from the HUD.
+ *
+ * Clients are cached per model: building one per turn would re-read the env and
+ * allocate an SDK client in the middle of a phone call.
+ */
+const clients = new Map<string, LlmClient>();
+
+function llmFor(model: string): LlmClient {
+  const base = llmConfigFromEnv(process.env, 'VOICE_');
+  const resolved = model || base.model;
+  let client = clients.get(resolved);
+  if (!client) {
+    client = createLlmClient({ ...base, model: resolved });
+    clients.set(resolved, client);
+  }
+  return client;
+}
 
 /**
  * Everything the agent knows about whoever is on the line, assembled once at
@@ -104,31 +122,38 @@ function describeContext(ctx: CallerContext): string {
   return lines.length ? `\nWhat you know about them:\n- ${lines.join('\n- ')}` : '';
 }
 
-function systemPrompt(ctx: CallerContext): string {
+/**
+ * The instructions, assembled from the session's own editable prompt.
+ *
+ * The caller block is substituted into `{{context}}` where the presenter put it,
+ * and appended when they removed the placeholder — an edited prompt that loses
+ * the marker must not lose the personalisation with it, since knowing the caller
+ * is the whole demo. The tool section and the direction line are always the
+ * app's own: both describe mechanics the presenter cannot change by typing.
+ */
+function systemPrompt(ctx: CallerContext, config: RelayConfig): string {
   const name = ctx.name || 'someone whose name you do not know';
+  const context = `You are speaking with ${name}.${describeContext(ctx)}`;
 
-  return `You are a friendly AI voice agent at a Twilio Wonder event. You were built live on stage in under five minutes — you are the demo of how fast Twilio lets a developer ship a voice AI agent.
+  const base = config.systemPrompt.includes('{{context}}')
+    ? config.systemPrompt.replace('{{context}}', context)
+    : `${config.systemPrompt}\n\n${context}`;
 
-You are speaking with ${name}.${describeContext(ctx)}
-
-Use what you know: refer to something specific they actually said or do, in their words, rather than talking in generalities. Never invent a detail that is not listed above, and if you know nothing about them, ask rather than guess.
-
-Keep every reply SHORT — one or two sentences, because this is a phone call and they are standing in a room. Be warm and concrete. If they ask what you can do, say you are a ConversationRelay agent that handles real-time voice, reads a Twilio Conversation Memory customer profile, and can hand off to a human.
-
-${
-  ctx.inbound
+  const direction = ctx.inbound
     ? 'They chose to call in, so let them lead: answer what they ask, ask a follow-up, and stay on the line until they are done.'
-    : 'You called them as part of the finale, so wrap up warmly after two or three exchanges.'
-}`;
+    : 'You called them as part of the finale, so wrap up warmly after two or three exchanges.';
+
+  return `${base}${relayToolPrompt(config)}\n\n${direction}`;
 }
 
 export async function generateResponse(
   ctx: CallerContext,
+  config: RelayConfig,
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
   userMessage: string
 ): Promise<string> {
-  const text = await llm.complete({
-    system: systemPrompt(ctx),
+  const text = await llmFor(config.model).complete({
+    system: systemPrompt(ctx, config),
     maxTokens: 150,
     messages: [...conversationHistory, { role: 'user' as const, content: userMessage }],
   });
@@ -145,20 +170,23 @@ export async function generateResponse(
  * phone. So a static greeting is always computed first and returned whenever the
  * model does not produce something usable.
  */
-export async function generateGreeting(ctx: CallerContext): Promise<string> {
-  const fallback = staticGreeting(ctx);
-  if (!hasContext(ctx)) return fallback;
+export async function generateGreeting(
+  ctx: CallerContext,
+  config: RelayConfig
+): Promise<string> {
+  const fallback = staticGreeting(ctx, config);
+  if (!config.generateGreeting || !hasContext(ctx)) return fallback;
 
   try {
-    const text = await llm.complete({
-      system: systemPrompt(ctx),
+    const text = await llmFor(config.model).complete({
+      system: systemPrompt(ctx, config),
       maxTokens: 80,
       messages: [
         {
           role: 'user' as const,
           content: ctx.inbound
-            ? 'Greet the caller by name in one or two sentences. Acknowledge that they rang in, mention one specific thing you know about them, and ask what they would like to talk about.'
-            : 'Greet them by name in one or two sentences. Mention that every phone in the room just rang at once, refer to one specific thing you know about them, and ask them one question about it.',
+            ? `${config.greetingInstruction} They rang in, so acknowledge that.`
+            : `${config.greetingInstruction} Mention that every phone in the room just rang at once.`,
         },
       ],
     });
@@ -170,9 +198,7 @@ export async function generateGreeting(ctx: CallerContext): Promise<string> {
   }
 }
 
-function staticGreeting(ctx: CallerContext): string {
-  const name = ctx.name || 'there';
-  return ctx.inbound
-    ? `Hi ${name}! Thanks for calling the agent that was just built live on stage. What would you like to ask me?`
-    : `Hey ${name}! I'm the AI agent that was just built live on stage. Pretty cool that every phone in the room rang at once, right? What did you think of today's session?`;
+/** The opening line that always exists, from the session's own template. */
+function staticGreeting(ctx: CallerContext, config: RelayConfig): string {
+  return config.staticGreeting.replace(/\{\{name\}\}/g, ctx.name || 'there');
 }

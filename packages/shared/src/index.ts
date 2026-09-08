@@ -10,3 +10,4 @@ export * from './features.js';
 export * from './canvas.js';
 export * from './deckTransfer.js';
 export * from './phone.js';
+export * from './relayConfig.js';

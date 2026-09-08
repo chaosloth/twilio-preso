@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { toPublicSession, validateDeck } from '@twilio-preso/shared';
-import type { Deck } from '@twilio-preso/shared';
+import { resolveRelayConfig, toPublicSession, validateDeck } from '@twilio-preso/shared';
+import type { Deck, RelayConfig } from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
 import {
   PhonePoolExhaustedError,
@@ -11,6 +11,7 @@ import {
   getSessionById,
   listSessions,
   setSessionDeck,
+  setSessionRelay,
   setSessionStatus,
 } from '../services/sessions.js';
 import { getAllParticipants } from '../services/sync.js';
@@ -87,6 +88,34 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
       const session = await setSessionDeck(request.params.id, deck);
       if (!session) return reply.status(404).send({ error: 'Session not found' });
       return { session, warnings: validateDeck(session.deck) };
+    }
+  );
+
+  /**
+   * Voice-agent settings for this presentation: instructions, greeting, tools,
+   * voice, language and ASR. Returned resolved (defaults merged in) so the HUD
+   * edits real values rather than blanks, but stored as the partial that was
+   * sent — see `setSessionRelay`.
+   */
+  app.get<{ Params: { id: string } }>('/api/sessions/:id/relay', async (request, reply) => {
+    const session = await getSessionById(request.params.id);
+    if (!session) return reply.status(404).send({ error: 'Session not found' });
+    return { relay: resolveRelayConfig(session.relay), stored: session.relay ?? {} };
+  });
+
+  app.put<{ Params: { id: string }; Body: { relay: Partial<RelayConfig> } }>(
+    '/api/sessions/:id/relay',
+    async (request, reply) => {
+      const relay = request.body?.relay;
+      if (!relay || typeof relay !== 'object') {
+        return reply.status(400).send({ error: 'relay object is required' });
+      }
+      // Resolved before storing, so an unknown key from a hand-edited payload is
+      // dropped at the boundary rather than sitting in the record waiting to be
+      // read by something less careful.
+      const session = await setSessionRelay(request.params.id, resolveRelayConfig(relay));
+      if (!session) return reply.status(404).send({ error: 'Session not found' });
+      return { session, relay: resolveRelayConfig(session.relay) };
     }
   );
 
