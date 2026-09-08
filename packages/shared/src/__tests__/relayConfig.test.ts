@@ -190,13 +190,22 @@ describe('per-language voices', () => {
    * TTS and ASR are separate choices, and Google STT v2 publishes Mandarin as
    * `cmn-Hans-CN` — there is no `zh-CN` there. Sending the pair Twilio built from
    * this row (`google/zh-CN/`) is a 64101 that fails the whole call, so the row
-   * inherits Deepgram, which does accept `zh-CN`.
+   * transcribes with Deepgram, which does accept `zh-CN`.
    */
-  it('gives Mandarin a Google voice but leaves transcription inherited', () => {
+  it('gives Mandarin a Google voice but transcribes it with Deepgram', () => {
     const mandarin = resolvedLanguages(resolveRelayConfig()).find((l) => l.code === 'zh-CN');
     expect(mandarin?.ttsProvider).toBe('Google');
     expect(mandarin?.voice).toBe('cmn-CN-Wavenet-A');
-    expect(mandarin?.transcriptionProvider).toBeUndefined();
+    expect(mandarin?.transcriptionProvider).toBe('Deepgram');
+  });
+
+  /** Even when the presenter points the whole agent at Google ASR: filling this
+   *  row from the parent would rebuild the exact pair that fails the call. */
+  it('keeps Mandarin off Google transcription even when the agent uses it', () => {
+    const config = resolveRelayConfig({ transcriptionProvider: 'Google' });
+    expect(resolvedLanguages(config).find((l) => l.code === 'zh-CN')?.transcriptionProvider).toBe(
+      'Deepgram'
+    );
   });
 
   /** A session created while the Google-ASR default shipped holds it in its
@@ -218,6 +227,28 @@ describe('per-language voices', () => {
     expect(tamil?.ttsProvider).toBe('ElevenLabs');
     expect(tamil?.voice).toBeTruthy();
     expect(tamil?.voice).not.toBe(DEFAULT_RELAY_CONFIG.voice);
+  });
+
+  /**
+   * The account default, not the parent, is what an omitted `transcriptionProvider`
+   * falls back to — and for an account that used ConversationRelay before
+   * 2025-09-12 that default is Google. So every row states its provider: a silent
+   * fallback to Google on the one tag Google STT does not publish (`zh-CN`) is a
+   * 64101 that fails the whole call.
+   */
+  it('states the transcription provider on every language, never inheriting it', () => {
+    const config = resolveRelayConfig({ transcriptionProvider: 'Deepgram' });
+    for (const entry of resolvedLanguages(config)) {
+      expect(entry.transcriptionProvider).toBe('Deepgram');
+    }
+  });
+
+  it('keeps a per-language transcription provider the presenter chose', () => {
+    const config = resolveRelayConfig({
+      transcriptionProvider: 'Deepgram',
+      languages: [{ code: 'it-IT', transcriptionProvider: 'Google' }],
+    });
+    expect(resolvedLanguages(config).find((l) => l.code === 'it-IT')?.transcriptionProvider).toBe('Google');
   });
 
   it('keeps a voice the presenter chose', () => {

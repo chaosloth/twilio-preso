@@ -1,4 +1,4 @@
-import { withLanguageDefaults } from './languages.js';
+import { GOOGLE_STT_UNSUPPORTED, withLanguageDefaults } from './languages.js';
 import type { LanguageVoice } from './languages.js';
 /**
  * How the voice agent behaves, per presentation.
@@ -380,11 +380,32 @@ export function resolvedLanguages(config: RelayConfig): LanguageVoice[] {
   };
   const rows = [primary, ...config.languages];
   const seen = new Set<string>();
-  return rows.filter((l) => {
-    if (!BCP47.test(l.code) || seen.has(l.code)) return false;
-    seen.add(l.code);
-    return true;
-  });
+  return rows
+    .filter((l) => {
+      if (!BCP47.test(l.code) || seen.has(l.code)) return false;
+      seen.add(l.code);
+      return true;
+    })
+    /**
+     * Every row states its transcription provider rather than inheriting one.
+     * A `<Language>` that omits the attribute does *not* fall back to the
+     * parent's: it falls back to the account default, which for an account that
+     * used ConversationRelay before 2025-09-12 is Google. That silently pairs
+     * Google STT with tags it does not publish — `google/zh-CN/`, error 64101,
+     * the whole call dead before the greeting. Only the *speech model* is left
+     * unstated, so Twilio still picks one that matches each language.
+     */
+    .map((l) => {
+      const provider = l.transcriptionProvider ?? config.transcriptionProvider;
+      return {
+        ...l,
+        // The unsupported-tag rule outranks the fill: a presenter who sets the
+        // parent to Google must not thereby recreate `google/zh-CN/`. Deepgram
+        // is what these tags fall to, because Deepgram does accept them.
+        transcriptionProvider:
+          provider === 'Google' && GOOGLE_STT_UNSUPPORTED.has(l.code) ? 'Deepgram' : provider,
+      };
+    });
 }
 
 /** Just the tags — what the agent's switch tool is allow-listed against. */

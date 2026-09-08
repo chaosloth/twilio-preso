@@ -89,7 +89,7 @@ export const LANGUAGE_VOICE_DEFAULTS: Record<
  * Mandarin `cmn-Hans-CN`, while `code` here has to be the BCP-47 tag TTS and the
  * agent's switch tool use. Deepgram accepts `zh-CN`, so these inherit it.
  */
-const GOOGLE_STT_UNSUPPORTED = new Set(['zh-CN']);
+export const GOOGLE_STT_UNSUPPORTED = new Set(['zh-CN']);
 
 /** Tags the HUD offers, most-likely first. Any other BCP-47 tag may be typed. */
 export const LANGUAGE_PRESETS = Object.keys(LANGUAGE_VOICE_DEFAULTS);
