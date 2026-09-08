@@ -401,31 +401,43 @@ export async function upsertProfile(participant: Participant): Promise<string | 
   return work;
 }
 
+/** A write against a profile the store no longer has. Lookup answers from the
+ *  identifier index, which outlives a profile deleted in the Console, so this is
+ *  a normal answer to "patch what the identifier points at" — not a failure. */
+function isProfileGone(err: unknown): boolean {
+  return /\b(404|20404)\b/.test(err instanceof Error ? err.message : String(err));
+}
+
 async function resolveProfile(participant: Participant): Promise<string | null> {
   const traits = await traitPayload(participant);
 
   const existing = await lookupProfile(participant.phone);
   if (existing) {
-    // Patching merges, so this adds what's new without clearing anything a
-    // previous event learned about them.
-    await memoryFetch(`/Profiles/${existing}`, { traits }, 'PATCH');
-    // A profile created before this app wrote WhatsApp identifiers has only the
-    // phone one, so they are topped up on every join rather than only at create.
-    await ensureIdentifiers(existing, participant.phone);
-    await recordObservationFor(existing, participant);
-    return existing;
+    try {
+      // Patching merges, so this adds what's new without clearing anything a
+      // previous event learned about them.
+      await memoryFetch(`/Profiles/${existing}`, { traits }, 'PATCH');
+      // A profile created before this app wrote WhatsApp identifiers has only the
+      // phone one, so they are topped up on every join rather than only at create.
+      await ensureIdentifiers(existing, participant.phone);
+      await recordObservationFor(existing, participant);
+      return existing;
+    } catch (err) {
+      // Anything other than a dead profile is a real failure and stays one.
+      if (!isProfileGone(err)) throw err;
+      console.warn(`Memory profile ${existing} is gone; creating a new one.`);
+    }
   }
 
-  // Create bare, then PATCH the traits — the same write the returning-attendee
-  // path uses. A create carrying traits is the one call whose failure mode is a
-  // profile that exists with nothing on it and no second attempt; splitting it
-  // means the traits are written by code that already runs on every join.
+  // Traits go in the create itself: the store rejects a bare create outright
+  // ("Traits are required to create a profile", 400), so creating empty and
+  // patching after is not a safer split of one write — it is a write that never
+  // lands, and every new attendee silently ends up with no profile at all.
   // Create answers with `{id, message}` — not `sid`, and not the profile body.
-  const created = await memoryFetch<{ id?: string }>('/Profiles', {});
+  if (Object.keys(traits).length === 0) return null;
+  const created = await memoryFetch<{ id?: string }>('/Profiles', { traits });
   const profileId = created?.id;
   if (!profileId) return null;
-
-  await memoryFetch(`/Profiles/${profileId}`, { traits }, 'PATCH');
 
   // The identifiers are what Identity Resolution matches on next time; the phone
   // trait alone is not enough, though it does carry an `idTypePromotion`.

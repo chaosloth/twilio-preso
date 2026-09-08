@@ -15,6 +15,9 @@ type Call = { method: string; path: string; body: any };
 
 let calls: Call[];
 let lookupAnswers: Record<string, string[]>;
+/** Profile ids an identifier points at but the store no longer has — a profile
+ *  deleted in the Console leaves exactly this behind. */
+let deletedProfiles: Set<string>;
 
 function stubFetch() {
   calls = [];
@@ -34,9 +37,26 @@ function stubFetch() {
         ],
       });
     }
-    if (path === '/Profiles') return json({ id: 'PRnew' });
+    // The store requires traits on create: a bare `{}` is a 400, not an empty
+    // profile waiting for a PATCH.
+    if (path === '/Profiles') {
+      if (!body?.traits || Object.keys(body.traits).length === 0) {
+        return error(400, 'Traits are required to create a profile');
+      }
+      return json({ id: 'PRnew' });
+    }
+    const target = path.match(/^\/Profiles\/([^/]+)/)?.[1];
+    if (target && deletedProfiles.has(target)) return error(404, 'Profile not found');
     return json({ message: 'accepted' });
   });
+}
+
+function error(status: number, message: string) {
+  return {
+    ok: false,
+    status,
+    text: async () => JSON.stringify({ code: status, message }),
+  } as unknown as Response;
 }
 
 function json(value: unknown) {
@@ -57,6 +77,7 @@ const pathsOf = (method: string) => calls.filter((c) => c.method === method).map
 
 beforeEach(() => {
   lookupAnswers = {};
+  deletedProfiles = new Set();
   refreshTraitSchema();
   stubFetch();
 });
@@ -81,13 +102,36 @@ describe('upsertProfile', () => {
     expect(pathsOf('POST')).not.toContain('/Profiles');
   });
 
-  it('creates a profile with no traits, then patches them', async () => {
+  /**
+   * The store rejects a create that carries no traits — "Traits are required to
+   * create a profile", a 400. Creating bare and patching after is therefore not
+   * a safer split of one write, it is a write that never lands: every new
+   * attendee silently got no profile at all, and the only findable profile was
+   * whichever one an earlier event had already made.
+   */
+  it('creates the profile with its traits, since a bare create is rejected', async () => {
     const id = await upsertProfile(participant);
 
     expect(id).toBe('PRnew');
     const create = calls.find((c) => c.path === '/Profiles' && c.method === 'POST');
-    expect(create?.body?.traits).toBeUndefined();
-    expect(pathsOf('PATCH')).toContain('/Profiles/PRnew');
+    expect(create?.body?.traits?.Contact?.firstName).toBe('Billy');
+    expect(create?.body?.traits?.['live-presentation']?.company).toBe('Twilio');
+  });
+
+  /**
+   * A profile deleted in the Console can still be what Lookup answers with. The
+   * patch onto it 404s, and that used to abort the whole upsert — leaving the
+   * attendee with no profile and no second attempt, on the one path that was
+   * supposed to be the safe one.
+   */
+  it('creates a new profile when the one an identifier points at is gone', async () => {
+    lookupAnswers['phone:+6591305079'] = ['PRdead'];
+    deletedProfiles.add('PRdead');
+
+    const id = await upsertProfile(participant);
+
+    expect(id).toBe('PRnew');
+    expect(calls.find((c) => c.path === '/Profiles' && c.method === 'POST')).toBeTruthy();
   });
 
   it('creates one profile when the same phone registers twice at once', async () => {
