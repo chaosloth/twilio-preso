@@ -26,8 +26,9 @@ import type { Participant, ParticipantResponse } from '@twilio-preso/shared';
  *   declared in the store's settings is rejected with a bare 400 — so the
  *   payload is filtered against the store's *actual* schema (read once and
  *   cached) rather than assumed. `Contact` ships with every store; the
- *   `Wonder` group holding company and role does not, which is why the HUD can
- *   both report it missing and create it.
+ *   `live-presentation` group holding registration details and the mandatory
+ *   poll answers does not, which is why the HUD can both report it missing and
+ *   create it — and why nothing writes a trait it has not declared first.
  * - **Everything the audience *says* is an observation, not a trait.** Traits
  *   are stable facts with a fixed schema; a word-cloud answer is neither. Recall
  *   is a semantic search over observations, so this is also the only shape that
@@ -84,9 +85,14 @@ const PHONE_ID_TYPE = 'phone';
  *  Console configuration at all. */
 const CONTACT_GROUP = 'Contact';
 
-/** The group this app declares for the attributes registration always collects
- *  but `Contact` has no field for. Created on demand from the HUD. */
-const WONDER_GROUP = 'Wonder';
+/**
+ * The group this app declares for everything about an attendee that `Contact`
+ * has no field for: what they told us at registration, and every choice they
+ * made in a mandatory poll. Created on demand from the HUD — the traits have to
+ * exist in the store's schema before anything can be written into them, because
+ * an undeclared trait key rejects the whole write.
+ */
+const LIVE_GROUP = 'live-presentation';
 
 /**
  * The traits this app writes, by group. Registration collects exactly these, so
@@ -102,14 +108,29 @@ export const DESIRED_TRAITS: Record<string, Record<string, { dataType: string; d
     lastName: { dataType: 'STRING', description: 'Family name' },
     phone: { dataType: 'STRING', description: 'Mobile number in E.164' },
   },
-  [WONDER_GROUP]: {
+  [LIVE_GROUP]: {
     company: { dataType: 'STRING', description: 'Company the attendee gave at registration' },
     role: { dataType: 'STRING', description: 'Job role the attendee gave at registration' },
+    brandName: { dataType: 'STRING', description: 'Brand the attendee chose to build for' },
+    theme: { dataType: 'STRING', description: 'Visual theme the attendee chose' },
+    otpMethod: { dataType: 'STRING', description: 'Channel the attendee chose for one-time passcodes' },
   },
 };
 
+/**
+ * Which mandatory poll answer lands in which declared trait. A poll answer is
+ * one of a fixed set of options — a stable fact with a schema, unlike a
+ * word-cloud fragment — so these are traits as well as observations. Keyed by
+ * stage id, so a stage the deck no longer contains simply never fires one.
+ */
+export const RESPONSE_TRAITS: Record<string, string> = {
+  'brand-poll': 'brandName',
+  'theme-poll': 'theme',
+  'otp-poll': 'otpMethod',
+};
+
 /** Groups this app will create itself. `Contact` is Twilio's, not ours. */
-const OWNED_GROUPS = [WONDER_GROUP];
+const OWNED_GROUPS = [LIVE_GROUP];
 
 interface TraitGroupsResponse {
   traitGroups?: Array<{ displayName?: string; traits?: Record<string, unknown> }>;
@@ -177,9 +198,9 @@ export function contactTraits(participant: Participant): Record<string, string> 
   return { ...splitName(participant.name), phone: participant.phone };
 }
 
-/** The `Wonder` traits a registration knows. Empty when the attendee skipped
- *  both fields — an empty group is not sent. */
-export function wonderTraits(participant: Participant): Record<string, string> {
+/** The `live-presentation` traits a registration knows. Empty when the attendee
+ *  skipped both fields — an empty group is not sent. */
+export function registrationTraits(participant: Participant): Record<string, string> {
   const traits: Record<string, string> = {};
   if (participant.company) traits.company = participant.company;
   if (participant.role) traits.role = participant.role;
@@ -200,7 +221,7 @@ export async function traitPayload(
 ): Promise<Record<string, Record<string, string>>> {
   const wanted: Record<string, Record<string, string>> = {
     [CONTACT_GROUP]: contactTraits(participant),
-    [WONDER_GROUP]: wonderTraits(participant),
+    [LIVE_GROUP]: registrationTraits(participant),
   };
 
   const declared = await traitSchema().catch(() => null);
@@ -216,6 +237,30 @@ export async function traitPayload(
     if (Object.keys(kept).length > 0) payload[group] = kept;
   }
   return payload;
+}
+
+/**
+ * Writes one mandatory poll answer to its declared trait, or does nothing if the
+ * stage has no trait mapped, the store does not declare it, or memory is off.
+ *
+ * Filtered against the schema for the same reason `traitPayload` is: an
+ * undeclared key rejects the whole PATCH, and this one carries only one trait,
+ * so the failure would be total rather than partial. PATCH merges, so an
+ * attendee changing their mind overwrites just that trait.
+ */
+export async function writeResponseTrait(
+  profileId: string | undefined,
+  stageId: string,
+  value: string
+): Promise<void> {
+  if (!isMemoryEnabled() || !profileId || !value.trim()) return;
+  const trait = RESPONSE_TRAITS[stageId];
+  if (!trait) return;
+
+  const declared = await traitSchema().catch(() => null);
+  if (!declared?.[LIVE_GROUP]?.has(trait)) return;
+
+  await memoryFetch(`/Profiles/${profileId}`, { traits: { [LIVE_GROUP]: { [trait]: value } } }, 'PATCH');
 }
 
 /** Company and role are traits *and* a sentence: only observations are

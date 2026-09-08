@@ -28,11 +28,38 @@ function migrateFixtureStage(stage: Record<string, unknown>) {
 
 const expectedStages = (stagesFixture as Record<string, unknown>[]).map(migrateFixtureStage);
 
+/** Position is a property of the deck, and the deck has legitimately grown
+ *  since the fixture was captured — so every shipped stage must still resolve
+ *  identically apart from where it sits. Order is asserted separately. */
+function withoutIndex(stage: Record<string, unknown>) {
+  const { index: _dropped, ...rest } = stage;
+  return rest;
+}
+
 describe('resolveDeck(DEFAULT_DECK)', () => {
-  test('reproduces the 23 stages the presentation shipped with', () => {
-    expect(resolveDeck(DEFAULT_DECK).map((s) => withoutSlots(s as unknown as Record<string, unknown>))).toEqual(
-      expectedStages
+  /**
+   * The fixture records the 23 stages that shipped. Stages added since — the
+   * three mandatory polls, the blank canvas — are additions to the deck, not
+   * changes to those 23, so this asserts the shipped stages survive unchanged
+   * and in their original relative order rather than asserting the deck is
+   * still exactly 23 long. The fixture itself is never edited to pass.
+   */
+  test('still reproduces every stage the presentation shipped with, in order', () => {
+    const resolved = resolveDeck(DEFAULT_DECK).map((s) =>
+      withoutSlots(s as unknown as Record<string, unknown>)
     );
+    const byId = new Map(resolved.map((s) => [s.id as string, s]));
+
+    for (const expected of expectedStages) {
+      const actual = byId.get(expected.id as string);
+      expect(actual, expected.id as string).toBeDefined();
+      expect(withoutIndex(actual!)).toEqual(withoutIndex(expected));
+    }
+
+    const positions = expectedStages.map((s) =>
+      resolved.findIndex((r) => r.id === s.id)
+    );
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
   });
 
   test('stamps a runtime index matching array position', () => {

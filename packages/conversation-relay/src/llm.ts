@@ -19,6 +19,9 @@ export interface CallerContext {
   name: string | null;
   company: string | null;
   role: string | null;
+  /** The mandatory poll choices, from the durable profile's traits — so a caller
+   *  who chose them at a previous event is still known by them today. */
+  choices: Array<{ label: string; value: string }>;
   /** This session's answers, as question/answer pairs. */
   answers: Array<{ question: string | null; answer: string }>;
   /** Recent observations from the durable profile, newest first. */
@@ -44,7 +47,7 @@ export function buildCallerContext(
   inbound: boolean
 ): CallerContext {
   const contact = profile?.traits?.Contact ?? {};
-  const wonder = profile?.traits?.Wonder ?? {};
+  const live = profile?.traits?.['live-presentation'] ?? {};
   const traitName = [contact.firstName, contact.lastName].filter(Boolean).join(' ');
 
   const answers = Object.values(participant?.responses ?? {})
@@ -56,8 +59,13 @@ export function buildCallerContext(
 
   return {
     name: participant?.name || traitName || null,
-    company: participant?.company || wonder.company || null,
-    role: participant?.role || wonder.role || null,
+    company: participant?.company || live.company || null,
+    role: participant?.role || live.role || null,
+    choices: [
+      { label: 'brand they are building for', value: live.brandName },
+      { label: 'theme they chose', value: live.theme },
+      { label: 'passcode channel they prefer', value: live.otpMethod },
+    ].filter((c): c is { label: string; value: string } => !!c.value),
     answers,
     observations: profile?.observations ?? [],
     recall: null,
@@ -68,7 +76,7 @@ export function buildCallerContext(
 /** True when there is something specific enough to personalise on. Drives the
  *  choice between an LLM greeting and the generic one. */
 export function hasContext(ctx: CallerContext): boolean {
-  return !!(ctx.name || ctx.answers.length || ctx.observations.length || ctx.recall);
+  return !!(ctx.name || ctx.answers.length || ctx.choices.length || ctx.observations.length || ctx.recall);
 }
 
 /** The context as prompt text. Empty when nothing is known. */
@@ -77,6 +85,10 @@ function describeContext(ctx: CallerContext): string {
   if (ctx.company && ctx.role) lines.push(`They are ${ctx.role} at ${ctx.company}.`);
   else if (ctx.company) lines.push(`They work at ${ctx.company}.`);
   else if (ctx.role) lines.push(`Their role is ${ctx.role}.`);
+
+  for (const { label, value } of ctx.choices) {
+    lines.push(`The ${label}: ${value}.`);
+  }
 
   for (const { question, answer } of ctx.answers) {
     lines.push(question ? `Asked "${question}" today, they answered "${answer}".` : `They said "${answer}" today.`);

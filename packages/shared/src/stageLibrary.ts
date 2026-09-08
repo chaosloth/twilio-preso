@@ -87,6 +87,66 @@ const templates: StageTemplate[] = [
       { key: 'image', label: 'Image URL', kind: 'image', default: '' },
     ],
   },
+  // The three mandatory polls. Deliberately first, before any other
+  // interaction: they choose the brand, the palette and the OTP channel that
+  // the rest of the talk — and every outbound message — is built around, so
+  // they have to be answered before anything downstream is shown. Each answer
+  // is written to the attendee's `live-presentation` trait group as well as to
+  // Sync, which is what lets a later session recognise their choices.
+  {
+    id: 'brand-poll',
+    title: 'Brand Name',
+    act: 1,
+    notes: 'Mandatory poll. Which brand are we building for? TwilioCupcakes or TwilioTours.',
+    interaction: {
+      stageId: 'brand-poll',
+      type: 'poll',
+      prompt: 'Which brand are we building today?',
+      options: ['Cup Cakes Store', 'Guided Tour Package'],
+    },
+    slots: [
+      { key: 'headline', label: 'Question', kind: 'multiline', default: 'Which brand are we building today?' },
+      { key: 'waiting', label: 'Waiting prompt', kind: 'text', default: 'Check your phone to vote' },
+      { key: 'waitingHint', label: 'Waiting hint', kind: 'text', default: 'Results will appear here in real-time' },
+      { key: 'image', label: 'Image URL', kind: 'image', default: '' },
+    ],
+  },
+  {
+    id: 'theme-poll',
+    title: 'Theme',
+    act: 1,
+    notes: 'Mandatory poll. Which palette the build takes on.',
+    interaction: {
+      stageId: 'theme-poll',
+      type: 'poll',
+      prompt: 'Pick the theme',
+      options: ['Modern Sunset (Red)', 'Nordic Forest (Green)'],
+    },
+    slots: [
+      { key: 'headline', label: 'Question', kind: 'multiline', default: 'Pick the theme' },
+      { key: 'waiting', label: 'Waiting prompt', kind: 'text', default: 'Check your phone to vote' },
+      { key: 'waitingHint', label: 'Waiting hint', kind: 'text', default: 'Results will appear here in real-time' },
+      { key: 'image', label: 'Image URL', kind: 'image', default: '' },
+    ],
+  },
+  {
+    id: 'otp-poll',
+    title: 'Default OTP Method',
+    act: 1,
+    notes: 'Mandatory poll. Which channel one-time passcodes go out on.',
+    interaction: {
+      stageId: 'otp-poll',
+      type: 'poll',
+      prompt: 'How should we send your one-time passcode?',
+      options: ['SMS/RCS', 'WhatsApp'],
+    },
+    slots: [
+      { key: 'headline', label: 'Question', kind: 'multiline', default: 'How should we send your one-time passcode?' },
+      { key: 'waiting', label: 'Waiting prompt', kind: 'text', default: 'Check your phone to vote' },
+      { key: 'waitingHint', label: 'Waiting hint', kind: 'text', default: 'Results will appear here in real-time' },
+      { key: 'image', label: 'Image URL', kind: 'image', default: '' },
+    ],
+  },
   {
     id: 'patience-poll',
     title: 'Patience Poll',
@@ -404,3 +464,11 @@ export const STAGE_LIBRARY: Record<string, StageTemplate> = Object.fromEntries(
 
 /** Library order — the order DEFAULT_DECK presents them in. */
 export const STAGE_LIBRARY_ORDER: string[] = templates.map((t) => t.id);
+
+/**
+ * The polls the presentation always asks, in the order it asks them. Their
+ * answers are stored as declared traits on the attendee's Customer Profile, so
+ * these ids are referenced by the backend's trait mapping — renaming one here
+ * without renaming it there silently stops the trait being written.
+ */
+export const MANDATORY_POLL_STAGE_IDS = ['brand-poll', 'theme-poll', 'otp-poll'] as const;

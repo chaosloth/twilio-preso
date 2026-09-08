@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { publishEvent, recordParticipantResponse } from '../services/sync.js';
 import { requireLiveSession } from '../services/sessionContext.js';
 import { getParticipant } from '../services/sync.js';
-import { recordObservation, responseObservation } from '../services/memory.js';
+import { recordObservation, responseObservation, writeResponseTrait } from '../services/memory.js';
 import type { AudienceResponseEvent, InteractionType } from '@twilio-preso/shared';
 
 interface ResponseBody {
@@ -59,8 +59,12 @@ export async function responseRoutes(app: FastifyInstance): Promise<void> {
     void (async () => {
       const participant = await getParticipant(sessionId, participantId);
       if (!participant?.memoryProfileId) return;
-      // An observation rather than a trait: what someone said in a poll is not
-      // a stable fact, and only observations are indexed for recall.
+      // A mandatory poll answer is one of a fixed set of options, so it is a
+      // trait too — the durable "this attendee builds for TwilioTours in green"
+      // a later session can read back directly instead of searching prose.
+      await writeResponseTrait(participant.memoryProfileId, stageId, value);
+      // Still an observation as well: free-text answers have no schema, and only
+      // observations are semantically indexed for recall.
       await recordObservation(
         participant.memoryProfileId,
         responseObservation(participant, {

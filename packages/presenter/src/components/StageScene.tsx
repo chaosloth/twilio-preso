@@ -6,6 +6,9 @@ import { StageActiveContext } from './stageActive';
 
 const stageComponents: Record<string, React.LazyExoticComponent<ComponentType>> = {
   opening: lazy(() => import('../stages/Stage01Opening')),
+  'brand-poll': lazy(() => import('../stages/PollStage').then((m) => m.pollStage('brand-poll'))),
+  'theme-poll': lazy(() => import('../stages/PollStage').then((m) => m.pollStage('theme-poll'))),
+  'otp-poll': lazy(() => import('../stages/PollStage').then((m) => m.pollStage('otp-poll'))),
   'patience-poll': lazy(() => import('../stages/Stage02PatiencePoll')),
   speakers: lazy(() => import('../stages/Stage02Speakers')),
   'why-wonder': lazy(() => import('../stages/Stage03WhyWonder')),
