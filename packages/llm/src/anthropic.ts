@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { LlmClient, LlmConfig, LlmRequest } from './types.js';
+import { requireTokens } from './stream.js';
 
 export function createAnthropicClient(config: LlmConfig): LlmClient {
   const client = new Anthropic({
@@ -29,7 +30,7 @@ export function createAnthropicClient(config: LlmConfig): LlmClient {
     },
 
     stream(request) {
-      return (async function* () {
+      const tokens = (async function* () {
         const stream = client.messages.stream(params(request));
         for await (const event of stream) {
           if (
@@ -40,6 +41,7 @@ export function createAnthropicClient(config: LlmConfig): LlmClient {
           }
         }
       })();
+      return requireTokens(tokens, 'anthropic');
     },
   };
 }

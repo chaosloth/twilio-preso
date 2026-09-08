@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import type { LlmClient, LlmConfig, LlmRequest } from './types.js';
+import { requireTokens } from './stream.js';
 
 /**
  * Works against OpenAI itself and any OpenAI-compatible Chat Completions
@@ -36,7 +37,7 @@ export function createOpenAiClient(config: LlmConfig): LlmClient {
     },
 
     stream(request) {
-      return (async function* () {
+      const tokens = (async function* () {
         const stream = await client.chat.completions.create({
           ...params(request),
           stream: true,
@@ -46,6 +47,7 @@ export function createOpenAiClient(config: LlmConfig): LlmClient {
           if (delta) yield delta;
         }
       })();
+      return requireTokens(tokens, `openai (${config.baseUrl ?? 'api.openai.com'})`);
     },
   };
 }
