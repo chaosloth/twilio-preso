@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRelayConfig, tallyRoom } from '@twilio-preso/shared';
+import { MID_CONVERSATION_RULE, resolveRelayConfig, tallyRoom } from '@twilio-preso/shared';
 import type { Participant } from '@twilio-preso/shared';
 import { buildCallerContext, systemPromptFor } from '../llm.js';
 
@@ -69,5 +69,28 @@ describe('room context in the prompt', () => {
   it('says nothing about the room when nobody has answered yet', () => {
     const prompt = promptWith({}, []);
     expect(prompt).not.toContain(resolveRelayConfig().outcomeInstruction);
+  });
+});
+
+describe('greeting only once', () => {
+  const ctx = buildCallerContext(
+    { id: 'p1', name: 'Chris', phone: '+61400000001', responses: [] } as never,
+    null,
+    false,
+    []
+  );
+
+  /** Every turn after the opening one: the caller's "hello?" must not be met with
+   *  a second welcome. */
+  it('tells the model it is mid-conversation on an ordinary turn', () => {
+    expect(systemPromptFor(ctx, resolveRelayConfig())).toContain(MID_CONVERSATION_RULE);
+  });
+
+  /** The opening turn is the one place greeting is the job — the rule there would
+   *  argue with the greeting instruction and can lose. */
+  it('leaves it out of the opening turn', () => {
+    expect(systemPromptFor(ctx, resolveRelayConfig(), { opening: true })).not.toContain(
+      MID_CONVERSATION_RULE
+    );
   });
 });

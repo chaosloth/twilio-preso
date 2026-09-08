@@ -226,6 +226,20 @@ export interface RelayConfig {
   tools: RelayTool[];
 }
 
+/**
+ * Appended to the system prompt on every turn *after* the opening line, and never
+ * on the opening line itself.
+ *
+ * The app speaks its greeting before the caller has said a word, so an outbound
+ * caller's first sound is almost always "hello?" — and a model whose instructions
+ * are all about greeting warmly by name answers that with a second greeting. The
+ * caller hears themselves welcomed twice. It lives here rather than inside the
+ * editable `systemPrompt` because it is a fact about how this app opens a call,
+ * not a matter of taste a presenter should be able to edit away.
+ */
+export const MID_CONVERSATION_RULE =
+  'You have already spoken your opening line, before they said anything, so you are mid-conversation from here on: never greet them again, never say hello or repeat their name in greeting, and never re-introduce yourself. If their first words are just "hello", "hi" or "can you hear me", that is them picking up — acknowledge it in a word and go straight on with what you were asking them.';
+
 export const DEFAULT_RELAY_CONFIG: RelayConfig = {
   systemPrompt: `You are a friendly AI voice agent at a Twilio event. You were built live on stage in under five minutes — you are the demo of how fast Twilio lets a developer ship a voice AI agent.
 

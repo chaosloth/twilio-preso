@@ -1,6 +1,6 @@
 import { createLlmClient, llmConfigFromEnv } from '@twilio-preso/llm';
 import type { LlmClient } from '@twilio-preso/llm';
-import { STAGE_LIBRARY, relayToolPrompt } from '@twilio-preso/shared';
+import { MID_CONVERSATION_RULE, STAGE_LIBRARY, relayToolPrompt } from '@twilio-preso/shared';
 import type { Participant, RelayConfig, RoomTally } from '@twilio-preso/shared';
 import type { ProfileContext } from './memory.js';
 
@@ -186,7 +186,11 @@ function describeRoom(ctx: CallerContext): string {
  * is the whole demo. The tool section and the direction line are always the
  * app's own: both describe mechanics the presenter cannot change by typing.
  */
-export function systemPromptFor(ctx: CallerContext, config: RelayConfig): string {
+export function systemPromptFor(
+  ctx: CallerContext,
+  config: RelayConfig,
+  opts: { opening?: boolean } = {}
+): string {
   const name = ctx.name || 'someone whose name you do not know';
   // The room's block and the instruction for reading it travel together: the
   // instruction alone is advice about data the agent was not given, and the data
@@ -203,7 +207,12 @@ export function systemPromptFor(ctx: CallerContext, config: RelayConfig): string
     ? 'They chose to call in, so let them lead: answer what they ask, ask a follow-up, and stay on the line until they are done.'
     : 'You called them as part of the finale, so wrap up warmly after two or three exchanges.';
 
-  return `${base}${relayToolPrompt(config)}\n\n${direction}`;
+  // Only after the opening line. On the opening turn this rule and the greeting
+  // instruction contradict each other, and the one that loses decides whether the
+  // phone is answered by a greeting or by nothing.
+  const mid = opts.opening ? '' : `\n\n${MID_CONVERSATION_RULE}`;
+
+  return `${base}${relayToolPrompt(config)}\n\n${direction}${mid}`;
 }
 
 export async function generateResponse(
@@ -260,7 +269,7 @@ export async function generateGreeting(
 
   try {
     const text = await llmFor(config.model).complete({
-      system: systemPromptFor(ctx, config),
+      system: systemPromptFor(ctx, config, { opening: true }),
       maxTokens: 80,
       messages: [
         {

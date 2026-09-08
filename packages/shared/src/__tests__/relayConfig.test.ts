@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_RELAY_CONFIG,
+  MID_CONVERSATION_RULE,
   RELAY_TOOLS,
   relayToolPrompt,
   resolveRelayConfig,
@@ -297,5 +298,23 @@ describe('per-language voices', () => {
       languages: [{ code: 'ja-JP' }, { code: 'nonsense language' }, { code: '' }] as never,
     });
     expect(languageCodes(config)).toEqual([DEFAULT_RELAY_CONFIG.language, 'ja-JP']);
+  });
+});
+
+describe('greeting once', () => {
+  /**
+   * The opening line is spoken by the app before the caller has said anything, so
+   * an outbound caller's first words are usually "hello?" — and a model told to
+   * greet by name answers that with a second greeting. On a phone call that lands
+   * as being welcomed twice, which is the one thing the finale cannot sound like.
+   */
+  it('has a rule saying the opening line was already spoken', () => {
+    expect(MID_CONVERSATION_RULE).toMatch(/never greet them again/i);
+  });
+
+  /** Not in the editable prompt: a presenter editing the persona must not be able
+   *  to delete the reason the agent stops greeting. */
+  it('keeps that rule out of the editable prompt', () => {
+    expect(DEFAULT_RELAY_CONFIG.systemPrompt).not.toContain(MID_CONVERSATION_RULE);
   });
 });
