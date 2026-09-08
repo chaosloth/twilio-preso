@@ -14,6 +14,16 @@ const DEFAULT_MODELS: Record<LlmProviderName, string> = {
   openai: 'gpt-4o-mini',
 };
 
+/**
+ * OpenRouter speaks the OpenAI Chat Completions protocol, so it needs no
+ * provider of its own — it is `openai` pointed at another host. It is the
+ * default credential because one key there reaches every model the talk might
+ * want, including Claude, without a second account per provider.
+ */
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+/** OpenRouter namespaces model ids; a bare `gpt-4o-mini` is a 400 there. */
+const OPENROUTER_DEFAULT_MODEL = 'openai/gpt-4o-mini';
+
 export function createLlmClient(config: LlmConfig): LlmClient {
   const factory = PROVIDERS[config.provider];
   if (!factory) {
@@ -30,10 +40,14 @@ export function createLlmClient(config: LlmConfig): LlmClient {
  *
  *   LLM_PROVIDER   anthropic | openai            (default: openai)
  *   LLM_MODEL      provider model id             (default: per-provider above)
- *   LLM_API_KEY    key; falls back to OPENAI_API_KEY / ANTHROPIC_API_KEY
+ *   LLM_API_KEY    key; falls back to OPENROUTER_API_KEY, then
+ *                  OPENAI_API_KEY / ANTHROPIC_API_KEY
  *   LLM_BASE_URL   optional API host override — with provider=openai this
  *                  targets any OpenAI-compatible endpoint (OpenRouter, Groq,
  *                  Together, vLLM, Ollama, …)
+ *
+ * With nothing but `OPENROUTER_API_KEY` set, this resolves to OpenRouter: one
+ * key, one host, every model — which is why it is the default.
  *   LLM_MAX_TOKENS / LLM_TEMPERATURE  optional defaults
  *
  * `prefix` lets one process hold a second, independently configured client
@@ -56,13 +70,22 @@ export function llmConfigFromEnv(
     );
   }
 
+  // OpenRouter first, and only when nothing more specific was asked for: an
+  // explicit LLM_API_KEY or LLM_BASE_URL means the deployment has chosen a host,
+  // and silently redirecting it at OpenRouter would send that key elsewhere.
+  const explicitKey = read('LLM_API_KEY');
+  const explicitBase = read('LLM_BASE_URL');
+  const viaOpenRouter =
+    provider === 'openai' && !explicitKey && !explicitBase && !!env.OPENROUTER_API_KEY;
+
   const apiKey =
-    read('LLM_API_KEY') ||
+    explicitKey ||
+    (viaOpenRouter ? env.OPENROUTER_API_KEY : undefined) ||
     (provider === 'anthropic' ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY);
   if (!apiKey) {
     throw new Error(
       `Missing API key for LLM provider "${provider}". Set LLM_API_KEY (or ${
-        provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY'
+        provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENROUTER_API_KEY / OPENAI_API_KEY'
       }).`
     );
   }
@@ -72,9 +95,11 @@ export function llmConfigFromEnv(
 
   return {
     provider,
-    model: read('LLM_MODEL') || DEFAULT_MODELS[provider],
+    model:
+      read('LLM_MODEL') ||
+      (viaOpenRouter ? OPENROUTER_DEFAULT_MODEL : DEFAULT_MODELS[provider]),
     apiKey,
-    baseUrl: read('LLM_BASE_URL'),
+    baseUrl: explicitBase || (viaOpenRouter ? OPENROUTER_BASE_URL : undefined),
     maxTokens: maxTokens ? parseInt(maxTokens, 10) : undefined,
     temperature: temperature ? parseFloat(temperature) : undefined,
   };

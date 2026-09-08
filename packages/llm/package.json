@@ -7,7 +7,8 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc --build --force",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -15,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.11"
   }
 }
