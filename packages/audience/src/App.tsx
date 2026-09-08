@@ -170,10 +170,19 @@ export function App() {
     }
   })();
 
+  /**
+   * The interaction is keyed by the stage it belongs to.
+   *
+   * Every interaction page holds its own "answered" state, and React reuses a
+   * component of the same type across a prop change — so two poll stages in a row
+   * meant the second one rendered already-submitted, with every button dead. The
+   * key makes the second stage a different component: fresh state, live buttons.
+   * Position is part of it because a deck may legitimately show a stage twice.
+   */
   return (
     <>
       <ConnectionBadge connected={connected} />
-      {content}
+      <div key={`${activeInteraction?.stageId ?? 'waiting'}:${activeStageIndex}`}>{content}</div>
     </>
   );
 }
