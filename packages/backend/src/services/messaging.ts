@@ -2,7 +2,7 @@ import Twilio from 'twilio';
 import { config } from '../config.js';
 import { renderTemplate } from '@twilio-preso/shared';
 import type { Participant } from '@twilio-preso/shared';
-import { approvedContentSid, contentVariablesJson } from './content.js';
+import { contentSidFor, contentVariablesJson } from './content.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -90,7 +90,7 @@ export async function sendOnChannel(
    * WhatsApp attempt is one that is expected to fail into the SMS below, and with
    * one it reaches a phone that has never opened the chat.
    */
-  const contentSid = approvedContentSid(message.template);
+  const contentSid = await contentSidFor(message.template);
   try {
     await client.messages.create(
       contentSid

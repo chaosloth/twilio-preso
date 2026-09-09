@@ -17,6 +17,8 @@ import { responseRoutes } from './routes/response.js';
 import { aiPromptRoutes } from './routes/aiPrompt.js';
 import { featureRoutes } from './routes/features.js';
 import { orchestratorRoutes } from './routes/orchestrator.js';
+import { describeContentTemplates } from './services/content.js';
+import { isWhatsAppConfigured } from './services/messaging.js';
 
 const app = Fastify({ logger: true });
 
@@ -44,5 +46,19 @@ app.get('/health', async () => ({ status: 'ok' }));
 // Control-plane maps + allowlist bootstrap. Must precede listen: an empty
 // allowlist means nobody can sign in.
 await initControlPlane();
+/**
+ * Warm the approved-template cache, without waiting for it.
+ *
+ * `contentSidFor` reads the account on demand anyway, so this is only about the
+ * first WhatsApp send of an event not paying for the listing — and it must not be
+ * awaited: Content being slow or down is a plain-text message, never a backend
+ * that will not boot.
+ */
+if (isWhatsAppConfigured()) {
+  void describeContentTemplates().catch((err) =>
+    app.log.warn({ err }, 'could not pre-read the WhatsApp content templates')
+  );
+}
+
 await app.listen({ port: config.port, host: '0.0.0.0' });
 console.log(`Backend running on http://localhost:${config.port}`);

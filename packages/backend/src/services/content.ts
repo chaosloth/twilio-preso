@@ -153,12 +153,59 @@ async function submitForApproval(template: ContentTemplate, contentSid: string):
  * plain-text fallback rather than depending on this being warm.
  */
 let cache: Map<string, TemplateState> = new Map();
+let readAt = 0;
+/** Shared by every concurrent caller, so a finale messaging the whole room reads
+ *  the account once rather than once per recipient. */
+let inFlight: Promise<void> | null = null;
+
+/**
+ * How long a read is trusted. Short enough that a template approved *during* the
+ * talk becomes usable without a redeploy or a HUD press, long enough that a
+ * room's worth of sends is one listing.
+ */
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /** The sid to send by, or null — meaning "send plain text instead". Never blocks:
  *  a cold cache is a text message, not a wait. */
 export function approvedContentSid(key: string): string | null {
   const state = cache.get(key);
   return state?.status === 'approved' && state.contentSid ? state.contentSid : null;
+}
+
+/**
+ * The sid to send by, reading the account first when what we hold is cold or
+ * stale.
+ *
+ * This exists because the synchronous version above was the whole WhatsApp path,
+ * and nothing filled the cache at boot: a freshly deployed backend sent every
+ * WhatsApp trigger as free-form text, which WhatsApp drops outside the 24-hour
+ * window, so an approved template sat unused and the room silently dropped to
+ * SMS. It only appeared to work because opening the HUD's Config tab warmed it.
+ *
+ * A failed read resolves to null rather than throwing: the message still has to
+ * go out, and plain text then SMS is what a missing template has always meant.
+ */
+export async function contentSidFor(key: string): Promise<string | null> {
+  if (!cache.size || Date.now() - readAt > CACHE_TTL_MS) {
+    inFlight ??= describeContentTemplates()
+      .then(() => undefined)
+      .catch((err) => {
+        console.warn('Content templates could not be read — sending plain text:', err);
+      })
+      .finally(() => {
+        inFlight = null;
+      });
+    await inFlight;
+  }
+  return approvedContentSid(key);
+}
+
+/** Test seam. Nothing in the running app clears this — the TTL is what keeps it
+ *  honest there. */
+export function resetContentCache(): void {
+  cache = new Map();
+  readAt = 0;
+  inFlight = null;
 }
 
 export function contentVariablesJson(values: readonly string[]): string {
@@ -178,6 +225,7 @@ export async function describeContentTemplates(): Promise<TemplateState[]> {
     })
   );
   cache = new Map(states.map((s) => [s.key, s]));
+  readAt = Date.now();
   return states;
 }
 
