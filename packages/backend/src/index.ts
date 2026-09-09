@@ -16,6 +16,7 @@ import { adminRoutes } from './routes/admin.js';
 import { responseRoutes } from './routes/response.js';
 import { aiPromptRoutes } from './routes/aiPrompt.js';
 import { featureRoutes } from './routes/features.js';
+import { orchestratorRoutes } from './routes/orchestrator.js';
 
 const app = Fastify({ logger: true });
 
@@ -36,6 +37,7 @@ await app.register(adminRoutes);
 await app.register(responseRoutes);
 await app.register(aiPromptRoutes);
 await app.register(featureRoutes);
+await app.register(orchestratorRoutes);
 
 app.get('/health', async () => ({ status: 'ok' }));
 

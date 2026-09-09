@@ -14,6 +14,7 @@ import {
 } from '../services/memory.js';
 import { probeLlm } from '../services/ai.js';
 import { describeContentTemplates, ensureContentTemplates } from '../services/content.js';
+import { describeOrchestrator } from '../services/orchestrator.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -40,7 +41,7 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const sessionId = request.query.sessionId;
 
-      const [sync, verify, messaging, memory, traits, llmProbe, templates, pool, state] =
+      const [sync, verify, messaging, memory, traits, llmProbe, templates, orchestrator, pool, state] =
         await Promise.all([
         probe(async () => {
           const s = await client.sync.v1.services(config.twilio.syncServiceSid).fetch();
@@ -61,6 +62,10 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
         // leave the rest of the report readable, and no templates simply means
         // every WhatsApp send is plain text inside the 24-hour window.
         describeContentTemplates().catch(() => []),
+        // Same shape of best-effort as the templates probe: an unreachable
+        // Orchestrator must leave the rest of the report readable, and no
+        // configuration simply means texting the number gets no reply.
+        describeOrchestrator().catch(() => null),
         describePoolUsage().catch(() => []),
         sessionId ? getPresentationState(sessionId).catch(() => null) : Promise.resolve(null),
       ]);
@@ -253,6 +258,39 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
             label: t.key,
             value: t.rejectionReason ? `${t.status} — ${t.rejectionReason}` : t.status,
           })),
+        },
+        {
+          id: 'orchestrator',
+          label: 'Text agent (Conversation Orchestrator)',
+          state: !config.orchestratorWebhookToken || !config.twilio.memoryStoreId
+            ? 'off'
+            : !orchestrator?.configured
+              ? 'warn'
+              : orchestrator.callbackMatches
+                ? 'ok'
+                : 'warn',
+          detail: !config.orchestratorWebhookToken
+            ? 'ORCHESTRATOR_WEBHOOK_TOKEN unset — texting the session number gets no reply, and the webhook refuses every request without it.'
+            : !config.twilio.memoryStoreId
+              ? 'TWILIO_MEMORY_STORE_ID unset — an Orchestrator configuration needs a memory store.'
+              : !orchestrator?.configured
+                ? 'No configuration yet. Create it and an attendee texting the session number reaches the same agent the phone call does.'
+                : orchestrator.callbackMatches
+                  ? 'A text to the session number is answered by this backend, with this session\'s persona.'
+                  : `The account calls back to a different origin, so texts reach nothing here: ${orchestrator.registeredCallback ?? 'none registered'}`,
+          // Manual, like the templates above: it writes account-level Twilio
+          // configuration that outlives the event. Creation is not idempotent on
+          // Twilio's side either, so this matches by display name and updates.
+          action:
+            config.orchestratorWebhookToken && config.twilio.memoryStoreId && !orchestrator?.callbackMatches
+              ? { label: 'Create & update configuration', path: '/api/orchestrator/configuration' }
+              : undefined,
+          values: [
+            { label: 'Callback', value: orchestrator?.registeredCallback ?? 'none' },
+            ...(orchestrator?.configurationId
+              ? [{ label: 'Configuration', value: orchestrator.configurationId }]
+              : []),
+          ],
         },
         {
           id: 'webhooks',

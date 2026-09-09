@@ -116,6 +116,44 @@ export async function sendOnChannel(
   }
 }
 
+/**
+ * One free-form message, on the channel the recipient wrote from.
+ *
+ * The templated `sendOnChannel` above exists because a business-initiated
+ * WhatsApp message reaches a phone that has never opened the chat only as
+ * approved content. This is the opposite case: the person just messaged us, so
+ * the 24-hour customer service window is open and free-form text is exactly what
+ * WhatsApp is willing to deliver — which is what lets the agent write its own
+ * reply instead of picking from six fixed bodies.
+ *
+ * The SMS fallback is kept for the same reason it exists there: a WhatsApp send
+ * can still fail (an expired window on a slow reply, an unregistered sender),
+ * and the reply has to arrive.
+ */
+export async function sendTextOnChannel(
+  channel: MessageChannel,
+  smsFrom: string,
+  to: string,
+  body: string
+): Promise<'whatsapp' | 'sms'> {
+  const whatsappFrom = config.twilio.whatsappFrom;
+  if (channel === 'sms' || !whatsappFrom) {
+    await sendSms(smsFrom, to, body);
+    return 'sms';
+  }
+
+  try {
+    await client.messages.create({ from: whatsappFrom, to: `whatsapp:${to}`, body });
+    return 'whatsapp';
+  } catch (err: any) {
+    console.warn(
+      `WhatsApp reply to ${to} failed (${err?.code ?? 'unknown'}) — sending as SMS`
+    );
+    await sendSms(smsFrom, to, body);
+    return 'sms';
+  }
+}
+
 /** The same body to everyone, on the requested channel, with per-recipient
  *  fallback: one attendee outside the WhatsApp window must not drop the room to
  *  SMS, and one hard failure must not stop the rest. */

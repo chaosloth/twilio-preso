@@ -65,6 +65,18 @@ export const config = {
     whatsappFrom: normalizeWhatsAppSender(process.env.TWILIO_WHATSAPP_FROM),
   },
   /**
+   * Shared secret in the Conversation Orchestrator status-callback URL.
+   *
+   * Twilio documents no signature, retry policy or expected response for these
+   * callbacks, so `X-Twilio-Signature` — how every `/api/voice/*` webhook is
+   * authenticated — is not available here. A secret in the URL is what is left.
+   *
+   * Optional, and unset the webhook route refuses every request: the endpoint
+   * runs an LLM turn and sends a message, so an unauthenticated one is worse
+   * than an absent feature.
+   */
+  orchestratorWebhookToken: process.env.ORCHESTRATOR_WEBHOOK_TOKEN || '',
+  /**
    * Seeded into `presenter-allowlist` at boot if missing. An empty allowlist is
    * an unrecoverable lockout, so this is deliberately idempotent — it
    * self-heals after an accidental deletion.
