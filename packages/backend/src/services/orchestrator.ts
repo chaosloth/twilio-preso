@@ -136,12 +136,15 @@ function channelSettings(numbers: string[]): Record<string, unknown> {
   };
 }
 
-/** The status-callback URL Twilio is told to call, secret and all. */
+/**
+ * The status-callback URL Twilio is told to call. No secret in it: Twilio signs
+ * the callback with the account auth token, and the signature covers this exact
+ * URL — so a query string here would have to be reproduced byte for byte on the
+ * receiving side.
+ */
 export function webhookUrl(): string {
   const base = config.publicBaseUrl.replace(/\/$/, '');
-  return `${base}/api/orchestrator/webhook?token=${encodeURIComponent(
-    config.orchestratorWebhookToken
-  )}`;
+  return `${base}/api/orchestrator/webhook`;
 }
 
 export interface EnsureResult {
@@ -159,11 +162,6 @@ export interface EnsureResult {
  * a presenter presses rather than something a boot does.
  */
 export async function ensureConfiguration(): Promise<EnsureResult> {
-  if (!config.orchestratorWebhookToken) {
-    throw new Error(
-      'ORCHESTRATOR_WEBHOOK_TOKEN is not set — registering a callback URL the webhook will refuse is worse than not registering one'
-    );
-  }
   if (!config.twilio.memoryStoreId) {
     throw new Error('TWILIO_MEMORY_STORE_ID is not set — a configuration needs a memory store');
   }

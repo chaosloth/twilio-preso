@@ -1,4 +1,3 @@
-import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { createLlmClientFromEnv, llmConfigFromEnv } from '@twilio-preso/llm';
 import type { LlmClient } from '@twilio-preso/llm';
@@ -22,6 +21,7 @@ import { historyFromCommunications, inboundText } from '../services/orchestrator
 import type { InboundText, OrchestratorEvent } from '../services/orchestratorEvents.js';
 import { getSessionById, sessionIdForPhoneNumber } from '../services/sessions.js';
 import { getAllParticipants, isSessionLive } from '../services/sync.js';
+import { requireOrchestratorSignature } from '../services/twilioSignature.js';
 
 /**
  * The text half of the AI agent.
@@ -53,16 +53,6 @@ function llmFor(model: string): LlmClient {
 }
 
 const STUMBLE = "Sorry — I lost my train of thought there. Ask me again?";
-
-/** Constant-time, and length-safe: `timingSafeEqual` throws on a length
- *  mismatch, which would itself leak the secret's length as a 500. */
-function tokenMatches(supplied: string | undefined): boolean {
-  const expected = config.orchestratorWebhookToken;
-  if (!expected || !supplied) return false;
-  const a = Buffer.from(supplied);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
 
 function findParticipant(participants: Participant[], phone: string): Participant | null {
   const wanted = phone.replace(/[^\d+]/g, '');
@@ -167,19 +157,32 @@ async function reply(app: FastifyInstance, message: InboundText): Promise<void> 
 
 export async function orchestratorRoutes(app: FastifyInstance): Promise<void> {
   /**
+   * Keeps the raw bytes of the body, which the signature is taken over: the hash
+   * is of what Twilio sent, and re-serializing the parsed object changes key
+   * order and whitespace. Scoped to this plugin, so no other route's parsing
+   * changes.
+   */
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body, done) => {
+    (request as typeof request & { rawBody?: string }).rawBody = body as string;
+    try {
+      done(null, body ? JSON.parse(body as string) : {});
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
+
+  /**
    * Conversation Orchestrator's status callback.
    *
-   * Twilio documents no signature for these, so the URL carries a shared secret
-   * — and with no secret configured the route refuses everything: an endpoint
-   * that runs an LLM turn and sends a message must not be open.
+   * Twilio signs it the same way it signs a TwiML webhook, except over the JSON
+   * body's hash rather than form fields — so the account auth token is what
+   * authenticates it, and this endpoint (which runs an LLM turn and sends a real
+   * message) needs no shared secret of its own.
    */
-  app.post<{ Querystring: { token?: string }; Body: OrchestratorEvent }>(
+  app.post<{ Body: OrchestratorEvent }>(
     '/api/orchestrator/webhook',
-    async (request, reply_) => {
-      if (!tokenMatches(request.query.token)) {
-        return reply_.status(403).send({ error: 'forbidden' });
-      }
-
+    { preHandler: requireOrchestratorSignature },
+    async (request) => {
       const message = inboundText(request.body, config.twilio.phonePool);
       // 200 either way. A retried delivery of a message already answered is a
       // second reply to a real phone, so nothing here asks Twilio to try again.

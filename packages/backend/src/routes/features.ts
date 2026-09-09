@@ -262,27 +262,25 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
         {
           id: 'orchestrator',
           label: 'Text agent (Conversation Orchestrator)',
-          state: !config.orchestratorWebhookToken || !config.twilio.memoryStoreId
+          state: !config.twilio.memoryStoreId
             ? 'off'
             : !orchestrator?.configured
               ? 'warn'
               : orchestrator.callbackMatches
                 ? 'ok'
                 : 'warn',
-          detail: !config.orchestratorWebhookToken
-            ? 'ORCHESTRATOR_WEBHOOK_TOKEN unset — texting the session number gets no reply, and the webhook refuses every request without it.'
-            : !config.twilio.memoryStoreId
-              ? 'TWILIO_MEMORY_STORE_ID unset — an Orchestrator configuration needs a memory store.'
-              : !orchestrator?.configured
-                ? 'No configuration yet. Create it and an attendee texting the session number reaches the same agent the phone call does.'
-                : orchestrator.callbackMatches
-                  ? 'A text to the session number is answered by this backend, with this session\'s persona.'
-                  : `The account calls back to a different origin, so texts reach nothing here: ${orchestrator.registeredCallback ?? 'none registered'}`,
+          detail: !config.twilio.memoryStoreId
+            ? 'TWILIO_MEMORY_STORE_ID unset — an Orchestrator configuration needs a memory store.'
+            : !orchestrator?.configured
+              ? 'No configuration yet. Create it and an attendee texting the session number reaches the same agent the phone call does.'
+              : orchestrator.callbackMatches
+                ? 'A text to the session number is answered by this backend, with this session\'s persona.'
+                : `The account calls back to a different origin, so texts reach nothing here: ${orchestrator.registeredCallback ?? 'none registered'}`,
           // Manual, like the templates above: it writes account-level Twilio
           // configuration that outlives the event. Creation is not idempotent on
           // Twilio's side either, so this matches by display name and updates.
           action:
-            config.orchestratorWebhookToken && config.twilio.memoryStoreId && !orchestrator?.callbackMatches
+            config.twilio.memoryStoreId && !orchestrator?.callbackMatches
               ? { label: 'Create & update configuration', path: '/api/orchestrator/configuration' }
               : undefined,
           values: [

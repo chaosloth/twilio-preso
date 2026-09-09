@@ -75,7 +75,6 @@ export const config = {
    * runs an LLM turn and sends a message, so an unauthenticated one is worse
    * than an absent feature.
    */
-  orchestratorWebhookToken: process.env.ORCHESTRATOR_WEBHOOK_TOKEN || '',
   /**
    * Seeded into `presenter-allowlist` at boot if missing. An empty allowlist is
    * an unrecoverable lockout, so this is deliberately idempotent — it
