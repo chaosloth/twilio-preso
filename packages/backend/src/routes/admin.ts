@@ -3,6 +3,7 @@ import {
   getAllParticipants,
   getPresentationState,
   removeParticipant,
+  publishEvent,
   resetParticipants,
   updatePresentationState,
 } from '../services/sync.js';
@@ -29,6 +30,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       if (!removed) {
         return reply.status(404).send({ error: 'Participant not found' });
       }
+      // Tell the phone itself. Its Sync token is still valid, so nothing else
+      // would: it would sit on the current slide until that token expired,
+      // connected to a session it is no longer part of.
+      await publishEvent(request.session!.id, {
+        type: 'participant-removed',
+        participantId: request.params.id,
+        timestamp: Date.now(),
+      });
       return { removed: request.params.id };
     }
   );
@@ -57,6 +66,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { sessionId: string } }>('/api/admin/reset', async (request, reply) => {
     try {
       await resetParticipants(request.session!.id);
+      // Empty id: every phone in the room is no longer a participant.
+      await publishEvent(request.session!.id, {
+        type: 'participant-removed',
+        participantId: '',
+        timestamp: Date.now(),
+      });
       return { reset: true };
     } catch (err: any) {
       request.log.error({ err, sessionId: request.session!.id }, 'admin reset failed');

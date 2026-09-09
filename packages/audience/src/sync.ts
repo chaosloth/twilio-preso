@@ -46,12 +46,39 @@ export async function shutdownSync(): Promise<void> {
   }
 }
 
+/**
+ * This phone is no longer a participant of the session — the presenter removed
+ * it in the HUD, or reset the room. It is the one token failure that will never
+ * come good on a retry, so it is a type rather than a status code buried in a
+ * message: retrying it forever leaves the phone reading "Reconnecting…" against
+ * a session it has been thrown out of, with no way back to the door.
+ */
+export class NotAParticipantError extends Error {
+  constructor() {
+    super('no longer a participant of this session');
+    this.name = 'NotAParticipantError';
+  }
+}
+
 async function fetchToken(sessionId: string, participantId: string): Promise<string> {
   const res = await fetch(
     `${BACKEND_URL}/api/token?identity=${encodeURIComponent(participantId)}&sessionId=${encodeURIComponent(sessionId)}`
   );
+  if (res.status === 403) throw new NotAParticipantError();
   if (!res.ok) throw new Error(`token request failed: ${res.status}`);
   return (await res.json()).token as string;
+}
+
+/**
+ * Called when the backend says this phone is no longer a participant. Set by the
+ * app so a removal that happens *while* the client is connected is noticed too:
+ * the SDK's own states cannot see it — the socket is fine, it is the identity
+ * behind it that is gone — so the signal arrives on the next token renewal.
+ */
+let onRevoked: (() => void) | null = null;
+
+export function setOnRevoked(handler: (() => void) | null): void {
+  onRevoked = handler;
 }
 
 export async function initSync(sessionId: string, participantId: string): Promise<SyncClient> {
@@ -64,8 +91,9 @@ export async function initSync(sessionId: string, participantId: string): Promis
   const renew = async () => {
     try {
       client.updateToken(await fetchToken(sessionId, participantId));
-    } catch {
-      // The next event, or the app's own retry, will try again.
+    } catch (err) {
+      if (err instanceof NotAParticipantError) onRevoked?.();
+      // Anything else: the next event, or the app's own retry, will try again.
     }
   };
   client.on('tokenAboutToExpire', renew);
@@ -93,7 +121,14 @@ export async function subscribeToEvents(
    * keyed by stage id now, since a stage's position varies between decks.
    */
   onInteraction: (interaction: InteractionConfig, stageIndex: number) => void,
-  onStageAdvance: (stageIndex: number) => void
+  onStageAdvance: (stageIndex: number) => void,
+  /**
+   * This phone was removed from the room. `participantId` is passed so the
+   * stream's own broadcast can be matched against who this phone is — a removal
+   * event names one participant, or every one of them.
+   */
+  participantId?: string,
+  onRemoved?: () => void
 ): Promise<void> {
   const client = getSyncClient();
   const names = sessionNames();
@@ -106,6 +141,9 @@ export async function subscribeToEvents(
       onInteraction(data.interaction, data.stageIndex);
     } else if (data.type === 'stage-advance') {
       onStageAdvance(data.stageIndex);
+    } else if (data.type === 'participant-removed') {
+      // '' is a whole-room reset; anything else names one phone.
+      if (!data.participantId || data.participantId === participantId) onRemoved?.();
     }
   });
 

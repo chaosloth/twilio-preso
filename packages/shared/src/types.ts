@@ -134,11 +134,26 @@ export interface AiPromptResponseEvent {
   timestamp: number;
 }
 
+/**
+ * The presenter removed this phone from the room (or reset the session). It is
+ * broadcast because the phone cannot see it any other way: its Sync socket stays
+ * up on a token that was already issued, so without this it sits on the slide it
+ * was on until that token expires — connected to a session it is no longer part
+ * of, and unable to register again. `participantId` empty means everyone.
+ */
+export interface ParticipantRemovedEvent {
+  type: 'participant-removed';
+  /** The participant thrown out, or '' for a whole-room reset. */
+  participantId: string;
+  timestamp: number;
+}
+
 export type SyncStreamEvent =
   | StageAdvanceEvent
   | InteractionPromptEvent
   | AudienceResponseEvent
   | ParticipantJoinedEvent
+  | ParticipantRemovedEvent
   | AiPromptPendingEvent
   | AiPromptResponseEvent;
 

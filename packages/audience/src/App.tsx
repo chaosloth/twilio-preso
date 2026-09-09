@@ -1,8 +1,18 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { InteractionConfig } from '@twilio-preso/shared';
-import { initSync, subscribeToEvents, publishResponse, isSyncConnected, isSyncDead, shutdownSync } from './sync';
+import {
+  initSync,
+  subscribeToEvents,
+  publishResponse,
+  isSyncConnected,
+  isSyncDead,
+  shutdownSync,
+  setOnRevoked,
+  NotAParticipantError,
+} from './sync';
 import { Join } from './pages/Join';
 import {
+  forgetSession,
   joinCodeFromPath,
   loadSession,
   saveSession,
@@ -57,27 +67,59 @@ export function App() {
   const [activeStageIndex, setActiveStageIndex] = useState(0);
   const [connected, setConnected] = useState(false);
 
-  const connectSync = useCallback(async (sessionId: string, id: string) => {
-    try {
-      await initSync(sessionId, id);
-      await subscribeToEvents(
-        (interaction, stageIndex) => {
-          setActiveInteraction(interaction);
-          setActiveStageIndex(stageIndex);
-          setState('interaction');
-        },
-        () => {
-          setActiveInteraction(null);
-          setState('waiting');
-        }
-      );
-      setConnected(true);
-    } catch {
-      setConnected(false);
-      // Retry after 3 seconds
-      setTimeout(() => connectSync(sessionId, id), 3000);
-    }
+  /**
+   * Back to the door. The presenter removed this phone from the room (or reset
+   * it), so the saved participant id is dead: the backend will refuse a token for
+   * it forever, and resuming from storage would loop the phone back onto
+   * "Reconnecting…" every time it reloaded. Forgetting the id is what lets the
+   * same handset register again.
+   */
+  const returnToRegistration = useCallback((sessionId: string) => {
+    setOnRevoked(null);
+    forgetSession(sessionId);
+    setParticipantId('');
+    setName('');
+    setActiveInteraction(null);
+    setConnected(false);
+    setState('register');
+    void shutdownSync();
   }, []);
+
+  const connectSync = useCallback(
+    async (sessionId: string, id: string) => {
+      try {
+        // A removal that lands while this phone is connected: the socket stays
+        // up on an already-issued token, so the stream event is the only signal.
+        setOnRevoked(() => returnToRegistration(sessionId));
+        await initSync(sessionId, id);
+        await subscribeToEvents(
+          (interaction, stageIndex) => {
+            setActiveInteraction(interaction);
+            setActiveStageIndex(stageIndex);
+            setState('interaction');
+          },
+          () => {
+            setActiveInteraction(null);
+            setState('waiting');
+          },
+          id,
+          () => returnToRegistration(sessionId)
+        );
+        setConnected(true);
+      } catch (err) {
+        setConnected(false);
+        // The one failure that never comes good: this phone is not a participant
+        // of this session any more, so retrying is a permanent "Reconnecting…".
+        if (err instanceof NotAParticipantError) {
+          returnToRegistration(sessionId);
+          return;
+        }
+        // Anything else is transient — retry after 3 seconds.
+        setTimeout(() => connectSync(sessionId, id), 3000);
+      }
+    },
+    [returnToRegistration]
+  );
 
   /**
    * A session resolved by the join screen. If this device already registered for
