@@ -517,6 +517,69 @@ export async function recall(
   return parts.length ? parts.join(' ') : null;
 }
 
+/**
+ * The durable profile as the prompt builders want it: declared traits *and*
+ * recent observations.
+ *
+ * Both halves, because they are not interchangeable. Traits are the schema — who
+ * this person is, and the only reliable home of the name, company, role and the
+ * mandatory-poll choices. Observations are everything they have said, here or at
+ * a previous event, and unlike `Recall` they are readable the moment they are
+ * written, which matters when a text lands seconds after the poll closed.
+ *
+ * The two reads are independent: traits without observations is a worse answer
+ * than both, and far better than neither, so a failed observations page does not
+ * discard the name with it. Nothing here throws — the caller is mid-turn with
+ * someone waiting on a reply.
+ */
+export interface ProfileContext {
+  traits: Record<string, Record<string, string>>;
+  observations: string[];
+}
+
+export async function fetchProfileContext(
+  profileId: string | undefined | null
+): Promise<ProfileContext | null> {
+  if (!isMemoryEnabled() || !profileId) return null;
+
+  const read = async <T>(path: string): Promise<T | null> => {
+    try {
+      return await memoryFetch<T>(path, undefined, 'GET');
+    } catch (err) {
+      console.warn(`Memory read ${path} failed:`, err);
+      return null;
+    }
+  };
+
+  const [profile, observations] = await Promise.all([
+    read<{ traits?: Record<string, Record<string, string>> }>(`/Profiles/${profileId}`),
+    read<{ observations?: Array<{ content?: string }> }>(
+      `/Profiles/${profileId}/Observations?pageSize=15`
+    ),
+  ]);
+  if (!profile && !observations) return null;
+
+  return {
+    traits: profile?.traits ?? {},
+    observations: (observations?.observations ?? [])
+      .map((o) => o.content)
+      .filter((c): c is string => !!c && c.trim().length > 0),
+  };
+}
+
+/**
+ * The profile behind a number, whether or not that number registered.
+ *
+ * The text agent's equivalent of the relay's inbound-caller lookup: someone who
+ * texts the session number may be in no participant map at all — they came to a
+ * previous event, or never scanned the QR — and the phone identifier is exactly
+ * what Identity Resolution merges profiles on, so they are resolved anyway.
+ */
+export async function lookupProfileByPhone(phone: string | null | undefined): Promise<string | null> {
+  if (!isMemoryEnabled() || !phone) return null;
+  return lookupProfile(phone);
+}
+
 /** One missing piece of the declared schema. A missing group implies all of its
  *  traits, so the group is reported once rather than per trait. */
 export interface MissingTrait {

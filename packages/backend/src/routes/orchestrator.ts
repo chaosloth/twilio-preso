@@ -1,17 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { createLlmClientFromEnv, llmConfigFromEnv } from '@twilio-preso/llm';
 import type { LlmClient } from '@twilio-preso/llm';
-import {
-  buildCallerContext,
-  resolveRelayConfig,
-  systemPromptFor,
-  tallyRoom,
-} from '@twilio-preso/shared';
+import { buildCallerContext, resolveTextConfig, systemPromptFor, tallyRoom } from '@twilio-preso/shared';
 import type { Participant, SessionRecord } from '@twilio-preso/shared';
 import { config } from '../config.js';
 import { requirePresenter } from '../services/auth.js';
 import { sendTextOnChannel } from '../services/messaging.js';
-import { recall } from '../services/memory.js';
+import { fetchProfileContext, lookupProfileByPhone, recall } from '../services/memory.js';
 import {
   describeOrchestrator,
   ensureConfiguration,
@@ -30,10 +25,16 @@ import {
 /**
  * The text half of the AI agent.
  *
- * Same persona, same caller context, same room result as the voice agent — they
- * share `systemPromptFor` in `@twilio-preso/shared` and the per-session
- * `session.relay` the HUD's voice tab edits. The medium is the only difference:
- * `medium: 'text'` writes for a screen and offers no tool sentinels.
+ * It knows who it is talking to the same way the voice agent does: this
+ * session's Sync answers, the durable Conversation Memory profile's traits and
+ * observations, a semantic recall, and what the whole room voted — assembled by
+ * the same `buildCallerContext` / `systemPromptFor` the relay uses.
+ *
+ * What it does *not* share is the config. `session.text` is its own partial,
+ * edited on the HUD's Text tab: the structure and the default wording come from
+ * the voice agent's (`USE_WHAT_YOU_KNOW`, the same `{{context}}` block, the same
+ * outcome instruction) so the two are one persona, but nothing here can change
+ * what a live call sounds like.
  *
  * Conversation Orchestrator's callback is a post-event notification, not a
  * request whose response is delivered, so the reply is sent over the Messages API
@@ -55,8 +56,6 @@ function llmFor(model: string): LlmClient {
   }
   return client;
 }
-
-const STUMBLE = "Sorry — I lost my train of thought there. Ask me again?";
 
 function findParticipant(participants: Participant[], phone: string): Participant | null {
   const wanted = phone.replace(/[^\d+]/g, '');
@@ -94,23 +93,38 @@ async function reply(app: FastifyInstance, message: InboundText): Promise<void> 
     return;
   }
 
-  const relayConfig = resolveRelayConfig(session.relay);
+  const textConfig = resolveTextConfig(session.text);
   const participants = await getAllParticipants(sessionId);
   const participant = findParticipant(participants, message.from);
 
-  // Read once, before the turn — a memory round trip per message is latency a
-  // person watching a typing thread notices.
+  /**
+   * The profile, read once before the turn — a memory round trip per message is
+   * latency somebody watching a thread notices.
+   *
+   * `lookupProfileByPhone` is the half that matters most here: an attendee who
+   * texts the number may be in no participant map at all, having come to a
+   * previous event or never scanned the QR, and without this the agent answers
+   * them as a stranger while the whole point of the demo is that it knows them.
+   */
+  let profile = null;
   let recalled: string | null = null;
-  if (relayConfig.useMemory && participant?.memoryProfileId) {
-    try {
-      recalled = await recall(participant.memoryProfileId, message.text);
-    } catch (err) {
-      app.log.warn({ err }, 'orchestrator: memory recall failed');
-    }
+  if (textConfig.useMemory) {
+    const profileId = participant?.memoryProfileId ?? (await lookupProfileByPhone(message.from));
+    // Independently, not as one `Promise.all`: `Recall` is a semantic index that
+    // can fail or lag while the traits are already there, and a failed recall
+    // must not throw away the name with it.
+    const warn = (err: unknown) => {
+      app.log.warn({ err }, 'orchestrator: memory read failed');
+      return null;
+    };
+    [profile, recalled] = await Promise.all([
+      fetchProfileContext(profileId).catch(warn),
+      recall(profileId ?? undefined, message.text).catch(warn),
+    ]);
   }
 
   const ctx = {
-    ...buildCallerContext(participant, null, true, tallyRoom(participants)),
+    ...buildCallerContext(participant, profile, true, tallyRoom(participants)),
     recall: recalled,
   };
 
@@ -131,7 +145,7 @@ async function reply(app: FastifyInstance, message: InboundText): Promise<void> 
    * not reset it.
    */
   const sent = history.filter((h) => h.role === 'assistant').length;
-  if (sent >= relayConfig.maxTurnsInbound) {
+  if (sent >= textConfig.maxTurnsInbound) {
     app.log.info({ sessionId, sent }, 'orchestrator: turn limit reached, not replying');
     return;
   }
@@ -142,17 +156,24 @@ async function reply(app: FastifyInstance, message: InboundText): Promise<void> 
 
   let body: string;
   try {
-    const text = await llmFor(relayConfig.model).complete({
-      system: systemPromptFor(ctx, relayConfig, { medium: 'text' }),
+    const text = await llmFor(textConfig.model).complete({
+      system: systemPromptFor(ctx, textConfig, { medium: 'text' }),
       maxTokens: 200,
       messages: [...priorTurns, { role: 'user' as const, content: message.text }],
     });
-    body = text?.trim() || STUMBLE;
+    body = text?.trim() || textConfig.fallbackReply;
   } catch (err) {
     // A failed turn is a message that never arrives, which reads as the agent
     // ignoring them. Say something instead.
     app.log.error({ err }, 'orchestrator: LLM turn failed');
-    body = STUMBLE;
+    body = textConfig.fallbackReply;
+  }
+
+  // A presenter who cleared the fallback line asked for silence on a failed
+  // turn; sending an empty body is a Messages API error, not silence.
+  if (!body) {
+    app.log.warn({ sessionId }, 'orchestrator: nothing to send, fallback reply is empty');
+    return;
   }
 
   const via = await sendTextOnChannel(message.channel, session.phoneNumber, message.from, body);

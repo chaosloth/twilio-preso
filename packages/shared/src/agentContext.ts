@@ -23,6 +23,21 @@ export interface AgentProfileContext {
  * and one that is read are written differently, and the tool sentinels only
  * exist on a call.
  */
+/**
+ * What the prompt builder needs from a config, and no more.
+ *
+ * `RelayConfig` and `TextAgentConfig` both satisfy it — which is what lets one
+ * prompt builder serve the call and the thread. The voice-only tool section is
+ * read off `tools` when a config carries it, so a text config simply has none
+ * rather than being told about sentinels a reader would see verbatim.
+ */
+export interface AgentPromptConfig {
+  systemPrompt: string;
+  roomContext: boolean;
+  outcomeInstruction: string;
+  tools?: RelayConfig['tools'];
+}
+
 export type AgentMedium = 'voice' | 'text';
 
 /**
@@ -188,7 +203,7 @@ function describeRoom(ctx: CallerContext): string {
  */
 export function systemPromptFor(
   ctx: CallerContext,
-  config: RelayConfig,
+  config: AgentPromptConfig,
   opts: { opening?: boolean; medium?: AgentMedium } = {}
 ): string {
   const name = ctx.name || 'someone whose name you do not know';
@@ -225,5 +240,6 @@ export function systemPromptFor(
   // phone is answered by a greeting or by nothing.
   const mid = opts.opening ? '' : `\n\n${MID_CONVERSATION_RULE}`;
 
-  return `${base}${relayToolPrompt(config)}\n\n${direction}${mid}`;
+  const tools = 'tools' in config ? relayToolPrompt(config as RelayConfig) : '';
+  return `${base}${tools}\n\n${direction}${mid}`;
 }

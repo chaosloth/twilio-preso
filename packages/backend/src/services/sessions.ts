@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import Twilio from 'twilio';
 import { DEFAULT_DECK, allocateJoinCode, isValidJoinCode, normalizeJoinCode } from '@twilio-preso/shared';
-import type { RelayConfig } from '@twilio-preso/shared';
+import type { RelayConfig, TextAgentConfig } from '@twilio-preso/shared';
 import type {
   Deck,
   PhonePoolClaim,
@@ -356,6 +356,20 @@ export async function setSessionCountryCodes(
   const session = await getSessionById(sessionId);
   if (!session) return null;
   return updateSession(session, { countryCodes });
+}
+
+/**
+ * Text-agent settings, stored the same way and for the same reason as the voice
+ * ones — a separate field, because the two tabs are edited independently and a
+ * text save must not carry a stale copy of the call's settings with it.
+ */
+export async function setSessionText(
+  sessionId: string,
+  text: Partial<TextAgentConfig>
+): Promise<SessionRecord | null> {
+  const session = await getSessionById(sessionId);
+  if (!session) return null;
+  return updateSession(session, { text });
 }
 
 /**

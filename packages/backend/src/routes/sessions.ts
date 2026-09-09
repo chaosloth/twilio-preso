@@ -3,10 +3,11 @@ import {
   COUNTRY_CODES,
   VERIFY_CHANNELS,
   resolveRelayConfig,
+  resolveTextConfig,
   toPublicSession,
   validateDeck,
 } from '@twilio-preso/shared';
-import type { Deck, RelayConfig, VerifyChannel } from '@twilio-preso/shared';
+import type { Deck, RelayConfig, TextAgentConfig, VerifyChannel } from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
 import {
   PhonePoolExhaustedError,
@@ -18,6 +19,7 @@ import {
   listSessions,
   setSessionDeck,
   setSessionRelay,
+  setSessionText,
   setSessionStatus,
   setSessionCountryCode,
   setSessionCountryCodes,
@@ -125,6 +127,29 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
       const session = await setSessionRelay(request.params.id, resolveRelayConfig(relay));
       if (!session) return reply.status(404).send({ error: 'Session not found' });
       return { session, relay: resolveRelayConfig(session.relay) };
+    }
+  );
+
+  /**
+   * Text-agent settings: the same shape of edit as the voice tab, for the agent
+   * an attendee reaches by replying to a message rather than by answering a call.
+   */
+  app.get<{ Params: { id: string } }>('/api/sessions/:id/text', async (request, reply) => {
+    const session = await getSessionById(request.params.id);
+    if (!session) return reply.status(404).send({ error: 'Session not found' });
+    return { text: resolveTextConfig(session.text), stored: session.text ?? {} };
+  });
+
+  app.put<{ Params: { id: string }; Body: { text: Partial<TextAgentConfig> } }>(
+    '/api/sessions/:id/text',
+    async (request, reply) => {
+      const text = request.body?.text;
+      if (!text || typeof text !== 'object') {
+        return reply.status(400).send({ error: 'text object is required' });
+      }
+      const session = await setSessionText(request.params.id, resolveTextConfig(text));
+      if (!session) return reply.status(404).send({ error: 'Session not found' });
+      return { session, text: resolveTextConfig(session.text) };
     }
   );
 

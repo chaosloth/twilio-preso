@@ -11,6 +11,7 @@ export * from './canvas.js';
 export * from './deckTransfer.js';
 export * from './phone.js';
 export * from './relayConfig.js';
+export * from './textConfig.js';
 export * from './languages.js';
 export * from './contentTemplates.js';
 export * from './roomContext.js';

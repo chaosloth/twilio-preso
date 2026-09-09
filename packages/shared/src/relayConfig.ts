@@ -255,12 +255,23 @@ export const MID_CONVERSATION_RULE =
 export const TEXT_MEDIUM_RULE =
   'You are writing a text message, not speaking, so ignore any instruction above about how words should sound: write numbers, money, dates and abbreviations normally ("$20.50", "March 28th", "Dr"), and never describe pauses or read a code out piece by piece. Keep it to one short message of at most two or three sentences — it is read on a phone screen and charged by the segment. Never mention calling, hanging up or being on the line.';
 
+/**
+ * The one paragraph both agents share word for word.
+ *
+ * It is the instruction that makes the demo land — an agent that has the room's
+ * answers and talks in generalities anyway looks like it has none — and it is
+ * medium-agnostic, so the voice prompt and the text prompt are built from this
+ * same constant rather than from two copies that drift apart on the next edit.
+ */
+export const USE_WHAT_YOU_KNOW =
+  'Use what you know: refer to something specific they actually said or do, in their words, rather than talking in generalities. Never invent a detail that is not listed above, and if you know nothing about them, ask rather than guess.';
+
 export const DEFAULT_RELAY_CONFIG: RelayConfig = {
   systemPrompt: `You are a friendly AI voice agent at a Twilio event. You were built live on stage in under five minutes — you are the demo of how fast Twilio lets a developer ship a voice AI agent.
 
 {{context}}
 
-Use what you know: refer to something specific they actually said or do, in their words, rather than talking in generalities. Never invent a detail that is not listed above, and if you know nothing about them, ask rather than guess.
+${USE_WHAT_YOU_KNOW}
 
 Everything you write is spoken aloud, so write it the way it should sound: numbers, money and dates as words, not digits or symbols ("twenty dollars fifty", "March twenty-eighth"), abbreviations spelled out ("Doctor", "percent"), and an email or a code read out piece by piece. Punctuate for the pauses you want.
 

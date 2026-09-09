@@ -1,6 +1,7 @@
 import { countryCodeFor, offeredCountryCodesFor } from './countryCodes.js';
 import type { Deck } from './deck.js';
 import type { RelayConfig } from './relayConfig.js';
+import type { TextAgentConfig } from './textConfig.js';
 
 export type SessionStatus = 'draft' | 'live' | 'ended';
 
@@ -39,6 +40,14 @@ export interface SessionRecord {
    * default. Absent means "everything default".
    */
   relay?: Partial<RelayConfig>;
+  /**
+   * Text-agent settings — the same agent reached over SMS, RCS or WhatsApp.
+   *
+   * Its own partial rather than a corner of `relay`, because the two are edited
+   * on their own HUD tabs and a presenter tuning the thread should not be able to
+   * change what a live call sounds like. Read through `resolveTextConfig`.
+   */
+  text?: Partial<TextAgentConfig>;
   /**
    * Which channel registration offers first for the one-time passcode. A room
    * whose WhatsApp sender is not ready needs SMS, and that is a property of the
