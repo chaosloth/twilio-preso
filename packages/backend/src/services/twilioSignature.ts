@@ -1,4 +1,3 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import Twilio from 'twilio';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config.js';
@@ -42,13 +41,17 @@ export async function requireTwilioSignature(
 /**
  * Validates a Twilio signature over a **JSON** body — Conversation Orchestrator's
  * status callbacks, which are not form-encoded and so are not what
- * `Twilio.validateRequest` computes.
+ * `Twilio.validateRequest` computes on its own.
  *
- * The scheme, confirmed against real captured callbacks: HMAC-SHA1 over the URL
- * with `?bodySHA256=<sha256 hex of the raw body>` appended. Twilio does **not**
- * send that query parameter, so it cannot be read off the request — which also
- * means the raw bytes have to be kept: re-stringifying the parsed body changes
- * key order and whitespace and the hash with it.
+ * Twilio sends the body hash **itself**, as a `bodySHA256` query parameter on the
+ * request line, and signs the URL including it. So `url` is the URL that arrived,
+ * appended to nothing: computing the hash and adding a second `?bodySHA256=`
+ * hashes `…?bodySHA256=x?bodySHA256=x` and rejects every real callback.
+ *
+ * `Twilio.validateRequestWithBody` is that check — the signature over the whole
+ * URL, plus the raw body hashed against the parameter in it — so it is used
+ * rather than rebuilt. The raw bytes are what must reach here: re-stringifying
+ * the parsed body changes key order and whitespace, and the hash with them.
  */
 export function jsonSignatureValid(
   authToken: string,
@@ -57,13 +60,31 @@ export function jsonSignatureValid(
   rawBody: string
 ): boolean {
   if (!authToken || !signature) return false;
-  const hash = createHash('sha256').update(rawBody, 'utf8').digest('hex');
-  const expected = createHmac('sha1', authToken)
-    .update(`${url}?bodySHA256=${hash}`, 'utf8')
-    .digest('base64');
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
+  try {
+    return Twilio.validateRequestWithBody(authToken, signature, url, rawBody);
+  } catch {
+    // A URL with no `bodySHA256` at all: not a callback Twilio signed this way.
+    return false;
+  }
+}
+
+/**
+ * Whether the Orchestrator webhook is accepting unsigned callbacks.
+ *
+ * Deliberately run-time state rather than a stored setting: a bypass left on is
+ * an open LLM-and-SMS endpoint, so a restart or a deploy has to close it again.
+ * `ORCHESTRATOR_SKIP_SIGNATURE` seeds it for local work behind a tunnel, where
+ * the signed origin and the origin serving the request are easy to get apart.
+ */
+let signatureBypass = process.env.ORCHESTRATOR_SKIP_SIGNATURE === 'true';
+
+export function isSignatureBypassed(): boolean {
+  return signatureBypass;
+}
+
+export function setSignatureBypass(enabled: boolean): boolean {
+  signatureBypass = enabled;
+  return signatureBypass;
 }
 
 /**
@@ -77,6 +98,16 @@ export async function requireOrchestratorSignature(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
+  if (signatureBypass) {
+    // Warned every time, not once: an open webhook that has gone quiet in the log
+    // is how a bypass turned on to debug a tunnel survives into an event.
+    request.log.warn(
+      { url: request.url },
+      'Orchestrator signature validation is BYPASSED — this webhook is open'
+    );
+    return;
+  }
+
   const signature = request.headers['x-twilio-signature'];
   const raw = (request as FastifyRequest & { rawBody?: string }).rawBody;
   if (typeof signature !== 'string' || typeof raw !== 'string') {
@@ -88,7 +119,10 @@ export async function requireOrchestratorSignature(
   const url = `${base}${request.url}`;
 
   if (!jsonSignatureValid(config.twilio.authToken, signature, url, raw)) {
-    request.log.warn({ url }, 'Orchestrator callback failed signature validation');
+    request.log.warn(
+      { url, hasBodyHash: url.includes('bodySHA256=') },
+      'Orchestrator callback failed signature validation'
+    );
     return reply.status(403).send({ error: 'Invalid Twilio signature' });
   }
 }

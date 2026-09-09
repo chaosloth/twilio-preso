@@ -15,6 +15,7 @@ import {
 import { probeLlm } from '../services/ai.js';
 import { describeContentTemplates, ensureContentTemplates } from '../services/content.js';
 import { describeOrchestrator, webhookUrl } from '../services/orchestrator.js';
+import { isSignatureBypassed } from '../services/twilioSignature.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -91,6 +92,7 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
 
       const thisSessionNumber = phonePool.find((p) => p.isThisSession)?.phoneNumber;
       const relayUrl = process.env.CONVERSATION_RELAY_URL || '';
+      const signatureBypassed = isSignatureBypassed();
 
       let llm: FeatureStatus;
       try {
@@ -303,6 +305,19 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
                 ? [{ label: 'From env', value: orchestrator.configuredId }]
                 : []),
           ],
+        },
+        {
+          id: 'orchestrator-signature',
+          label: 'Text agent webhook signature',
+          state: signatureBypassed ? 'warn' : 'ok',
+          detail: signatureBypassed
+            ? 'BYPASSED: the webhook accepts unsigned callbacks, so anyone who knows the URL can make this account run an LLM turn and send a message. It closes itself on the next restart or deploy.'
+            : 'Every callback is validated against the account auth token and this origin. A mismatch is a 403 in the log and a text that gets no reply.',
+          action: {
+            label: signatureBypassed ? 'Re-enable validation' : 'Bypass validation (debug)',
+            path: '/api/orchestrator/signature-bypass',
+          },
+          values: [{ label: 'Signed origin', value: config.publicBaseUrl }],
         },
         {
           id: 'webhooks',

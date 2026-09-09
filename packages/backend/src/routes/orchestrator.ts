@@ -21,7 +21,11 @@ import { historyFromCommunications, inboundText } from '../services/orchestrator
 import type { InboundText, OrchestratorEvent } from '../services/orchestratorEvents.js';
 import { getSessionById, sessionIdForPhoneNumber } from '../services/sessions.js';
 import { getAllParticipants, isSessionLive } from '../services/sync.js';
-import { requireOrchestratorSignature } from '../services/twilioSignature.js';
+import {
+  isSignatureBypassed,
+  requireOrchestratorSignature,
+  setSignatureBypass,
+} from '../services/twilioSignature.js';
 
 /**
  * The text half of the AI agent.
@@ -210,4 +214,20 @@ export async function orchestratorRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/orchestrator/configuration', { preHandler: requirePresenter }, async () =>
     describeOrchestrator()
   );
+
+  /**
+   * Toggles signature validation on the webhook above. Presenter-only, and a
+   * toggle rather than a switch that stays where it is put: it is held in memory,
+   * so a restart or a deploy closes an open webhook that somebody forgot.
+   *
+   * It exists because a rejected callback looks exactly like a broken agent — the
+   * text arrives, nothing answers, and the only evidence is a 403 in the log —
+   * and behind a tunnel the signed origin and the origin serving the request are
+   * easy to get apart.
+   */
+  app.post('/api/orchestrator/signature-bypass', { preHandler: requirePresenter }, async (req) => {
+    const bypassed = setSignatureBypass(!isSignatureBypassed());
+    req.log.warn({ bypassed }, 'orchestrator signature validation toggled');
+    return { bypassed };
+  });
 }
