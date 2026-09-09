@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Deck, DeckWarning, ResolvedStage, SessionRecord, VerifyChannel } from '@twilio-preso/shared';
+import type {
+  Deck,
+  DeckWarning,
+  ParsedDeckTransfer,
+  ResolvedStage,
+  SessionRecord,
+  VerifyChannel,
+} from '@twilio-preso/shared';
 import { presenterFetch } from '../auth';
-import { fetchSession, saveDeck, stagesFor } from '../sessions';
+import { fetchSession, saveDeck, saveRelayConfig, saveTextConfig, stagesFor } from '../sessions';
 
 export interface ParticipantInfo {
   id: string;
@@ -198,6 +205,31 @@ export function useAdminApi(sessionId: string) {
     [sessionId]
   );
 
+  /**
+   * Commits an imported presentation: the deck, then whichever of the agent
+   * personas and door settings the file carried.
+   *
+   * The deck goes first because it is the thing the presenter is looking at, and
+   * each of the rest is written only when the file actually had it — a deck-only
+   * export must leave this session's personas alone rather than resetting them
+   * to the shipped defaults.
+   */
+  const applyImport = useCallback(
+    async (imported: ParsedDeckTransfer, deck: Deck) => {
+      await commitDeck(deck);
+      if (imported.relay) await saveRelayConfig(sessionId, imported.relay);
+      if (imported.text) await saveTextConfig(sessionId, imported.text);
+      const settings = imported.settings;
+      if (settings?.verifyChannel) await setVerifyChannel(settings.verifyChannel);
+      if (settings?.countryCodes?.length) await setCountryCodes(settings.countryCodes);
+      // Last: the offered list is what the starting code has to be a member of,
+      // so writing the code first can have it dropped by the list that follows.
+      if (settings?.countryCode) await setCountryCode(settings.countryCode);
+      await reloadSession();
+    },
+    [sessionId, commitDeck, setVerifyChannel, setCountryCode, setCountryCodes, reloadSession]
+  );
+
   return {
     session,
     stages,
@@ -212,6 +244,7 @@ export function useAdminApi(sessionId: string) {
     setCountryCode,
     setCountryCodes,
     commitDeck,
+    applyImport,
     reloadSession,
   };
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { deckExportFilename, exportDeck, parseDeckTransfer, validateDeck } from '@twilio-preso/shared';
-import type { Deck, DeckStage } from '@twilio-preso/shared';
+import type { Deck, DeckStage, ParsedDeckTransfer } from '@twilio-preso/shared';
 import type { AdminApi } from '../useAdminApi';
 import { SlideModal } from '../deck/SlideModal';
 import { SlideRail } from '../deck/SlideRail';
@@ -26,7 +26,7 @@ interface DeckTabProps {
  * own on commit. Neither blocks anything.
  */
 export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
-  const { session, warnings, commitDeck } = api;
+  const { session, warnings, commitDeck, applyImport } = api;
   const [draft, setDraft] = useState<DeckStage[]>([]);
   /** Index of the slide open in the editor overlay, or null when closed. */
   const [editing, setEditing] = useState<number | null>(null);
@@ -34,15 +34,28 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
   const [error, setError] = useState('');
   /** What an import said about the file, shown until the next edit. */
   const [importNote, setImportNote] = useState<string[]>([]);
+  /**
+   * The rest of an imported file — the agent personas and the door settings —
+   * held until Save, so the whole presentation lands in one deliberate action
+   * and a presenter who changes their mind has changed nothing.
+   */
+  const [imported, setImported] = useState<ParsedDeckTransfer | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (session) setDraft(session.deck.stages);
   }, [session]);
 
+  /**
+   * `imported` counts: a file may carry the same slides with a different voice
+   * persona, and then the deck comparison says nothing changed while there is
+   * still something waiting to be saved.
+   */
   const dirty = useMemo(
-    () => !!session && JSON.stringify(draft) !== JSON.stringify(session.deck.stages),
-    [draft, session]
+    () =>
+      !!session &&
+      (!!imported || JSON.stringify(draft) !== JSON.stringify(session.deck.stages)),
+    [draft, imported, session]
   );
 
   const preview = useMemo(
@@ -82,7 +95,18 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
    * looking at is what you meant to copy, and an export is read-only anyway.
    */
   function exportToFile() {
-    const file = exportDeck({ ...session!.deck, stages: draft }, session!.title);
+    // Everything a rehearsal changed, not only the slides: the personas, and the
+    // door settings the room depends on. Resolved by `exportDeck`, so the file
+    // states what this session actually does rather than only its overrides.
+    const file = exportDeck({ ...session!.deck, stages: draft }, session!.title, {
+      relay: session!.relay ?? {},
+      text: session!.text ?? {},
+      settings: {
+        verifyChannel: session!.verifyChannel,
+        countryCode: session!.countryCode,
+        countryCodes: session!.countryCodes,
+      },
+    });
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' })
     );
@@ -106,11 +130,18 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
     setError('');
     setImportNote([]);
     try {
-      const { deck, warnings: fileWarnings } = parseDeckTransfer(await file.text());
-      setDraft(deck.stages);
+      const parsed = parseDeckTransfer(await file.text());
+      setDraft(parsed.deck.stages);
+      setImported(parsed);
+      const carried = [
+        parsed.relay && 'voice agent',
+        parsed.text && 'text agent',
+        Object.keys(parsed.settings ?? {}).length > 0 && 'registration settings',
+      ].filter(Boolean) as string[];
       setImportNote([
-        `Loaded ${deck.stages.length} slides from ${file.name} — review, then Save deck.`,
-        ...fileWarnings,
+        `Loaded ${parsed.deck.stages.length} slides from ${file.name} — review, then Save deck.`,
+        ...(carried.length ? [`Also carries ${carried.join(', ')} — saved with the deck.`] : []),
+        ...parsed.warnings,
       ]);
     } catch (err: any) {
       setError(err?.message ?? 'Could not read that deck file.');
@@ -122,7 +153,12 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
     setError('');
     try {
       const deck: Deck = { ...session!.deck, stages: draft };
-      await commitDeck(deck);
+      if (imported) {
+        await applyImport(imported, deck);
+        setImported(null);
+      } else {
+        await commitDeck(deck);
+      }
       // Tell the presentation window to re-read the record, so a saved edit
       // takes effect on the big screen without restarting the session.
       const channel = new BroadcastChannel(`presenter-sync:${session!.id}`);
@@ -166,6 +202,7 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
             onClick={() => {
               setDraft(session.deck.stages);
               setImportNote([]);
+              setImported(null);
             }}
           >
             Revert
@@ -184,6 +221,12 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
           </button>
         </div>
       </Row>
+
+      <div style={{ ...caption, marginBottom: 16 }}>
+        Export carries the whole presentation — slide order, titles, speaker notes, copy,
+        interactions and triggers, plus the voice and text agent settings and the registration
+        channel and dialling codes. Import loads it as a draft; Save writes all of it.
+      </div>
 
       {error && <ErrorText>{error}</ErrorText>}
 
