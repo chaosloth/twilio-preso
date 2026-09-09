@@ -9,6 +9,7 @@ import {
   supportsAutoLanguageDetection,
   languageCodes,
   resolvedLanguages,
+  sayVoice,
 } from '../relayConfig.js';
 
 describe('resolveRelayConfig', () => {
@@ -316,5 +317,41 @@ describe('greeting once', () => {
    *  to delete the reason the agent stops greeting. */
   it('keeps that rule out of the editable prompt', () => {
     expect(DEFAULT_RELAY_CONFIG.systemPrompt).not.toContain(MID_CONVERSATION_RULE);
+  });
+});
+
+describe('sayVoice', () => {
+  /**
+   * The scripted finale and the live agent are two triggers on the same stage of
+   * the talk, so hearing two different voices reads as two different products.
+   * `<Say>` takes `{Provider}.{Voice}` where `<ConversationRelay>` takes the two
+   * as separate attributes, which is the whole reason this mapping exists.
+   */
+  it('renders the agent voice in the form the Say verb takes', () => {
+    expect(sayVoice(resolveRelayConfig())).toBe(`ElevenLabs.${DEFAULT_RELAY_CONFIG.voice}`);
+    expect(sayVoice(resolveRelayConfig({ ttsProvider: 'Google', voice: 'en-AU-Neural2-B' }))).toBe(
+      'Google.en-AU-Neural2-B'
+    );
+  });
+
+  /** Amazon is `Polly` to the Say verb and `Amazon` to ConversationRelay — the
+   *  same provider under two names, and the wrong one is a call that says
+   *  nothing. */
+  it('calls Amazon by the name the Say verb uses', () => {
+    expect(sayVoice(resolveRelayConfig({ ttsProvider: 'Amazon', voice: 'Olivia-Neural' }))).toBe(
+      'Polly.Olivia-Neural'
+    );
+  });
+
+  /**
+   * A relay voice may carry ElevenLabs' own tuning suffixes (model, then
+   * speed/stability/similarity). The Say verb does not take those, so they are
+   * dropped rather than passed through as part of a voice id that then does not
+   * exist.
+   */
+  it('drops the ElevenLabs tuning suffix the Say verb cannot take', () => {
+    expect(sayVoice(resolveRelayConfig({ voice: 'M7ya1YbaeFaPXljg9BpK-1.1_0.6_0.8' }))).toBe(
+      'ElevenLabs.M7ya1YbaeFaPXljg9BpK'
+    );
   });
 });

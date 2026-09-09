@@ -315,6 +315,25 @@ Keep every reply SHORT — one or two sentences, because this is a phone call an
  * document that a hand-edited export or an older build could have written, and
  * only declared fields may reach the prompt or the TwiML.
  */
+/**
+ * The agent's voice in the form the `<Say>` verb takes it.
+ *
+ * `<Say>` wants one `{Provider}.{Voice}` string where `<ConversationRelay>` takes
+ * `ttsProvider` and `voice` separately, and it calls Amazon `Polly`. This exists
+ * so the scripted finale speaks in the same voice as the live agent: they are two
+ * triggers on the same moment of the talk, and two voices read as two products.
+ *
+ * ElevenLabs' tuning suffixes (`-flash_v2`, `-1.1_0.6_0.8`) are part of a
+ * ConversationRelay voice id but not of a `<Say>` one, so they are dropped rather
+ * than passed through into a voice that does not exist.
+ */
+export function sayVoice(config: RelayConfig): string {
+  const provider = config.ttsProvider === 'Amazon' ? 'Polly' : config.ttsProvider;
+  const voice =
+    config.ttsProvider === 'ElevenLabs' ? config.voice.split('-')[0] : config.voice;
+  return `${provider}.${voice}`;
+}
+
 export function resolveRelayConfig(stored?: Partial<RelayConfig> | null): RelayConfig {
   const source = stored ?? {};
   const pick = <K extends keyof RelayConfig>(key: K): RelayConfig[K] =>

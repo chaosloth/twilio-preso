@@ -18,13 +18,13 @@ describe('scan and vote deck', () => {
     expect(stages.map((s) => s.id)).toEqual(['opening', 'brand-poll', 'theme-poll', 'otp-poll']);
   });
 
-  /** "Scan me" and nothing else: the QR is the whole slide, so no image, no
-   *  sub-headline competing with it. */
-  it('shows nothing on the opening slide but the code and scan me', () => {
+  /** The QR is the whole slide: "Scan me" over it and the instruction under it,
+   *  and nothing else — no photo, no name, no title, no image. */
+  it('shows nothing on the opening slide but the code and how to use it', () => {
     const opening = stages[0];
     expect(opening.slots?.headline).toMatch(/scan me/i);
-    expect(opening.slots?.image).toBe('');
-    expect(opening.slots?.subhead).toBe('');
+    expect(opening.slots?.subhead).toMatch(/participate live/i);
+    expect(Object.keys(opening.slots ?? {})).toEqual(['headline', 'subhead']);
   });
 
   it('asks each question with both answers on the phones', () => {

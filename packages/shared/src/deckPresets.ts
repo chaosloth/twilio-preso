@@ -18,7 +18,7 @@ export const SCAN_AND_VOTE_DECK: Deck = {
   id: 'scan-and-vote',
   name: 'Scan & vote — QR plus the three choices',
   stages: [
-    { stageId: 'opening', slots: { headline: 'Scan Me', subhead: '', image: '' } },
+    { stageId: 'opening', slots: { headline: 'Scan Me' } },
     { stageId: 'brand-poll' },
     { stageId: 'theme-poll' },
     { stageId: 'otp-poll' },

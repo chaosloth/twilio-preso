@@ -10,6 +10,7 @@ import {
   resolveRelayConfig,
   resolvedLanguages,
   responseFor,
+  sayVoice,
   supportsAutoLanguageDetection,
 } from '@twilio-preso/shared';
 import type { Participant, RelayConfig, SessionRecord } from '@twilio-preso/shared';
@@ -279,7 +280,11 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
          * either or both, so neither may change under the other.
          */
         case 'voice-mass-outbound': {
-          const called = await callEveryone(participants, from, `${twimlBase()}/api/voice/demo-bot`);
+          const called = await callEveryone(
+            participants,
+            from,
+            `${twimlBase()}/api/voice/demo-bot?sessionId=${encodeURIComponent(session.id)}`
+          );
           return { called, total: participants.length, mode: 'static-twiml' };
         }
 
@@ -378,16 +383,32 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
-  // TwiML endpoint for static fallback bot
-  app.post('/api/voice/demo-bot', { preHandler: requireTwilioSignature }, async (request, reply) => {
-    const voice = process.env.TWILIO_VOICE || 'Google.en-AU-Neural2-B';
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+  /**
+   * The scripted bot's TwiML.
+   *
+   * It speaks in the **session's own agent voice** (`sayVoice`), not a
+   * `TWILIO_VOICE` of its own: this trigger and `voice-mass-relay` are two
+   * versions of the same moment in the talk, and a room that hears one voice from
+   * the scripted call and another from the live agent hears two products. The
+   * session is optional because a number's inbound `voiceUrl` also lands here —
+   * without one it falls back to the shipped default rather than failing a call.
+   */
+  app.post<{ Querystring: { sessionId?: string } }>(
+    '/api/voice/demo-bot',
+    { preHandler: requireTwilioSignature },
+    async (request, reply) => {
+      const session = request.query.sessionId
+        ? await getSessionById(request.query.sessionId)
+        : null;
+      const voice = sayVoice(resolveRelayConfig(session?.relay));
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="${voice}">Hey there! You just experienced a mass outbound call from an AI agent that was built live, on stage, in under 5 minutes. That's the power of Twilio. Every phone in the room just rang simultaneously. Whether you're reaching 1 customer or 1000, Twilio scales with you. Thanks for being part of the magic today. We can't wait to see what you build with Twilio.</Say>
+  <Say voice="${voice}">Hey there! Every phone in this room just rang at the same time — and what you watched today was a startup being created live, on stage, in front of you. That is the power of Twilio. Whether you are reaching one customer or a thousand, Twilio scales with you. If you like, call me back and we can talk about your individual experiences. Thanks for being part of it today.</Say>
   <Pause length="1"/>
   <Hangup/>
 </Response>`;
-    reply.header('Content-Type', 'text/xml');
-    return twiml;
-  });
+      reply.header('Content-Type', 'text/xml');
+      return twiml;
+    }
+  );
 }

@@ -1,21 +1,16 @@
 import { TwilioGem, ParticleField, FloatingText } from '../objects';
-import { Html, useTexture } from '@react-three/drei';
+import { Html } from '@react-three/drei';
 import { usePresenterStore } from '../store';
 import { QRCodeSVG } from 'qrcode.react';
 import { useSlots } from '../hooks/useSlots';
 
 const AUDIENCE_URL = import.meta.env.VITE_AUDIENCE_URL || 'http://localhost:3002';
 
-function PresenterPhoto() {
-  const texture = useTexture('/images/connolly.png');
-  return (
-    <mesh>
-      <planeGeometry args={[3, 3.5]} />
-      <meshBasicMaterial map={texture} transparent />
-    </mesh>
-  );
-}
-
+/**
+ * The QR code and the instruction that goes with it — nothing else. No presenter
+ * photo, name or title: the person is on stage beside the screen, and the only
+ * thing the room has to act on is the scan.
+ */
 export default function Stage01Opening() {
   const slot = useSlots();
   const participants = usePresenterStore((s) => s.totalParticipants);
@@ -25,56 +20,45 @@ export default function Stage01Opening() {
 
   return (
     <group>
-      <TwilioGem scale={1.2} emissiveIntensity={0.6} rotationSpeed={0.1} position={[0, 0, -2]} />
+      <TwilioGem scale={1.2} emissiveIntensity={0.6} rotationSpeed={0.1} position={[0, 0, -3]} />
       <ParticleField count={Math.min(participants * 10 + 80, 600)} spread={12} size={0.02} speed={0.15} />
 
-      {/* Left side: Speaker photo + info */}
-      <group position={[-3, 0, 0]}>
-        <PresenterPhoto />
-        <FloatingText position={[0, -2.4, 0.1]} fontSize={0.24} color="#ffffff" bold delay={0.3}>
-          {slot('presenter')}
-        </FloatingText>
-        <FloatingText position={[0, -3, 0.1]} fontSize={0.12} color="#7e869c" delay={0.5}>
-          {slot('presenterRole')}
-        </FloatingText>
-      </group>
+      <FloatingText position={[0, 3.1, 0]} fontSize={0.42} color="#ffffff" bold delay={0.2}>
+        {slot('headline')}
+      </FloatingText>
 
-      {/* Right side: QR + join */}
-      <group position={[3, 0, 0]}>
-        <FloatingText position={[0, 2.2, 0]} fontSize={0.32} color="#ffffff" bold delay={0.2}>
-          {slot('headline')}
-        </FloatingText>
-        <FloatingText position={[0, 1.6, 0]} fontSize={0.14} color="#7e869c" delay={0.4}>
-          {slot('subhead')}
-        </FloatingText>
-        <Html position={[0, -0.3, 0]} center transform>
-          <div style={{ background: 'white', padding: 20, borderRadius: 16, boxShadow: '0 0 60px rgba(242,47,70,0.4)' }}>
-            <QRCodeSVG value={joinUrl} size={180} level="M" />
-          </div>
-        </Html>
-        {/* The code in text for anyone who cannot scan. Space Grotesk, not
-            Tektur — it is a value, not a headline. */}
-        <Html position={[0, -1.9, 0]} center transform>
-          <div
-            style={{
-              fontFamily: "'Space Grotesk', sans-serif",
-              fontSize: 28,
-              fontWeight: 600,
-              letterSpacing: 8,
-              color: '#ffffff',
-              background: '#1e3a5f',
-              padding: '8px 18px',
-              borderRadius: 10,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {joinCode}
-          </div>
-        </Html>
-        <FloatingText position={[0, -2.8, 0]} fontSize={0.22} color="#ef223a" delay={0.8}>
-          {`${participants} connected`}
-        </FloatingText>
-      </group>
+      <Html position={[0, 0.4, 0]} center transform>
+        <div style={{ background: 'white', padding: 24, borderRadius: 16, boxShadow: '0 0 60px rgba(242,47,70,0.4)' }}>
+          <QRCodeSVG value={joinUrl} size={240} level="M" />
+        </div>
+      </Html>
+
+      {/* The code in text for anyone who cannot scan. Space Grotesk, not
+          Tektur — it is a value, not a headline. */}
+      <Html position={[0, -1.6, 0]} center transform>
+        <div
+          style={{
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontSize: 30,
+            fontWeight: 600,
+            letterSpacing: 9,
+            color: '#ffffff',
+            background: '#1e3a5f',
+            padding: '10px 20px',
+            borderRadius: 10,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {joinCode}
+        </div>
+      </Html>
+
+      <FloatingText position={[0, -2.4, 0]} fontSize={0.24} color="#babecc" delay={0.5}>
+        {slot('subhead')}
+      </FloatingText>
+      <FloatingText position={[0, -3.1, 0]} fontSize={0.22} color="#ef223a" delay={0.8}>
+        {`${participants} connected`}
+      </FloatingText>
 
       <pointLight position={[0, 2, 3]} color="#ef223a" intensity={1.5} distance={10} />
       <pointLight position={[0, -2, 3]} color="#ffffff" intensity={0.5} distance={6} />

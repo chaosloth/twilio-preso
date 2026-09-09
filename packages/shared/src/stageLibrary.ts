@@ -84,12 +84,16 @@ const templates: StageTemplate[] = [
     act: 1,
     notes: 'Welcome audience. QR code is displayed. Encourage scanning. Wait for registration count to build.',
     interaction: null,
+    // No presenter photo, name or title: the slide is the QR code and the one
+    // instruction that goes with it. Whoever is on stage is standing next to it.
     slots: [
-      { key: 'presenter', label: 'Presenter name', kind: 'text', default: 'Christopher Connolly' },
-      { key: 'presenterRole', label: 'Presenter role', kind: 'text', default: 'Director, Solutions Engineering, Twilio APJ' },
       { key: 'headline', label: 'Headline', kind: 'text', default: 'Scan to Join' },
-      { key: 'subhead', label: 'Sub-headline', kind: 'text', default: 'Be part of the live demo' },
-      { key: 'image', label: 'Image URL', kind: 'image', default: '' },
+      {
+        key: 'subhead',
+        label: 'Sub-headline',
+        kind: 'text',
+        default: 'Scan this to participate live',
+      },
     ],
   },
   // The three mandatory polls. Deliberately first, before any other
