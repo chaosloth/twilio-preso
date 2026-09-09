@@ -16,3 +16,4 @@ export * from './contentTemplates.js';
 export * from './roomContext.js';
 export * from './countryCodes.js';
 export * from './deckPresets.js';
+export * from './agentContext.js';

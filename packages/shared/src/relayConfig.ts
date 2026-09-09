@@ -240,6 +240,21 @@ export interface RelayConfig {
 export const MID_CONVERSATION_RULE =
   'You have already spoken your opening line, before they said anything, so you are mid-conversation from here on: never greet them again, never say hello or repeat their name in greeting, and never re-introduce yourself. If their first words are just "hello", "hi" or "can you hear me", that is them picking up — acknowledge it in a word and go straight on with what you were asking them.';
 
+/**
+ * Appended instead of the spoken-form guidance when the same agent is reached
+ * over text rather than over a phone call.
+ *
+ * The persona, the context block and the room's result are identical on both —
+ * that is the point of one config driving two experiences — but the medium is
+ * not: a reply that reads well aloud ("twenty dollars fifty", punctuation for
+ * pauses) reads badly on a screen, and an SMS that runs past a couple of
+ * segments is billed and rendered as several messages. It lives here rather than
+ * in the editable prompt for the same reason `MID_CONVERSATION_RULE` does: it is
+ * a fact about how this app delivers the reply, not a matter of taste.
+ */
+export const TEXT_MEDIUM_RULE =
+  'You are writing a text message, not speaking, so ignore any instruction above about how words should sound: write numbers, money, dates and abbreviations normally ("$20.50", "March 28th", "Dr"), and never describe pauses or read a code out piece by piece. Keep it to one short message of at most two or three sentences — it is read on a phone screen and charged by the segment. Never mention calling, hanging up or being on the line.';
+
 export const DEFAULT_RELAY_CONFIG: RelayConfig = {
   systemPrompt: `You are a friendly AI voice agent at a Twilio event. You were built live on stage in under five minutes — you are the demo of how fast Twilio lets a developer ship a voice AI agent.
 
