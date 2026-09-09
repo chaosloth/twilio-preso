@@ -33,6 +33,49 @@ describe('audience country codes', () => {
     }
   });
 
+  /** The talk travels, and the tour list stopped being the list of rooms it is
+   *  given in. Every country is offered so no attendee is turned away at the
+   *  door for a prefix nobody thought of. */
+  it('covers the whole world, not only the tour', () => {
+    expect(AUDIENCE_COUNTRY_CODES.length).toBeGreaterThan(190);
+    const wanted: Record<string, string> = {
+      Brazil: '+55',
+      Germany: '+49',
+      Nigeria: '+234',
+      Egypt: '+20',
+      Fiji: '+679',
+      Mexico: '+52',
+      'Saudi Arabia': '+966',
+      Ukraine: '+380',
+      Iceland: '+354',
+      Peru: '+51',
+    };
+    for (const [country, code] of Object.entries(wanted)) {
+      const entry = AUDIENCE_COUNTRY_CODES.find((c) => c.country === country);
+      expect(entry, country).toBeTruthy();
+      expect(entry!.code).toBe(code);
+    }
+  });
+
+  /** The tour still opens the list: APJ first, so the room the talk is in is
+   *  usually the first thing in the select rather than something to scroll for. */
+  it('keeps the tour countries at the top, in tour order', () => {
+    expect(AUDIENCE_COUNTRY_CODES.slice(0, 4).map((c) => c.country)).toEqual([
+      'Australia',
+      'New Zealand',
+      'Singapore',
+      'Malaysia',
+    ]);
+  });
+
+  /** A code with no flag reads as a broken glyph in a select on a phone, and the
+   *  flag is the only reason the list is scannable at all. */
+  it('gives every country a flag', () => {
+    for (const entry of AUDIENCE_COUNTRY_CODES) {
+      expect(entry.flag, entry.country).toMatch(/^[\u{1F1E6}-\u{1F1FF}]{2}$/u);
+    }
+  });
+
   it('has no duplicate dialling codes, so a select cannot show one twice', () => {
     expect(new Set(COUNTRY_CODES).size).toBe(COUNTRY_CODES.length);
   });
