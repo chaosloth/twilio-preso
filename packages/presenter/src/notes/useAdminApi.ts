@@ -171,6 +171,23 @@ export function useAdminApi(sessionId: string) {
     [sessionId]
   );
 
+  /** The codes registration offers. Sent as the whole list rather than a
+   *  toggle, so two HUD windows disagreeing ends with one list rather than a
+   *  merge nobody chose. */
+  const setCountryCodes = useCallback(
+    async (countryCodes: string[]) => {
+      const res = await ok(
+        await presenterFetch(`/api/sessions/${sessionId}/countries`, {
+          method: 'PUT',
+          body: JSON.stringify({ countryCodes }),
+        })
+      );
+      const data = await res.json().catch(() => ({}));
+      if (data.session) setSession(data.session as SessionRecord);
+    },
+    [sessionId]
+  );
+
   const commitDeck = useCallback(
     async (deck: Deck) => {
       const result = await saveDeck(sessionId, deck);
@@ -193,6 +210,7 @@ export function useAdminApi(sessionId: string) {
     fireTrigger,
     setVerifyChannel,
     setCountryCode,
+    setCountryCodes,
     commitDeck,
     reloadSession,
   };

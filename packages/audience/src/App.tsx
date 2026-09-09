@@ -188,6 +188,7 @@ export function App() {
         sessionId={session.sessionId}
         defaultChannel={session.verifyChannel}
         defaultCountryCode={session.countryCode}
+        countryCodes={session.countryCodes}
         onRegistered={handleRegistered}
       />
     );

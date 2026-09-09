@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AUDIENCE_COUNTRY_CODES } from '@twilio-preso/shared';
+import { AUDIENCE_COUNTRY_CODES, type CountryCode } from '@twilio-preso/shared';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
@@ -16,6 +16,13 @@ interface RegisterProps {
    * in the room a step, and a wrong one is a number Verify cannot reach.
    */
   defaultCountryCode: string;
+  /**
+   * The codes this event offers, resolved by the backend. A narrowed list is the
+   * presenter saying which rooms are in the room; an empty one never reaches
+   * here, so this falls back to every code only for a session record that
+   * predates the field.
+   */
+  countryCodes?: string[];
   onRegistered: (participantId: string, name: string) => void;
 }
 
@@ -29,8 +36,12 @@ export function Register({
   sessionId,
   defaultChannel,
   defaultCountryCode,
+  countryCodes,
   onRegistered,
 }: RegisterProps) {
+  const offered: readonly CountryCode[] = countryCodes?.length
+    ? AUDIENCE_COUNTRY_CODES.filter((c) => countryCodes.includes(c.code))
+    : AUDIENCE_COUNTRY_CODES;
   const [step, setStep] = useState<Step>('phone');
   const [countryCode, setCountryCode] = useState(defaultCountryCode);
   const [localNumber, setLocalNumber] = useState('');
@@ -143,7 +154,7 @@ export function Register({
                 onChange={(e) => setCountryCode(e.target.value)}
                 className="px-3 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white focus:outline-none focus:border-twilio-red text-lg"
               >
-                {AUDIENCE_COUNTRY_CODES.map((c) => (
+                {offered.map((c) => (
                   <option key={c.code} value={c.code}>
                     {c.flag} {c.code}
                   </option>

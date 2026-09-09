@@ -27,11 +27,35 @@ interface ControlsTabProps {
 }
 
 export function ControlsTab({ api, joinCode, onToggleDemo }: ControlsTabProps) {
-  const { demoEnabled, fireTrigger, session, setCountryCode, setVerifyChannel } = api;
+  const { demoEnabled, fireTrigger, session, setCountryCode, setCountryCodes, setVerifyChannel } =
+    api;
   const channel = session ? verifyChannelFor(session) : DEFAULT_VERIFY_CHANNEL;
   const countryCode = session ? countryCodeFor(session) : DEFAULT_COUNTRY_CODE;
   const [channelSave, setChannelSave] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [codeSave, setCodeSave] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [listSave, setListSave] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [filter, setFilter] = useState('');
+  /**
+   * The presenter's own list, unresolved: an empty one means "offer everything",
+   * which is what a new session and every session created before this panel
+   * existed holds. Reading the resolved list here would tick all 197 boxes and
+   * make the first untick look like it disabled 196 countries.
+   */
+  const enabled = session?.countryCodes ?? [];
+  const allOffered = enabled.length === 0;
+  const shown = filter.trim()
+    ? AUDIENCE_COUNTRY_CODES.filter((c) =>
+        `${c.country} ${c.code}`.toLowerCase().includes(filter.trim().toLowerCase())
+      )
+    : AUDIENCE_COUNTRY_CODES;
+
+  const saveList = (codes: string[]) => void track(setListSave)(() => setCountryCodes(codes));
+  const toggleCode = (code: string) => {
+    // From "everything" the first tick has to mean *only* that code, not "all
+    // but one" — the box was never really ticked, the list was simply empty.
+    if (allOffered) return saveList([code]);
+    saveList(enabled.includes(code) ? enabled.filter((c) => c !== code) : [...enabled, code]);
+  };
 
   /** Save-on-change with something on screen while it is in flight: these two
    *  write to the session record, and a select that snaps back after a failed
@@ -168,6 +192,81 @@ export function ControlsTab({ api, joinCode, onToggleDemo }: ControlsTabProps) {
         <div style={{ fontSize: 12, color: '#7e869c', marginTop: 8 }}>
           Which code the registration screen starts on. An attendee can still pick another — this is
           what the room does not have to think about.
+        </div>
+      </div>
+
+      {/* Which of them the screen offers at all. A room in Singapore has no use
+          for two hundred options, and each one is a prefix an attendee can type
+          a number Verify cannot reach. */}
+      <div style={panel}>
+        <Row style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 14, fontWeight: 500 }}>Countries on the registration screen</div>
+          <SaveState state={listSave} />
+        </Row>
+        <div style={{ fontSize: 12, color: '#7e869c', marginBottom: 8 }}>
+          {allOffered
+            ? `Every country (${AUDIENCE_COUNTRY_CODES.length}). Tick one to offer only the ones you pick.`
+            : `${enabled.length} offered. The default (${countryCode}) is always offered, whatever is ticked here.`}
+        </div>
+        <Row style={{ marginBottom: 8, gap: 6 }}>
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter countries"
+            style={{
+              flex: 1,
+              padding: '6px 8px',
+              borderRadius: 6,
+              background: '#000d25',
+              border: '1px solid #4d5777',
+              color: '#ffffff',
+              fontSize: 12,
+              fontFamily: "'Space Grotesk', system-ui, sans-serif",
+            }}
+          />
+          <button style={smallButton} onClick={() => saveList([])}>
+            Offer all
+          </button>
+          <button style={smallButton} onClick={() => saveList([countryCode])}>
+            Only {countryCode}
+          </button>
+        </Row>
+        <div
+          style={{
+            maxHeight: 240,
+            overflowY: 'auto',
+            border: '1px solid #4d5777',
+            borderRadius: 6,
+            padding: 6,
+          }}
+        >
+          {shown.map((c) => (
+            <label
+              key={c.code}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '3px 4px',
+                fontSize: 12,
+                color: c.code === countryCode ? '#ffffff' : '#babecc',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={allOffered || enabled.includes(c.code) || c.code === countryCode}
+                disabled={c.code === countryCode && !allOffered}
+                onChange={() => toggleCode(c.code)}
+              />
+              <span>
+                {c.flag} {c.country} ({c.code})
+              </span>
+            </label>
+          ))}
+          {shown.length === 0 && (
+            <div style={{ fontSize: 12, color: '#7e869c', padding: 4 }}>No country matches that.</div>
+          )}
         </div>
       </div>
 

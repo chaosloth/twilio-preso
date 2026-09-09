@@ -1,4 +1,4 @@
-import { countryCodeFor } from './countryCodes.js';
+import { countryCodeFor, offeredCountryCodesFor } from './countryCodes.js';
 import type { Deck } from './deck.js';
 import type { RelayConfig } from './relayConfig.js';
 
@@ -53,6 +53,13 @@ export interface SessionRecord {
    * the fix cannot be one attendee at a time. Absent means the default.
    */
   countryCode?: string;
+  /**
+   * Which dialling codes the registration screen offers at all. Absent or empty
+   * means every one this build knows — narrowing it is how a room stops being a
+   * list of two hundred options, and never how it stops being usable, so the
+   * resolved default is offered whatever this says.
+   */
+  countryCodes?: string[];
   /** Claimed from `TWILIO_PHONE_POOL` at creation, released on end. */
   phoneNumber: string;
   status: SessionStatus;
@@ -76,6 +83,9 @@ export interface PublicSession {
   verifyChannel: VerifyChannel;
   /** The dialling code the registration screen starts on. */
   countryCode: string;
+  /** The dialling codes it offers. Resolved, so it always contains the one
+   *  above. */
+  countryCodes: string[];
 }
 
 /**
@@ -97,6 +107,7 @@ export function toPublicSession(session: SessionRecord): PublicSession {
     phoneNumber: session.phoneNumber,
     verifyChannel: verifyChannelFor(session),
     countryCode: countryCodeFor(session),
+    countryCodes: offeredCountryCodesFor(session).map((c) => c.code),
   };
 }
 

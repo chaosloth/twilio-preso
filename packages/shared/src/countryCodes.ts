@@ -248,3 +248,23 @@ export function countryCodeFor(session: SessionRecord): string {
     ? (session.countryCode as string)
     : DEFAULT_COUNTRY_CODE;
 }
+
+/**
+ * The dialling codes this session's registration screen may offer.
+ *
+ * Narrowing the list is a property of the room: an event in Singapore has no use
+ * for two hundred options, and every one of them is a way for an attendee to
+ * type a number Verify cannot reach. Absent, empty, or naming nothing this build
+ * knows means the whole world — an unreadable record must not close the door,
+ * and a presenter who unticks everything has not asked for an empty select.
+ *
+ * The resolved default is always included: it is the code every phone starts on,
+ * so a list without it is a select whose value is not one of its options.
+ * Returned in `AUDIENCE_COUNTRY_CODES` order, so the tour's rooms stay on top.
+ */
+export function offeredCountryCodesFor(session: SessionRecord): readonly CountryCode[] {
+  const chosen = new Set((session.countryCodes ?? []).filter((c) => COUNTRY_CODES.includes(c)));
+  if (chosen.size === 0) return AUDIENCE_COUNTRY_CODES;
+  chosen.add(countryCodeFor(session));
+  return AUDIENCE_COUNTRY_CODES.filter((c) => chosen.has(c.code));
+}

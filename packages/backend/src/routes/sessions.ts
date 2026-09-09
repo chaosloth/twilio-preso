@@ -20,6 +20,7 @@ import {
   setSessionRelay,
   setSessionStatus,
   setSessionCountryCode,
+  setSessionCountryCodes,
   setSessionVerifyChannel,
 } from '../services/sessions.js';
 import { getAllParticipants } from '../services/sync.js';
@@ -170,6 +171,26 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
           .send({ error: `countryCode must be one of ${COUNTRY_CODES.join(', ')}` });
       }
       const session = await setSessionCountryCode(request.params.id, countryCode as string);
+      if (!session) return reply.status(404).send({ error: 'Session not found' });
+      return { session };
+    }
+  );
+
+  /** Which dialling codes that screen offers at all. Separate from the default
+   *  above because narrowing the list and choosing within it are two decisions,
+   *  and the presenter makes them at different moments. */
+  app.put<{ Params: { id: string }; Body: { countryCodes?: string[] } }>(
+    '/api/sessions/:id/countries',
+    async (request, reply) => {
+      const countryCodes = request.body?.countryCodes;
+      if (!Array.isArray(countryCodes)) {
+        return reply.status(400).send({ error: 'countryCodes must be an array of dialling codes' });
+      }
+      const unknown = countryCodes.filter((c) => !COUNTRY_CODES.includes(c));
+      if (unknown.length) {
+        return reply.status(400).send({ error: `unknown dialling codes: ${unknown.join(', ')}` });
+      }
+      const session = await setSessionCountryCodes(request.params.id, countryCodes);
       if (!session) return reply.status(404).send({ error: 'Session not found' });
       return { session };
     }

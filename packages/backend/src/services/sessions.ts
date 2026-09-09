@@ -345,6 +345,20 @@ export async function setSessionCountryCode(
 }
 
 /**
+ * Which dialling codes registration offers. Stored as the presenter's own list,
+ * unresolved, so `offeredCountryCodesFor` can keep widening what an empty or
+ * unrecognised list means without every stored session freezing today's answer.
+ */
+export async function setSessionCountryCodes(
+  sessionId: string,
+  countryCodes: string[]
+): Promise<SessionRecord | null> {
+  const session = await getSessionById(sessionId);
+  if (!session) return null;
+  return updateSession(session, { countryCodes });
+}
+
+/**
  * Voice-agent settings. Stored as the partial the presenter edited rather than a
  * resolved config, so a field added later still arrives as its new default
  * instead of frozen at whatever shipped the day the session was created.

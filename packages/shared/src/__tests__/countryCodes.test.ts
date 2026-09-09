@@ -4,6 +4,7 @@ import {
   COUNTRY_CODES,
   DEFAULT_COUNTRY_CODE,
   countryCodeFor,
+  offeredCountryCodesFor,
 } from '../countryCodes.js';
 import type { SessionRecord } from '../session.js';
 
@@ -92,5 +93,39 @@ describe('countryCodeFor', () => {
   it('falls back to the default for an absent or unknown code', () => {
     expect(countryCodeFor(session())).toBe(DEFAULT_COUNTRY_CODE);
     expect(countryCodeFor(session('+999'))).toBe(DEFAULT_COUNTRY_CODE);
+  });
+});
+
+describe('offeredCountryCodesFor', () => {
+  /** A record written before the presenter could narrow the list — and the
+   *  default for a new session — offers the whole world, unchanged. */
+  it('offers every country when the session names none', () => {
+    expect(offeredCountryCodesFor(session()).map((c) => c.code)).toEqual([...COUNTRY_CODES]);
+  });
+
+  it('offers only the codes the presenter enabled, in list order', () => {
+    const record = { id: 's', countryCodes: ['+65', '+61'] } as SessionRecord;
+    expect(offeredCountryCodesFor(record).map((c) => c.code)).toEqual(['+61', '+65']);
+  });
+
+  /**
+   * The default is the code every phone starts on, so a list that excludes it is
+   * a select whose value is not one of its options — nobody in the room can
+   * register. Keeping it is cheaper than validating it at three call sites.
+   */
+  it('always offers the session default, even when it was toggled off', () => {
+    const record = { id: 's', countryCode: '+65', countryCodes: ['+61'] } as SessionRecord;
+    expect(offeredCountryCodesFor(record).map((c) => c.code)).toEqual(['+61', '+65']);
+  });
+
+  /** An empty list is the same shape of lockout, and is what a presenter who
+   *  unticks everything produces. */
+  it('falls back to the whole world when the list is empty or unknown', () => {
+    expect(offeredCountryCodesFor({ id: 's', countryCodes: [] } as SessionRecord).length).toBe(
+      COUNTRY_CODES.length
+    );
+    expect(
+      offeredCountryCodesFor({ id: 's', countryCodes: ['+999'] } as SessionRecord).length
+    ).toBe(COUNTRY_CODES.length);
   });
 });
