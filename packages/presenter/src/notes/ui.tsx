@@ -3,7 +3,7 @@
  * presenter app — background #000d25, panels #0a1535, red #ef223a, and Tektur
  * reserved for headlines.
  */
-import type { CSSProperties, ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 
 export const panel: CSSProperties = {
   padding: 16,
@@ -74,4 +74,73 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export function ErrorText({ children }: { children: ReactNode }) {
   return <p style={{ color: '#ef223a', fontSize: 12, margin: '8px 0 0' }}>{children}</p>;
+}
+
+/**
+ * A button for anything that talks to the backend.
+ *
+ * Every action in this HUD is a round trip — a trigger that places calls, a deck
+ * commit, an allowlist write — and until now a press did nothing visible until it
+ * finished. On stage that reads as a dead button, so it gets pressed again: a
+ * second identical trigger, or a save racing its own predecessor. So the press
+ * disables the button, says what it is doing, and reports a failure in place
+ * rather than only in the console.
+ */
+export function ActionButton({
+  children,
+  onClick,
+  style,
+  disabled,
+  disabledReason,
+  pendingLabel = 'Working…',
+}: {
+  children: ReactNode;
+  onClick: () => void | Promise<void>;
+  style?: CSSProperties;
+  disabled?: boolean;
+  /** Shown as the button's tooltip when disabled — why, not just that. */
+  disabledReason?: string;
+  pendingLabel?: string;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const off = pending || disabled === true;
+
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+      <button
+        style={{
+          ...smallButton,
+          ...style,
+          opacity: off ? 0.45 : 1,
+          cursor: off ? 'not-allowed' : 'pointer',
+        }}
+        disabled={off}
+        title={disabled ? disabledReason : undefined}
+        onClick={async () => {
+          setError(null);
+          setPending(true);
+          try {
+            await onClick();
+          } catch (err: any) {
+            setError(err?.message || 'failed');
+          } finally {
+            setPending(false);
+          }
+        }}
+      >
+        {pending ? pendingLabel : children}
+      </button>
+      {error && <span style={{ color: '#ef223a', fontSize: 10 }}>{error}</span>}
+    </span>
+  );
+}
+
+/** A quiet "saved"/"saving…" marker for controls that save on change. */
+export function SaveState({ state }: { state: 'idle' | 'saving' | 'saved' | 'error' }) {
+  if (state === 'idle') return null;
+  const label = state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved' : 'Save failed';
+  return (
+    <span style={{ fontSize: 11, color: state === 'error' ? '#ef223a' : '#7e869c' }}>{label}</span>
+  );
 }

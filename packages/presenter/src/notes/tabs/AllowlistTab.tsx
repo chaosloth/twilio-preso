@@ -78,7 +78,7 @@ export function AllowlistTab() {
           aria-label="Name"
         />
         <button style={smallButton} type="submit" disabled={busy || !phone.trim() || !name.trim()}>
-          Add
+          {busy ? 'Working…' : 'Add'}
         </button>
       </form>
       <div style={{ ...caption, marginBottom: 16 }}>Include the country code, e.g. +61…</div>

@@ -14,6 +14,19 @@ export interface ParticipantInfo {
 const PARTICIPANT_POLL_MS = 5000;
 
 /**
+ * The backend's own words for a failure, thrown rather than swallowed.
+ *
+ * These calls used to resolve regardless of status, so a trigger refused with
+ * `409 not armed` looked identical to one that placed a room's worth of calls.
+ * The HUD button is the only place a presenter finds out, so it has to be told.
+ */
+async function ok(res: Response): Promise<Response> {
+  if (res.ok) return res;
+  const body = await res.json().catch(() => ({}) as { error?: string });
+  throw new Error(body.error || `${res.status} ${res.statusText}`);
+}
+
+/**
  * Everything the HUD tabs need from the backend, in one place.
  *
  * The tabs are presentation only — splitting the fetching out is what let
@@ -76,39 +89,52 @@ export function useAdminApi(sessionId: string) {
     async (isLive: boolean) => {
       setDemoEnabled(isLive);
       try {
-        await presenterFetch('/api/admin/mode', {
-          method: 'POST',
-          body: JSON.stringify({ sessionId, isLive }),
-        });
-      } catch {}
+        await ok(
+          await presenterFetch('/api/admin/mode', {
+            method: 'POST',
+            body: JSON.stringify({ sessionId, isLive }),
+          })
+        );
+      } catch (err) {
+        // The gate did not move, so neither may the switch: a toggle that reads
+        // LIVE while the backend is still in rehearsal is the worst of both.
+        setDemoEnabled(!isLive);
+        throw err;
+      }
     },
     [sessionId]
   );
 
   const removeParticipant = useCallback(
     async (id: string) => {
-      await presenterFetch(`/api/admin/participants/${id}?sessionId=${sessionId}`, {
-        method: 'DELETE',
-      });
+      await ok(
+        await presenterFetch(`/api/admin/participants/${id}?sessionId=${sessionId}`, {
+          method: 'DELETE',
+        })
+      );
       setParticipants((p) => p.filter((x) => x.id !== id));
     },
     [sessionId]
   );
 
   const resetSession = useCallback(async () => {
-    await presenterFetch('/api/admin/reset', {
-      method: 'POST',
-      body: JSON.stringify({ sessionId }),
-    });
+    await ok(
+      await presenterFetch('/api/admin/reset', {
+        method: 'POST',
+        body: JSON.stringify({ sessionId }),
+      })
+    );
     setParticipants([]);
   }, [sessionId]);
 
   const fireTrigger = useCallback(
     async (triggerId: string, targetParticipantId?: string) => {
-      await presenterFetch('/api/trigger', {
-        method: 'POST',
-        body: JSON.stringify({ sessionId, triggerId, targetParticipantId }),
-      });
+      await ok(
+        await presenterFetch('/api/trigger', {
+          method: 'POST',
+          body: JSON.stringify({ sessionId, triggerId, targetParticipantId }),
+        })
+      );
     },
     [sessionId]
   );
@@ -117,10 +143,12 @@ export function useAdminApi(sessionId: string) {
    *  room whose WhatsApp sender is not approved yet needs SMS on the door. */
   const setVerifyChannel = useCallback(
     async (verifyChannel: VerifyChannel) => {
-      const res = await presenterFetch(`/api/sessions/${sessionId}/verify-channel`, {
-        method: 'PUT',
-        body: JSON.stringify({ verifyChannel }),
-      });
+      const res = await ok(
+        await presenterFetch(`/api/sessions/${sessionId}/verify-channel`, {
+          method: 'PUT',
+          body: JSON.stringify({ verifyChannel }),
+        })
+      );
       const data = await res.json().catch(() => ({}));
       if (data.session) setSession(data.session as SessionRecord);
     },
@@ -131,10 +159,12 @@ export function useAdminApi(sessionId: string) {
    *  country, so it belongs to the session rather than to the build. */
   const setCountryCode = useCallback(
     async (countryCode: string) => {
-      const res = await presenterFetch(`/api/sessions/${sessionId}/country-code`, {
-        method: 'PUT',
-        body: JSON.stringify({ countryCode }),
-      });
+      const res = await ok(
+        await presenterFetch(`/api/sessions/${sessionId}/country-code`, {
+          method: 'PUT',
+          body: JSON.stringify({ countryCode }),
+        })
+      );
       const data = await res.json().catch(() => ({}));
       if (data.session) setSession(data.session as SessionRecord);
     },

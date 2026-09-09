@@ -31,6 +31,8 @@ import { ErrorText, Row, caption, heading, panel, smallButton, textInput } from 
 export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
   const [draft, setDraft] = useState<RelayConfig | null>(null);
   const [saved, setSaved] = useState<RelayConfig | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [calling, setCalling] = useState(false);
   const [status, setStatus] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [testNumber, setTestNumber] = useState('');
@@ -69,25 +71,35 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
   async function save() {
     if (!draft) return;
     setError('');
+    // Said on screen, not only afterwards: a save is a round trip, and a button
+    // that looks untouched for a second gets pressed a second time.
+    setStatus('Saving…');
+    setBusy(true);
     try {
       const config = await saveRelayConfig(sessionId, draft);
       setDraft(config);
       setSaved(config);
       setStatus('Saved — the next call uses these settings.');
     } catch (err: any) {
+      setStatus('');
       setError(err?.message ?? 'Save failed');
+    } finally {
+      setBusy(false);
     }
   }
 
   async function testCall() {
     setError('');
     setStatus('Calling…');
+    setCalling(true);
     try {
       const result = await placeTestCall(sessionId, testNumber.trim());
       setStatus(`Calling ${result.to} from ${result.from} — answer it.`);
     } catch (err: any) {
       setStatus('');
       setError(err?.message ?? 'Call failed');
+    } finally {
+      setCalling(false);
     }
   }
 
@@ -113,8 +125,12 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
             value={testNumber}
             onChange={(e) => setTestNumber(e.target.value)}
           />
-          <button style={{ ...smallButton, border: '1px solid #ef223a', color: '#ef223a' }} onClick={testCall}>
-            Call me
+          <button
+            style={{ ...smallButton, border: '1px solid #ef223a', color: '#ef223a' }}
+            onClick={testCall}
+            disabled={calling}
+          >
+            {calling ? 'Dialling…' : 'Call me'}
           </button>
         </Row>
         <p style={{ ...caption, textTransform: 'none', letterSpacing: 0, marginTop: 8 }}>
@@ -415,9 +431,9 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
         <button
           style={{ ...smallButton, border: '1px solid #ef223a', color: dirty ? '#ef223a' : '#7e869c' }}
           onClick={save}
-          disabled={!dirty}
+          disabled={!dirty || busy}
         >
-          Save settings
+          {busy ? 'Saving…' : 'Save settings'}
         </button>
         <button style={smallButton} onClick={() => setDraft(saved)} disabled={!dirty}>
           Discard

@@ -8,7 +8,8 @@ import {
   verifyChannelFor,
 } from '@twilio-preso/shared';
 import type { AdminApi } from '../useAdminApi';
-import { Row, heading, panel, smallButton } from '../ui';
+import { useState } from 'react';
+import { ActionButton, Row, SaveState, heading, panel, smallButton } from '../ui';
 
 /**
  * Every trigger the backend implements, derived rather than listed: a hardcoded
@@ -29,6 +30,23 @@ export function ControlsTab({ api, joinCode, onToggleDemo }: ControlsTabProps) {
   const { demoEnabled, fireTrigger, session, setCountryCode, setVerifyChannel } = api;
   const channel = session ? verifyChannelFor(session) : DEFAULT_VERIFY_CHANNEL;
   const countryCode = session ? countryCodeFor(session) : DEFAULT_COUNTRY_CODE;
+  const [channelSave, setChannelSave] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [codeSave, setCodeSave] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  /** Save-on-change with something on screen while it is in flight: these two
+   *  write to the session record, and a select that snaps back after a failed
+   *  write with no word said is how a room registers on the wrong prefix. */
+  const track =
+    (set: (s: 'idle' | 'saving' | 'saved' | 'error') => void) =>
+    async (run: () => Promise<void>) => {
+      set('saving');
+      try {
+        await run();
+        set('saved');
+      } catch {
+        set('error');
+      }
+    };
 
   return (
     <div>
@@ -65,17 +83,27 @@ export function ControlsTab({ api, joinCode, onToggleDemo }: ControlsTabProps) {
 
       <div style={panel}>
         <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Manual Triggers</div>
+        {/* Every one of these sends real SMS or places real calls, and the
+            backend refuses them all with a 409 while the session is in
+            rehearsal — so they are disabled rather than offered as a failure. */}
+        {!demoEnabled && (
+          <div style={{ fontSize: 12, color: '#7e869c', marginBottom: 8 }}>
+            Rehearsal mode — switch to LIVE above to fire these.
+          </div>
+        )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {MANUAL_TRIGGERS.map((trigger) => (
-            <button
+            <ActionButton
               key={trigger}
-              style={smallButton}
-              onClick={() => {
-                if (confirm(`Fire ${trigger}?`)) void fireTrigger(trigger);
+              disabled={!demoEnabled}
+              disabledReason="Rehearsal mode — no SMS or calls are sent"
+              pendingLabel={`${trigger}…`}
+              onClick={async () => {
+                if (confirm(`Fire ${trigger}?`)) await fireTrigger(trigger);
               }}
             >
               {trigger}
-            </button>
+            </ActionButton>
           ))}
         </div>
       </div>
@@ -84,7 +112,10 @@ export function ControlsTab({ api, joinCode, onToggleDemo }: ControlsTabProps) {
           whether anyone gets in at all, so it is a per-session switch rather than
           a build-time default. */}
       <div style={panel}>
-        <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Registration passcode</div>
+        <Row style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 14, fontWeight: 500 }}>Registration passcode</div>
+          <SaveState state={channelSave} />
+        </Row>
         <Row style={{ justifyContent: 'flex-start', gap: 8 }}>
           {VERIFY_CHANNELS.map((option) => (
             <button
@@ -94,7 +125,7 @@ export function ControlsTab({ api, joinCode, onToggleDemo }: ControlsTabProps) {
                 border: `1px solid ${channel === option ? '#ef223a' : '#4d5777'}`,
                 color: channel === option ? '#ef223a' : '#babecc',
               }}
-              onClick={() => void setVerifyChannel(option)}
+              onClick={() => void track(setChannelSave)(() => setVerifyChannel(option))}
             >
               {option === 'whatsapp' ? 'WhatsApp' : 'SMS'}
             </button>
@@ -110,10 +141,13 @@ export function ControlsTab({ api, joinCode, onToggleDemo }: ControlsTabProps) {
           Australian default registers nobody, and that cannot be fixed one
           phone at a time. */}
       <div style={panel}>
-        <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Audience country code</div>
+        <Row style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 14, fontWeight: 500 }}>Audience country code</div>
+          <SaveState state={codeSave} />
+        </Row>
         <select
           value={countryCode}
-          onChange={(e) => void setCountryCode(e.target.value)}
+          onChange={(e) => void track(setCodeSave)(() => setCountryCode(e.target.value))}
           style={{
             width: '100%',
             padding: '8px 10px',
