@@ -86,6 +86,26 @@ export async function findConfiguration(): Promise<OrchestratorConfiguration | n
   return all.find((c) => c.displayName === CONFIGURATION_NAME) ?? null;
 }
 
+/**
+ * The configuration `TWILIO_CONVERSATION_ORCHESTRATION_CONFIG_ID` names, or null
+ * when it names nothing.
+ *
+ * A missing one is not an error: an id copied from another account, or a
+ * configuration deleted in the Console, has to fall back to matching by name
+ * rather than report that the account has none and offer to create a second.
+ */
+export async function fetchConfiguredConfiguration(): Promise<OrchestratorConfiguration | null> {
+  const id = config.twilio.orchestratorConfigId;
+  if (!id) return null;
+  try {
+    return await orchestratorFetch<OrchestratorConfiguration>(
+      `/ControlPlane/Configurations/${encodeURIComponent(id)}`
+    );
+  } catch {
+    return null;
+  }
+}
+
 interface Operation {
   status?: string;
   errorMessage?: string;
@@ -168,7 +188,9 @@ export async function ensureConfiguration(): Promise<EnsureResult> {
 
   const numbers = config.twilio.phonePool;
   const url = webhookUrl();
-  const existing = await findConfiguration();
+  // Same order as the check: the env id is the configuration a presenter chose,
+  // so an update goes there rather than to whichever one carries the name.
+  const existing = (await fetchConfiguredConfiguration()) ?? (await findConfiguration());
 
   const payload: Record<string, unknown> = {
     displayName: CONFIGURATION_NAME,
@@ -226,6 +248,13 @@ export async function listCommunications(
 export interface OrchestratorState {
   configured: boolean;
   configurationId?: string;
+  /** The id the environment names, whatever was actually found. Reported so the
+   *  HUD can say "configured but not reachable" rather than only "not found". */
+  configuredId?: string;
+  /** True when the configuration in use is the one the environment names. False
+   *  with a `configuredId` set means that id resolved to nothing and this fell
+   *  back to the display name. */
+  idMatches: boolean;
   /** True when the registered callback is *this* deployment's URL. A stale one
    *  points a tunnel that has since died at a live account. */
   callbackMatches: boolean;
@@ -233,11 +262,17 @@ export interface OrchestratorState {
 }
 
 export async function describeOrchestrator(): Promise<OrchestratorState> {
-  const existing = await findConfiguration();
+  // The env id first, and no listing at all when it resolves: the account may
+  // hold several configurations, and the presenter told us which one.
+  const configuredId = config.twilio.orchestratorConfigId;
+  const declared = await fetchConfiguredConfiguration();
+  const existing = declared ?? (await findConfiguration());
   const registered = existing?.statusCallbacks?.[0]?.url;
   return {
     configured: !!existing,
     configurationId: existing?.id,
+    configuredId: configuredId || undefined,
+    idMatches: !!declared,
     registeredCallback: registered,
     callbackMatches: registered === webhookUrl(),
   };

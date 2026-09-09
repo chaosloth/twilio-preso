@@ -18,6 +18,8 @@ export default defineConfig({
       TWILIO_MESSAGING_SERVICE_SID: 'MGtest',
       TWILIO_PHONE_NUMBER: '+61400000000',
       TWILIO_MEMORY_STORE_ID: 'MStest',
+      TWILIO_CONVERSATION_ORCHESTRATION_CONFIG_ID: 'GXtest',
+      PUBLIC_BASE_URL: 'https://backend.test',
       PRESENTER_JWT_SECRET: 'test-jwt-secret',
     },
   },

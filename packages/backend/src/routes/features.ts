@@ -14,7 +14,7 @@ import {
 } from '../services/memory.js';
 import { probeLlm } from '../services/ai.js';
 import { describeContentTemplates, ensureContentTemplates } from '../services/content.js';
-import { describeOrchestrator } from '../services/orchestrator.js';
+import { describeOrchestrator, webhookUrl } from '../services/orchestrator.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -275,7 +275,7 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
               ? 'No configuration yet. Create it and an attendee texting the session number reaches the same agent the phone call does.'
               : orchestrator.callbackMatches
                 ? 'A text to the session number is answered by this backend, with this session\'s persona.'
-                : `The account calls back to a different origin, so texts reach nothing here: ${orchestrator.registeredCallback ?? 'none registered'}`,
+                : `The configuration calls back to a different origin, so texts reach nothing here: ${orchestrator.registeredCallback ?? 'none registered'}`,
           // Manual, like the templates above: it writes account-level Twilio
           // configuration that outlives the event. Creation is not idempotent on
           // Twilio's side either, so this matches by display name and updates.
@@ -284,10 +284,24 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
               ? { label: 'Create & update configuration', path: '/api/orchestrator/configuration' }
               : undefined,
           values: [
-            { label: 'Callback', value: orchestrator?.registeredCallback ?? 'none' },
+            { label: 'Expected callback', value: webhookUrl() },
+            { label: 'Registered callback', value: orchestrator?.registeredCallback ?? 'none' },
             ...(orchestrator?.configurationId
               ? [{ label: 'Configuration', value: orchestrator.configurationId }]
               : []),
+            // An id that resolved to nothing is the failure that otherwise reads
+            // as a missing configuration: the env names one, the account has
+            // another, and pressing create would make a third.
+            ...(orchestrator?.configuredId && !orchestrator.idMatches
+              ? [
+                  {
+                    label: 'TWILIO_CONVERSATION_ORCHESTRATION_CONFIG_ID',
+                    value: `${orchestrator.configuredId} — not found, matched by name instead`,
+                  },
+                ]
+              : orchestrator?.configuredId
+                ? [{ label: 'From env', value: orchestrator.configuredId }]
+                : []),
           ],
         },
         {

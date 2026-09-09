@@ -55,6 +55,14 @@ export const config = {
      */
     memoryStoreId: process.env.TWILIO_MEMORY_STORE_ID || '',
     /**
+     * The Conversation Orchestration configuration this deployment drives.
+     * Optional, like the memory store: unset, the configuration is matched by its
+     * display name instead. Set, it is the answer — an account that has been
+     * demoed against more than once holds several configurations, and the one
+     * carrying the name is not necessarily the one the presenter configured.
+     */
+    orchestratorConfigId: process.env.TWILIO_CONVERSATION_ORCHESTRATION_CONFIG_ID || '',
+    /**
      * A WhatsApp-enabled sender, `whatsapp:+…` or a bare E.164 number.
      *
      * Optional and separate from the phone pool on purpose: a WhatsApp sender is
