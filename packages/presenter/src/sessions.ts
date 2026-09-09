@@ -1,4 +1,4 @@
-import { resolveDeck, resolveRelayConfig } from '@twilio-preso/shared';
+import { resolveDeck, resolveRelayConfig, resolveTextConfig } from '@twilio-preso/shared';
 import type {
   Deck,
   DeckWarning,
@@ -7,6 +7,7 @@ import type {
   RelayConfig,
   ResolvedStage,
   SessionRecord,
+  TextAgentConfig,
 } from '@twilio-preso/shared';
 import { presenterFetch } from './auth';
 
@@ -101,6 +102,24 @@ export async function saveRelayConfig(id: string, relay: RelayConfig): Promise<R
     })
   );
   return resolveRelayConfig(result.relay);
+}
+
+/** The text agent's own settings. Resolved locally for the same reason the voice
+ *  ones are: a backend that predates a field must be a stale default here, not a
+ *  blank tab. */
+export async function fetchTextConfig(id: string): Promise<TextAgentConfig> {
+  const { text } = await json(await presenterFetch(`/api/sessions/${id}/text`));
+  return resolveTextConfig(text);
+}
+
+export async function saveTextConfig(id: string, text: TextAgentConfig): Promise<TextAgentConfig> {
+  const result = await json(
+    await presenterFetch(`/api/sessions/${id}/text`, {
+      method: 'PUT',
+      body: JSON.stringify({ text }),
+    })
+  );
+  return resolveTextConfig(result.text);
 }
 
 /** Places one real call into the agent, so the settings above can be heard

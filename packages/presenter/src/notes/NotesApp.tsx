@@ -6,9 +6,19 @@ import { DeckTab } from './tabs/DeckTab';
 import { FeaturesTab } from './tabs/FeaturesTab';
 import { NotesTab } from './tabs/NotesTab';
 import { ParticipantsTab } from './tabs/ParticipantsTab';
+import { TextAgentTab } from './tabs/TextAgentTab';
 import { VoiceAgentTab } from './tabs/VoiceAgentTab';
 
-const TABS = ['notes', 'participants', 'controls', 'deck', 'voice', 'presenters', 'config'] as const;
+const TABS = [
+  'notes',
+  'participants',
+  'controls',
+  'deck',
+  'voice',
+  'text',
+  'presenters',
+  'config',
+] as const;
 type Tab = (typeof TABS)[number];
 
 interface NotesAppProps {
@@ -187,6 +197,7 @@ export function NotesApp({ sessionId }: NotesAppProps) {
         )}
         {activeTab === 'deck' && <DeckTab api={api} stageIndex={stageIndex} onGoTo={goTo} />}
         {activeTab === 'voice' && <VoiceAgentTab sessionId={sessionId} />}
+        {activeTab === 'text' && <TextAgentTab sessionId={sessionId} />}
         {activeTab === 'presenters' && <AllowlistTab />}
         {activeTab === 'config' && <FeaturesTab sessionId={sessionId} />}
       </div>
