@@ -1,3 +1,4 @@
+import { countryCodeFor } from './countryCodes.js';
 import type { Deck } from './deck.js';
 import type { RelayConfig } from './relayConfig.js';
 
@@ -45,6 +46,13 @@ export interface SessionRecord {
    * Absent means the default.
    */
   verifyChannel?: VerifyChannel;
+  /**
+   * The dialling code the registration screen starts on, e.g. `+65` in
+   * Singapore. A property of the room, not of the build: a Singapore audience
+   * typing local numbers against an Australian default registers nobody, and
+   * the fix cannot be one attendee at a time. Absent means the default.
+   */
+  countryCode?: string;
   /** Claimed from `TWILIO_PHONE_POOL` at creation, released on end. */
   phoneNumber: string;
   status: SessionStatus;
@@ -66,6 +74,8 @@ export interface PublicSession {
   phoneNumber: string;
   /** Which channel the registration screen offers first. */
   verifyChannel: VerifyChannel;
+  /** The dialling code the registration screen starts on. */
+  countryCode: string;
 }
 
 /**
@@ -86,6 +96,7 @@ export function toPublicSession(session: SessionRecord): PublicSession {
     status: session.status,
     phoneNumber: session.phoneNumber,
     verifyChannel: verifyChannelFor(session),
+    countryCode: countryCodeFor(session),
   };
 }
 

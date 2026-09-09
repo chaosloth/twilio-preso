@@ -1,5 +1,11 @@
 import type { FastifyInstance } from 'fastify';
-import { VERIFY_CHANNELS, resolveRelayConfig, toPublicSession, validateDeck } from '@twilio-preso/shared';
+import {
+  COUNTRY_CODES,
+  VERIFY_CHANNELS,
+  resolveRelayConfig,
+  toPublicSession,
+  validateDeck,
+} from '@twilio-preso/shared';
 import type { Deck, RelayConfig, VerifyChannel } from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
 import {
@@ -13,6 +19,7 @@ import {
   setSessionDeck,
   setSessionRelay,
   setSessionStatus,
+  setSessionCountryCode,
   setSessionVerifyChannel,
 } from '../services/sessions.js';
 import { getAllParticipants } from '../services/sync.js';
@@ -146,6 +153,23 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: "verifyChannel must be 'whatsapp' or 'sms'" });
       }
       const session = await setSessionVerifyChannel(request.params.id, channel as VerifyChannel);
+      if (!session) return reply.status(404).send({ error: 'Session not found' });
+      return { session };
+    }
+  );
+
+  /** The dialling code the audience registration screen starts on. Its own
+   *  endpoint for the same reason as the channel: it governs the door. */
+  app.put<{ Params: { id: string }; Body: { countryCode?: string } }>(
+    '/api/sessions/:id/country-code',
+    async (request, reply) => {
+      const countryCode = request.body?.countryCode;
+      if (!COUNTRY_CODES.includes(countryCode ?? '')) {
+        return reply
+          .status(400)
+          .send({ error: `countryCode must be one of ${COUNTRY_CODES.join(', ')}` });
+      }
+      const session = await setSessionCountryCode(request.params.id, countryCode as string);
       if (!session) return reply.status(404).send({ error: 'Session not found' });
       return { session };
     }

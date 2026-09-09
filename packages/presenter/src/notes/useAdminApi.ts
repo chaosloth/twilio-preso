@@ -127,6 +127,20 @@ export function useAdminApi(sessionId: string) {
     [sessionId]
   );
 
+  /** The dialling code every phone's registration screen starts on. The room's
+   *  country, so it belongs to the session rather than to the build. */
+  const setCountryCode = useCallback(
+    async (countryCode: string) => {
+      const res = await presenterFetch(`/api/sessions/${sessionId}/country-code`, {
+        method: 'PUT',
+        body: JSON.stringify({ countryCode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.session) setSession(data.session as SessionRecord);
+    },
+    [sessionId]
+  );
+
   const commitDeck = useCallback(
     async (deck: Deck) => {
       const result = await saveDeck(sessionId, deck);
@@ -148,6 +162,7 @@ export function useAdminApi(sessionId: string) {
     resetSession,
     fireTrigger,
     setVerifyChannel,
+    setCountryCode,
     commitDeck,
     reloadSession,
   };

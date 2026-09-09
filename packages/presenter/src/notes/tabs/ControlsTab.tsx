@@ -1,4 +1,12 @@
-import { DEFAULT_VERIFY_CHANNEL, DEMO_TRIGGER_IDS, VERIFY_CHANNELS, verifyChannelFor } from '@twilio-preso/shared';
+import {
+  AUDIENCE_COUNTRY_CODES,
+  DEFAULT_COUNTRY_CODE,
+  DEFAULT_VERIFY_CHANNEL,
+  DEMO_TRIGGER_IDS,
+  VERIFY_CHANNELS,
+  countryCodeFor,
+  verifyChannelFor,
+} from '@twilio-preso/shared';
 import type { AdminApi } from '../useAdminApi';
 import { Row, heading, panel, smallButton } from '../ui';
 
@@ -18,8 +26,9 @@ interface ControlsTabProps {
 }
 
 export function ControlsTab({ api, joinCode, onToggleDemo }: ControlsTabProps) {
-  const { demoEnabled, fireTrigger, session, setVerifyChannel } = api;
+  const { demoEnabled, fireTrigger, session, setCountryCode, setVerifyChannel } = api;
   const channel = session ? verifyChannelFor(session) : DEFAULT_VERIFY_CHANNEL;
+  const countryCode = session ? countryCodeFor(session) : DEFAULT_COUNTRY_CODE;
 
   return (
     <div>
@@ -94,6 +103,37 @@ export function ControlsTab({ api, joinCode, onToggleDemo }: ControlsTabProps) {
         <div style={{ fontSize: 12, color: '#7e869c', marginTop: 8 }}>
           What every phone is offered first. An attendee can still switch on their own screen, and a
           WhatsApp code that fails to send falls back to SMS per phone.
+        </div>
+      </div>
+
+      {/* Also the door: a Singapore room typing local numbers against an
+          Australian default registers nobody, and that cannot be fixed one
+          phone at a time. */}
+      <div style={panel}>
+        <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Audience country code</div>
+        <select
+          value={countryCode}
+          onChange={(e) => void setCountryCode(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '8px 10px',
+            borderRadius: 6,
+            background: '#000d25',
+            border: '1px solid #4d5777',
+            color: '#ffffff',
+            fontSize: 13,
+            fontFamily: "'Space Grotesk', system-ui, sans-serif",
+          }}
+        >
+          {AUDIENCE_COUNTRY_CODES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.flag} {c.country} ({c.code})
+            </option>
+          ))}
+        </select>
+        <div style={{ fontSize: 12, color: '#7e869c', marginTop: 8 }}>
+          Which code the registration screen starts on. An attendee can still pick another — this is
+          what the room does not have to think about.
         </div>
       </div>
 

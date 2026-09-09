@@ -331,6 +331,20 @@ export async function setSessionVerifyChannel(
 }
 
 /**
+ * The dialling code the registration screen starts on. Validated against the
+ * shared list before it is stored: an unofferable code cannot be corrected from
+ * a phone, and `countryCodeFor` would only fall back to Australia anyway.
+ */
+export async function setSessionCountryCode(
+  sessionId: string,
+  countryCode: string
+): Promise<SessionRecord | null> {
+  const session = await getSessionById(sessionId);
+  if (!session) return null;
+  return updateSession(session, { countryCode });
+}
+
+/**
  * Voice-agent settings. Stored as the partial the presenter edited rather than a
  * resolved config, so a field added later still arrives as its new default
  * instead of frozen at whatever shipped the day the session was created.

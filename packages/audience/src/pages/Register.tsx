@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AUDIENCE_COUNTRY_CODES } from '@twilio-preso/shared';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
@@ -9,6 +10,12 @@ interface RegisterProps {
   /** Which channel this event offers first, from the session record. The phone
    *  can still switch — this is the default, not a restriction. */
   defaultChannel: Channel;
+  /**
+   * The dialling code this room is in, from the session record. Same rule as the
+   * channel: a default, not a restriction — but the right one saves every phone
+   * in the room a step, and a wrong one is a number Verify cannot reach.
+   */
+  defaultCountryCode: string;
   onRegistered: (participantId: string, name: string) => void;
 }
 
@@ -18,9 +25,14 @@ type Step = 'phone' | 'otp' | 'name';
  *  the event decides, since a room whose sender is not approved needs SMS. */
 type Channel = 'whatsapp' | 'sms';
 
-export function Register({ sessionId, defaultChannel, onRegistered }: RegisterProps) {
+export function Register({
+  sessionId,
+  defaultChannel,
+  defaultCountryCode,
+  onRegistered,
+}: RegisterProps) {
   const [step, setStep] = useState<Step>('phone');
-  const [countryCode, setCountryCode] = useState('+61');
+  const [countryCode, setCountryCode] = useState(defaultCountryCode);
   const [localNumber, setLocalNumber] = useState('');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -131,16 +143,11 @@ export function Register({ sessionId, defaultChannel, onRegistered }: RegisterPr
                 onChange={(e) => setCountryCode(e.target.value)}
                 className="px-3 py-3 rounded-lg bg-white/5 border border-accent-3/30 text-white focus:outline-none focus:border-twilio-red text-lg"
               >
-                <option value="+61">+61</option>
-                <option value="+1">+1</option>
-                <option value="+44">+44</option>
-                <option value="+65">+65</option>
-                <option value="+91">+91</option>
-                <option value="+64">+64</option>
-                <option value="+81">+81</option>
-                <option value="+82">+82</option>
-                <option value="+86">+86</option>
-                <option value="+852">+852</option>
+                {AUDIENCE_COUNTRY_CODES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.flag} {c.code}
+                  </option>
+                ))}
               </select>
               <input
                 type="tel"

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { DECK_PRESETS, DEFAULT_DECK, deckPreset } from '@twilio-preso/shared';
 import type { PhonePoolUsage, SessionRecord } from '@twilio-preso/shared';
 import { clearToken, type PresenterIdentity } from '../auth';
 import {
@@ -25,6 +26,10 @@ const STATUS_COLOUR: Record<SessionRecord['status'], string> = {
 export function SessionPicker({ presenter, onPicked, onSignedOut }: SessionPickerProps) {
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [title, setTitle] = useState('');
+  /** Which deck the new session starts from. A snapshot is taken at creation, so
+   *  this is the only moment the choice is made — afterwards it is edited in the
+   *  HUD's deck tab. */
+  const [presetId, setPresetId] = useState(DEFAULT_DECK.id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [poolInUse, setPoolInUse] = useState<PhonePoolUsage[] | null>(null);
@@ -87,7 +92,7 @@ export function SessionPicker({ presenter, onPicked, onSignedOut }: SessionPicke
         onSubmit={(e) => {
           e.preventDefault();
           void run(async () => {
-            const { session } = await createSession(title.trim());
+            const { session } = await createSession(title.trim(), deckPreset(presetId)?.deck);
             setTitle('');
             await refresh();
             onPicked(await setStatus(session.id, 'live'));
@@ -105,6 +110,24 @@ export function SessionPicker({ presenter, onPicked, onSignedOut }: SessionPicke
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Melbourne — August"
         />
+        <label style={{ ...label, marginTop: 14 }} htmlFor="deck">
+          Deck
+        </label>
+        <select
+          id="deck"
+          value={presetId}
+          onChange={(e) => setPresetId(e.target.value)}
+          style={{ ...input, appearance: 'auto' }}
+        >
+          {DECK_PRESETS.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.label}
+            </option>
+          ))}
+        </select>
+        <p style={{ ...label, textTransform: 'none', letterSpacing: 0, marginTop: 6 }}>
+          {deckPreset(presetId)?.description}
+        </p>
         <button style={button} type="submit" disabled={busy || !title.trim()}>
           {busy ? 'Working…' : 'Create and start'}
         </button>

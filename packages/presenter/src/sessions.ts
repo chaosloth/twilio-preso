@@ -39,9 +39,17 @@ export async function fetchSession(id: string): Promise<SessionWithWarnings> {
 }
 
 /** Throws with `inUse` populated when the phone pool is exhausted (409). */
-export async function createSession(title: string): Promise<SessionWithWarnings> {
+/**
+ * `deck` is the preset the presenter picked, sent as a snapshot: the session owns
+ * its own copy from creation, so editing a preset later cannot change a session
+ * that already exists. Omitted means the backend's default deck.
+ */
+export async function createSession(title: string, deck?: Deck): Promise<SessionWithWarnings> {
   return json(
-    await presenterFetch('/api/sessions', { method: 'POST', body: JSON.stringify({ title }) })
+    await presenterFetch('/api/sessions', {
+      method: 'POST',
+      body: JSON.stringify(deck ? { title, deck } : { title }),
+    })
   );
 }
 
