@@ -1,10 +1,12 @@
 import type { WebSocket } from 'ws';
-import { findParticipantByPhone, listParticipants } from './participant.js';
+import { listParticipants } from './participant.js';
 import { resolveSession } from './session.js';
 import { buildCallerContext, generateGreeting, streamResponse } from './llm.js';
 import type { CallerContext } from './llm.js';
 import { fetchProfileContext, lookupProfileByPhone, recallForProfile } from './memory.js';
 import { fetchSessionConfig } from './relayConfig.js';
+import { loadCallContext } from './callContext.js';
+import type { CallContextLoaders } from './callContext.js';
 import { extractToolCalls, sendFollowupSms } from './tools.js';
 import {
   SentinelSafeStream,
@@ -15,8 +17,19 @@ import {
   trimToInterrupt,
   turnTail,
 } from './protocol.js';
-import { languageCodes, resolveRelayConfig, tallyRoom } from '@twilio-preso/shared';
-import type { RelayConfig, RoomTally, SessionRecord } from '@twilio-preso/shared';
+import { languageCodes, resolveRelayConfig } from '@twilio-preso/shared';
+import type { RelayConfig, SessionRecord } from '@twilio-preso/shared';
+
+/** The real reads. `loadCallContext` takes them as arguments so its ordering can
+ *  be tested without a Twilio client. */
+const LOADERS: CallContextLoaders = {
+  resolveSession,
+  listParticipants,
+  fetchSessionConfig,
+  lookupProfileByPhone,
+  fetchProfileContext,
+  recallForProfile,
+};
 
 interface ConversationRelayEvent {
   type: 'setup' | 'prompt' | 'interrupt' | 'dtmf' | 'error';
@@ -94,60 +107,15 @@ async function handleEvent(
 ): Promise<void> {
   switch (event.type) {
     case 'setup': {
-      const inbound = !(event.direction?.startsWith('outbound') ?? false);
-
-      // Resolve the presentation first: participants live in a per-session map,
-      // so without a session there is nobody to look up. An unresolved call
-      // still gets greeted rather than met with silence.
-      const call = await resolveSession(event);
-      let participant = null;
-      // What the room answered as a whole. Read here, from the same list the
-      // caller is found in: the aggregate is what the presentation built from,
-      // and a majority can differ from the person on the line.
-      let room: RoomTally[] = [];
-      if (!call) {
-        console.warn(`Call from ${event.from} to ${event.to} matched no session — greeting generically`);
-      } else {
-        state.sessionId = call.sessionId;
-        const participants = await listParticipants(call.sessionId);
-        room = tallyRoom(participants);
-        if (call.participantPhone) {
-          participant = findParticipantByPhone(participants, call.participantPhone);
-        }
-        console.log(
-          `Call connected: ${call.participantPhone} in session ${call.sessionId} -> ${participant?.name || 'unknown'}`
-        );
-      }
-
-      // Voice settings before the first spoken word: the greeting, the prompt
-      // and whether memory is read at all come from this session's own config.
-      const settings = await fetchSessionConfig(state.sessionId);
-      state.config = settings.config;
-      state.session = settings.session;
-
-      // The participant record carries the profile id when they registered here.
-      // Falling back to a phone lookup is what makes calling *in* work at all:
-      // an inbound caller may have registered at a previous event, or not be in
-      // this session's map, and the phone identifier still resolves them.
-      const callerPhone = call?.participantPhone ?? (inbound ? event.from ?? null : event.to ?? null);
-      state.callerPhone = callerPhone;
-
-      // `useMemory` off is a demo choice, not a failure: it shows the agent
-      // working from this session's answers alone, so the profile is not read.
-      const profileId = state.config.useMemory
-        ? participant?.memoryProfileId ?? (await lookupProfileByPhone(callerPhone))
-        : null;
-
-      const [profile, recall] = await Promise.all([
-        fetchProfileContext(profileId ?? undefined),
-        recallForProfile(
-          profileId ?? undefined,
-          'customer experience challenges and what they want to build'
-        ),
-      ]);
-
-      state.caller = buildCallerContext(participant, profile, inbound, room);
-      state.caller.recall = recall;
+      // One place assembles all of this, and it starts every read that does not
+      // depend on another as soon as it can — the caller is holding a ringing
+      // phone for the sum of them.
+      const loaded = await loadCallContext(event, LOADERS);
+      state.sessionId = loaded.sessionId;
+      state.config = loaded.config;
+      state.session = loaded.session;
+      state.callerPhone = loaded.callerPhone;
+      state.caller = loaded.caller;
 
       const greeting = await generateGreeting(state.caller, state.config);
       state.conversationHistory.push({ role: 'assistant', content: greeting });

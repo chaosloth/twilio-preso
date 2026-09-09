@@ -23,22 +23,3 @@ export async function listParticipants(sessionId: string): Promise<Participant[]
     return [];
   }
 }
-
-/**
- * The caller, out of a room already in hand.
- *
- * Takes the list rather than fetching one, because setup needs the whole room
- * anyway — the aggregate answers are what the finale talks about — and a second
- * list of five hundred items is latency on a ringing phone for data already read.
- */
-export function findParticipantByPhone(
-  participants: Participant[],
-  phone: string
-): Participant | null {
-  const normalized = normalizePhone(phone);
-  return participants.find((p) => normalizePhone(p.phone) === normalized) ?? null;
-}
-
-function normalizePhone(phone: string): string {
-  return phone.replace(/[^\d+]/g, '');
-}
