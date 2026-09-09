@@ -20,14 +20,14 @@ export default function Stage01Opening() {
 
   return (
     <group>
-      <TwilioGem scale={1.2} emissiveIntensity={0.6} rotationSpeed={0.1} position={[0, 0, -6]} />
+      <TwilioGem scale={2.4} emissiveIntensity={0.6} rotationSpeed={0.1} position={[0, 0, -6]} />
       <ParticleField count={Math.min(participants * 10 + 80, 600)} spread={12} size={0.02} speed={0.15} />
 
       <FloatingText position={[0, 3.1, 0]} fontSize={0.42} color="#ffffff" bold delay={0.2}>
         {slot('headline')}
       </FloatingText>
 
-      <Html position={[0, 0.35, 0]} center transform scale={0.4}>
+      <Html position={[0, 0.45, 0]} center transform scale={0.58}>
         <div style={{ background: 'white', padding: 24, borderRadius: 16, boxShadow: '0 0 60px rgba(242,47,70,0.4)' }}>
           <QRCodeSVG value={joinUrl} size={240} level="M" />
         </div>
@@ -35,7 +35,7 @@ export default function Stage01Opening() {
 
       {/* The code in text for anyone who cannot scan. Space Grotesk, not
           Tektur — it is a value, not a headline. */}
-      <Html position={[0, -1.85, 0]} center transform scale={0.4}>
+      <Html position={[0, -2.55, 0]} center transform scale={0.42}>
         <div
           style={{
             fontFamily: "'Space Grotesk', sans-serif",
@@ -53,10 +53,7 @@ export default function Stage01Opening() {
         </div>
       </Html>
 
-      <FloatingText position={[0, -2.4, 0]} fontSize={0.24} color="#babecc" delay={0.5}>
-        {slot('subhead')}
-      </FloatingText>
-      <FloatingText position={[0, -3.1, 0]} fontSize={0.22} color="#ef223a" delay={0.8}>
+      <FloatingText position={[0, -3.3, 0]} fontSize={0.22} color="#ef223a" delay={0.8}>
         {`${participants} connected`}
       </FloatingText>
 

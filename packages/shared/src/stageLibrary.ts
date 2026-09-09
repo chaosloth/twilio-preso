@@ -84,17 +84,10 @@ const templates: StageTemplate[] = [
     act: 1,
     notes: 'Welcome audience. QR code is displayed. Encourage scanning. Wait for registration count to build.',
     interaction: null,
-    // No presenter photo, name or title: the slide is the QR code and the one
-    // instruction that goes with it. Whoever is on stage is standing next to it.
-    slots: [
-      { key: 'headline', label: 'Headline', kind: 'text', default: 'Scan to Join' },
-      {
-        key: 'subhead',
-        label: 'Sub-headline',
-        kind: 'text',
-        default: 'Scan this to participate live',
-      },
-    ],
+    // No presenter photo, name, title or second line of copy: the slide is the
+    // QR code, one line above it and the join code below. Whoever is on stage is
+    // standing next to it, and the space belongs to the thing the room must scan.
+    slots: [{ key: 'headline', label: 'Headline', kind: 'text', default: 'Scan to Join' }],
   },
   // The three mandatory polls. Deliberately first, before any other
   // interaction: they choose the brand, the palette and the OTP channel that
