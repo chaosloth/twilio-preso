@@ -9,6 +9,8 @@ import {
   TRANSCRIPTION_PROVIDERS,
   TTS_PROVIDERS,
   VOICE_PRESETS,
+  fluxLanguageMismatch,
+  isFluxVoice,
   languageLabel,
   resolveRelayConfig,
   supportsAutoLanguageDetection,
@@ -264,6 +266,23 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
           options={VOICE_PRESETS[draft.ttsProvider].map((v) => ({ value: v.id, label: `${v.label} · ${v.id}` }))}
           onChange={(v) => set('voice', v)}
         />
+        {/* Flux is English-only, and the primary language is what it reads. Said
+            rather than silently corrected: only the presenter knows whether they
+            meant the Italian agent or the Flux voice. */}
+        {fluxLanguageMismatch(draft) && (
+          <ErrorText>
+            {draft.voice} is a Deepgram Flux voice and speaks English only — {draft.language} will
+            not be read correctly.
+          </ErrorText>
+        )}
+        {isFluxVoice(draft.voice) && (
+          <p style={{ ...caption, textTransform: 'none', letterSpacing: 0, marginBottom: 10 }}>
+            Flux needs an employee account with TwiML Sessions (50030) and the new-TTS flag
+            (1265). Tuning rides in the voice id: <code>flux-kai-en-1.2</code> is speed 1.2,
+            <code> flux-kai-en-1.2_-1</code> adds expressivity −1 (speed 0.5–1.5, expressivity
+            −2 to 2).
+          </p>
+        )}
         <Select
           label="Primary language (BCP-47)"
           hint="or type any tag"
@@ -319,6 +338,35 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
         />
       </div>
 
+      {/* A room tone under the agent's own voice. Both the file and its gain are
+          omitted from the TwiML when the URL is blank — on an account without the
+          ambient-sound flag an unknown attribute fails the call rather than being
+          ignored. */}
+      <div style={panel}>
+        <div style={heading}>Ambient sound</div>
+        <p style={{ ...caption, textTransform: 'none', letterSpacing: 0, marginBottom: 10 }}>
+          Looped quietly under the agent while it speaks. Needs an employee account with
+          TwiML Sessions (50030) and the ambient-sound flag (1267). The file must be
+          uncompressed 16-bit PCM, mono, 8&nbsp;kHz WAV under 10&nbsp;MB — mp3, µ-law and
+          stereo are rejected. A failed download is not fatal: the call runs dry.
+        </p>
+        <Field
+          label="Loop URL"
+          hint="https://… .wav — blank turns ambience off"
+          value={draft.ambientSound}
+          onChange={(v) => set('ambientSound', v)}
+        />
+        <Select
+          label="Gain"
+          hint="how loud the loop sits under the voice"
+          value={String(draft.ambientSoundGain)}
+          options={GAIN_STEPS.map((g) => ({
+            value: String(g),
+            label: g === 0.5 ? `${g} (default)` : String(g),
+          }))}
+          onChange={(v) => set('ambientSoundGain', Number(v))}
+        />
+      </div>
 
       {/* Per-language voices. A tag on its own is not enough: `<Language>`
           inherits the parent's voice, so French offered without a French voice is
@@ -454,6 +502,9 @@ const MODE_LABELS: Record<RelayConfig['interruptible'], string> = {
   dtmf: 'keypad only',
   none: 'never — let it finish',
 };
+
+/** TwiML accepts 0.1 to 1.0; a dropdown because a typo here is a call attribute. */
+const GAIN_STEPS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1] as const;
 
 const NORMALIZATION_LABELS: Record<RelayConfig['textNormalization'], string> = {
   off: 'off — fastest (default)',

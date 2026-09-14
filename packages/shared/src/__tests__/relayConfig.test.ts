@@ -10,6 +10,10 @@ import {
   languageCodes,
   resolvedLanguages,
   sayVoice,
+  TTS_PROVIDERS,
+  VOICE_PRESETS,
+  isFluxVoice,
+  fluxLanguageMismatch,
 } from '../relayConfig.js';
 
 describe('resolveRelayConfig', () => {
@@ -353,5 +357,103 @@ describe('sayVoice', () => {
     expect(sayVoice(resolveRelayConfig({ voice: 'M7ya1YbaeFaPXljg9BpK-1.1_0.6_0.8' }))).toBe(
       'ElevenLabs.M7ya1YbaeFaPXljg9BpK'
     );
+  });
+});
+
+/**
+ * Two ConversationRelay features that are account-flagged for internal
+ * evaluation: Deepgram Flux TTS (flag 1265) and ambient sound under the agent's
+ * voice (flag 1267), both on top of TwiML Sessions (50030). Nothing here checks
+ * the flags — the account either has them or the call fails — so what the config
+ * owes is that a setup which *is* flagged is described correctly, and one that is
+ * not can be turned off in one place.
+ */
+describe('Deepgram Flux TTS', () => {
+  it('is a TTS provider the config accepts', () => {
+    expect(TTS_PROVIDERS).toContain('Deepgram');
+    const config = resolveRelayConfig({ ttsProvider: 'Deepgram', voice: 'flux-kai-en' });
+    expect(config.ttsProvider).toBe('Deepgram');
+    expect(config.voice).toBe('flux-kai-en');
+  });
+
+  it('offers the Flux voices as presets, tuning suffix and all', () => {
+    expect(VOICE_PRESETS.Deepgram.map((v) => v.id)).toContain('flux-kai-en');
+  });
+
+  /** Flux is selected by a full model-shaped voice name, and the tuning suffixes
+   *  are part of it: `flux-kai-en-1.2_-1` is speed 1.2, expressivity -1. */
+  it('recognises a Flux voice with or without its tuning suffix', () => {
+    expect(isFluxVoice('flux-kai-en')).toBe(true);
+    expect(isFluxVoice('FLUX-KAI-EN-1.2_-1')).toBe(true);
+    expect(isFluxVoice('M7ya1YbaeFaPXljg9BpK')).toBe(false);
+    expect(isFluxVoice('')).toBe(false);
+  });
+
+  /**
+   * Flux speaks English only. The primary language is what it reads, so a Flux
+   * voice with a non-English primary is a call that fails on the first word —
+   * surfaced as a warning rather than silently rewritten, because which half the
+   * presenter meant to change is theirs to decide.
+   */
+  it('reports a Flux voice paired with a language it cannot speak', () => {
+    expect(fluxLanguageMismatch(resolveRelayConfig())).toBe(false);
+    expect(
+      fluxLanguageMismatch(resolveRelayConfig({ ttsProvider: 'Deepgram', voice: 'flux-kai-en' }))
+    ).toBe(false);
+    expect(
+      fluxLanguageMismatch(
+        resolveRelayConfig({ ttsProvider: 'Deepgram', voice: 'flux-kai-en', language: 'it-IT' })
+      )
+    ).toBe(true);
+  });
+
+  /** `multi` is Deepgram ASR with *ElevenLabs* TTS. Flux is neither English-only
+   *  by accident nor part of that pair. */
+  it('cannot auto-detect the language', () => {
+    expect(
+      supportsAutoLanguageDetection(resolveRelayConfig({ ttsProvider: 'Deepgram', voice: 'flux-kai-en' }))
+    ).toBe(false);
+  });
+
+  /**
+   * The `<Say>` verb has no Deepgram provider at all, so the scripted finale
+   * cannot speak in the Flux voice. It falls back to the event's ElevenLabs voice
+   * rather than emitting `Deepgram.flux-kai-en`, which is a call that says
+   * nothing.
+   */
+  it('falls back to an ElevenLabs voice for the Say verb', () => {
+    expect(sayVoice(resolveRelayConfig({ ttsProvider: 'Deepgram', voice: 'flux-kai-en' }))).toBe(
+      `ElevenLabs.${DEFAULT_RELAY_CONFIG.voice}`
+    );
+  });
+});
+
+describe('ambient sound', () => {
+  it('is off until a file is given', () => {
+    expect(DEFAULT_RELAY_CONFIG.ambientSound).toBe('');
+    expect(DEFAULT_RELAY_CONFIG.ambientSoundGain).toBe(0.5);
+  });
+
+  it('takes an http(s) file and trims it', () => {
+    expect(resolveRelayConfig({ ambientSound: ' https://cdn.example.com/room.wav ' }).ambientSound).toBe(
+      'https://cdn.example.com/room.wav'
+    );
+  });
+
+  /** Anything else is not a quiet no-op — it is a URL Twilio tries to fetch
+   *  mid-call. Dropped here, where it is one presenter's typo. */
+  it('drops anything that is not an http(s) URL', () => {
+    expect(resolveRelayConfig({ ambientSound: 'room.wav' }).ambientSound).toBe('');
+    expect(resolveRelayConfig({ ambientSound: 'file:///room.wav' }).ambientSound).toBe('');
+    expect(resolveRelayConfig({ ambientSound: 42 as never }).ambientSound).toBe('');
+  });
+
+  /** TwiML accepts 0.1 to 1.0. Outside it the attribute is rejected, so the
+   *  stored value is clamped rather than passed through. */
+  it('clamps the gain to the range TwiML allows', () => {
+    expect(resolveRelayConfig({ ambientSoundGain: 0.3 }).ambientSoundGain).toBe(0.3);
+    expect(resolveRelayConfig({ ambientSoundGain: 0 }).ambientSoundGain).toBe(0.1);
+    expect(resolveRelayConfig({ ambientSoundGain: 9 }).ambientSoundGain).toBe(1);
+    expect(resolveRelayConfig({ ambientSoundGain: 'loud' as never }).ambientSoundGain).toBe(0.5);
   });
 });

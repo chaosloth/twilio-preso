@@ -35,3 +35,47 @@ describe('relayTwiml', () => {
     expect(twiml({ intelligenceService: 'GA1234' })).toContain('intelligenceService="GA1234"');
   });
 });
+
+/**
+ * Two internal-only ConversationRelay features. Both are gated on account flags
+ * (TwiML Sessions 50030, plus 1267 for ambience and 1265 for Flux), so the
+ * attributes must be absent unless the session actually asked for them — an
+ * account without the flag reads an unknown attribute as a 64101.
+ */
+describe('agent ambient sound', () => {
+  /** No URL, no attributes. The default must be sendable on any account. */
+  it('says nothing about ambience by default', () => {
+    expect(twiml()).not.toContain('agentAmbientSound');
+    expect(twiml()).not.toContain('ambientSoundGain');
+  });
+
+  /** Gain rides along with the URL: it means nothing on its own. */
+  it('emits the loop and its gain when a URL is configured', () => {
+    const out = twiml({ ambientSound: 'https://media.example.com/room.wav', ambientSoundGain: 0.3 });
+    expect(out).toContain('agentAmbientSound="https://media.example.com/room.wav"');
+    expect(out).toContain('ambientSoundGain="0.3"');
+  });
+
+  /** A gain with no file is a volume for silence. */
+  it('omits the gain when there is no loop to set it on', () => {
+    expect(twiml({ ambientSoundGain: 0.9 })).not.toContain('ambientSoundGain');
+  });
+});
+
+describe('Deepgram Flux TTS', () => {
+  /** Flux is selected by the *voice name* under ttsProvider="Deepgram" —
+   *  Twilio detects the Flux name and routes to it internally. */
+  it('names Deepgram as the provider and the Flux voice verbatim', () => {
+    const out = twiml({ ttsProvider: 'Deepgram', voice: 'flux-kai-en-1.2_-1' });
+    expect(out).toContain('ttsProvider="Deepgram"');
+    expect(out).toContain('voice="flux-kai-en-1.2_-1"');
+  });
+
+  /** Neither an ElevenLabs attribute nor `multi`: Flux is English-only and the
+   *  normalization attribute belongs to another provider. */
+  it('drops the ElevenLabs-only attribute and auto language detection', () => {
+    const out = twiml({ ttsProvider: 'Deepgram', voice: 'flux-kai-en', textNormalization: 'on' });
+    expect(out).not.toContain('elevenlabsTextNormalization');
+    expect(out).toContain('language="en-AU"');
+  });
+});

@@ -99,6 +99,18 @@ export function relayTwiml(session: SessionRecord | null, config: RelayConfig, u
   // when it does not — an empty attribute is a 64101, not an unused feature.
   if (config.intelligenceService)
     attrs.push(`intelligenceService="${escapeXml(config.intelligenceService)}"`);
+  /**
+   * A room tone looped under the agent's voice, so it does not sound like it is
+   * speaking from a vacuum. Both attributes are omitted together when no file is
+   * set: the gain is a volume for silence on its own, and on an account without
+   * the ambient-sound flag an unknown attribute is a 64101 rather than an
+   * ignored nicety. Twilio prefetches the file during setup and a failed
+   * download is non-fatal — the call proceeds dry.
+   */
+  if (config.ambientSound) {
+    attrs.push(`agentAmbientSound="${escapeXml(config.ambientSound)}"`);
+    attrs.push(`ambientSoundGain="${config.ambientSoundGain}"`);
+  }
   // Unfinalized prompts. Only asked for when the session wants them — the app
   // ignores `last: false` either way, so this cannot make the agent answer twice.
   if (config.partialPrompts) attrs.push('partialPrompts="true"');

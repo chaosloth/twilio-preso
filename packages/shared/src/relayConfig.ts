@@ -81,7 +81,7 @@ const BCP47 = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
  * validation message, it is error 64106 and a call that ends mid-sentence — so a
  * free-text field is the wrong control for any of them.
  */
-export const TTS_PROVIDERS = ['ElevenLabs', 'Google', 'Amazon'] as const;
+export const TTS_PROVIDERS = ['ElevenLabs', 'Google', 'Amazon', 'Deepgram'] as const;
 export const TRANSCRIPTION_PROVIDERS = ['Deepgram', 'Google'] as const;
 
 /**
@@ -128,7 +128,42 @@ export const VOICE_PRESETS: Record<TtsProvider, readonly { id: string; label: st
     { id: 'en-US-Journey-O', label: 'US Journey' },
   ],
   Amazon: [{ id: 'Joanna-Neural', label: 'Joanna' }],
+  /**
+   * Deepgram Flux. The provider is chosen by the voice *name*: Twilio detects a
+   * full Flux name and routes to Flux internally, which is also why the tuning
+   * suffixes belong in this id rather than in an attribute of their own —
+   * `flux-kai-en-1.2_-1` is speed 1.2, expressivity -1 (speed 0.5–1.5,
+   * expressivity -2 to 2).
+   */
+  Deepgram: [
+    { id: 'flux-kai-en', label: 'Flux Kai (English)' },
+    { id: 'flux-kai-en-1.1', label: 'Flux Kai, slightly faster' },
+  ],
 };
+
+/**
+ * Whether a voice id names Deepgram Flux.
+ *
+ * Flux is selected by the voice name, not by a flag, and it speaks English only —
+ * so this is what the two rules about it are derived from rather than a stored
+ * boolean that can disagree with the voice actually configured. Case-insensitive,
+ * because Twilio matches provider and voice names that way.
+ */
+export function isFluxVoice(voice: string): boolean {
+  return /^flux-/i.test(voice.trim());
+}
+
+/**
+ * A Flux voice asked to read a language it cannot speak.
+ *
+ * Flux is English-only and the primary language is what it reads, so this pairing
+ * is a call that fails on its first word. Reported rather than silently corrected:
+ * a presenter who has just picked an Italian agent and a presenter who has just
+ * picked a Flux voice both need to know, and only they know which half they meant.
+ */
+export function fluxLanguageMismatch(config: RelayConfig): boolean {
+  return isFluxVoice(config.voice) && !/^en(-|$)/i.test(config.language);
+}
 
 export interface RelayConfig {
   /** The agent's instructions. `{{context}}` is replaced with what is known
@@ -184,6 +219,17 @@ export interface RelayConfig {
    * attribute off entirely: a blank one is a 64101, not a no-op.
    */
   intelligenceService: string;
+  /**
+   * A WAV file looped quietly under the agent's own voice — a contact-centre
+   * room, a cafe — so the agent does not sound like it is speaking from a vacuum.
+   *
+   * An HTTP(S) URL Twilio can fetch, holding uncompressed 16-bit PCM, mono, 8 kHz
+   * audio under 10 MB; mp3, µ-law and stereo are rejected. Empty leaves the
+   * attribute off, which is what an account without flag 1267 must send.
+   */
+  ambientSound: string;
+  /** How loud that loop sits under the voice. TwiML takes 0.1 to 1.0. */
+  ambientSoundGain: number;
   interruptible: InterruptMode;
   /** How readily speech counts as an interruption. `low` needs a longer, more
    *  confident utterance — worth reaching for in a loud room, where `high` turns
@@ -304,6 +350,8 @@ Keep every reply SHORT — one or two sentences, because this is a phone call an
   speechModel: '',
   textNormalization: 'off',
   intelligenceService: '',
+  ambientSound: '',
+  ambientSoundGain: 0.5,
   interruptible: 'any',
   interruptSensitivity: 'high',
   ignoreBackchannel: true,
@@ -339,6 +387,11 @@ Keep every reply SHORT — one or two sentences, because this is a phone call an
  * than passed through into a voice that does not exist.
  */
 export function sayVoice(config: RelayConfig): string {
+  // `<Say>` has no Deepgram provider at all, so a Flux agent's scripted twin
+  // cannot speak in its voice. The event's own ElevenLabs voice is the closest
+  // thing that exists; `Deepgram.flux-kai-en` is a verb that says nothing.
+  if (config.ttsProvider === 'Deepgram')
+    return `ElevenLabs.${DEFAULT_RELAY_CONFIG.voice.split('-')[0]}`;
   const provider = config.ttsProvider === 'Amazon' ? 'Polly' : config.ttsProvider;
   const voice =
     config.ttsProvider === 'ElevenLabs' ? config.voice.split('-')[0] : config.voice;
@@ -393,6 +446,10 @@ export function resolveRelayConfig(stored?: Partial<RelayConfig> | null): RelayC
     // cannot resolve, and the call fails rather than the observability quietly
     // not appearing.
     intelligenceService: str('intelligenceService').trim(),
+    // Only a URL Twilio could actually fetch. Anything else is not a quiet
+    // no-op — it is a mid-call fetch of a path that does not exist.
+    ambientSound: httpUrl(source.ambientSound),
+    ambientSoundGain: gain(source.ambientSoundGain),
     interruptible: interruptMode(source.interruptible),
     interruptSensitivity: oneOf(
       'interruptSensitivity',
@@ -453,6 +510,25 @@ function oneOf<T extends readonly string[]>(allowed: T, value: unknown): T[numbe
   return typeof value === 'string' && (allowed as readonly string[]).includes(value)
     ? (value as T[number])
     : undefined;
+}
+
+/** An http(s) URL, trimmed, or '' — the shape the ambient attribute needs. */
+function httpUrl(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  return /^https?:\/\/\S+$/i.test(trimmed) ? trimmed : '';
+}
+
+/**
+ * The ambient gain, clamped to the 0.1–1.0 TwiML accepts.
+ *
+ * Clamped rather than dropped: a presenter who typed 2 wants it loud, and losing
+ * the attribute would silently return them to the default instead.
+ */
+function gain(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_RELAY_CONFIG.ambientSoundGain;
+  return Math.min(1, Math.max(0.1, Math.round(n * 100) / 100));
 }
 
 function text(value: unknown): string | undefined {
