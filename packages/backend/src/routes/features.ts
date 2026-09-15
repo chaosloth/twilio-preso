@@ -7,10 +7,13 @@ import { requirePresenter } from '../services/auth.js';
 import {
   describeNumberWebhook,
   describePoolUsage,
+  getSessionById,
   phoneNumberForSession,
   pointNumberAtVoiceAgent,
+  setSessionRelay,
 } from '../services/sessions.js';
 import { getPresentationState } from '../services/sync.js';
+import { probeAmbientSound } from '../services/ambientSound.js';
 import {
   DESIRED_TRAITS,
   ensureTraitGroups,
@@ -47,7 +50,7 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const sessionId = request.query.sessionId;
 
-      const [sync, verify, messaging, memory, traits, llmProbe, templates, orchestrator, pool, state] =
+      const [sync, verify, messaging, memory, traits, llmProbe, templates, orchestrator, pool, state, ambient] =
         await Promise.all([
         probe(async () => {
           const s = await client.sync.v1.services(config.twilio.syncServiceSid).fetch();
@@ -74,6 +77,9 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
         describeOrchestrator().catch(() => null),
         describePoolUsage().catch(() => []),
         sessionId ? getPresentationState(sessionId).catch(() => null) : Promise.resolve(null),
+        // Reads the account's own 12200 alerts, so an unreachable Monitor API
+        // must leave the rest of the report readable like every probe above.
+        probeAmbientSound(sessionId).catch(() => null),
       ]);
 
       const claimed = new Map(pool.map((p) => [p.phoneNumber, p]));
@@ -257,6 +263,65 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
             : thisSessionNumber
               ? [{ label: 'Number', value: thisSessionNumber }]
               : undefined,
+        },
+        {
+          /**
+           * Whether the room tone the voice tab offers actually reaches the call.
+           *
+           * `agentAmbientSound` is gated on an internal account flag (1267), and
+           * an account without it does *not* fail the call: Twilio raises an XML
+           * validation warning (12200) per attribute, drops both, and connects
+           * dry. So the knob looks like it works, the room hears nothing, and the
+           * two warnings pile up beside every real problem the call has — which is
+           * how a Connect media timeout came to look like an ambient-sound bug.
+           * There is no API for the flag, so this reports the consequence: the
+           * account's own recent rejections, counted.
+           */
+          id: 'ambient-sound',
+          label: 'Agent ambient sound',
+          state: !ambient
+            ? 'warn'
+            : !ambient.url
+              ? 'off'
+              : ambient.rejections > 0 || ambient.fileOk === false
+                ? 'error'
+                : ambient.fileOk === null
+                  ? 'warn'
+                  : 'ok',
+          detail: !ambient
+            ? 'Could not read this account’s alerts, so whether ambience reaches the call is unknown.'
+            : !ambient.url
+              ? 'No loop set — the agent speaks dry, and neither ambient attribute is sent.'
+              : ambient.rejections > 0
+                ? `This account rejects ambient sound: ${ambient.rejections} XML validation warning${ambient.rejections === 1 ? '' : 's'} naming agentAmbientSound in the last 24 hours. The calls still connect — Twilio drops both attributes — but nobody hears the loop, and the warnings sit in the log beside every real fault. Needs the ambient-sound flag (1267) on the account; clearing the loop is what stops the noise.`
+                : ambient.fileOk === false
+                  ? `The account has not rejected the attribute, but the file will: ${ambient.fileDetail}`
+                  : ambient.fileOk === null
+                    ? `The attribute is being sent and no rejection has been logged, but the file itself could not be checked: ${ambient.fileDetail}`
+                    : 'A room tone plays under the agent, and the file is the format ConversationRelay needs.',
+          // Clears one field on one session record — the same write the voice tab
+          // makes, offered here because the reason to make it is only visible in
+          // this report. Nothing account-level is touched; the flag is Twilio's.
+          action:
+            sessionId && ambient?.url && (ambient.rejections > 0 || ambient.fileOk === false)
+              ? {
+                  label: 'Turn ambient sound off for this session',
+                  path: `/api/voice/ambient-sound/clear?sessionId=${encodeURIComponent(sessionId)}`,
+                }
+              : undefined,
+          values: ambient?.url
+            ? [
+                { label: 'Loop', value: ambient.url },
+                { label: 'Gain', value: String(ambient.gain) },
+                { label: 'File', value: ambient.fileDetail },
+                {
+                  label: 'Rejections (24h)',
+                  value: ambient.lastRejectedAt
+                    ? `${ambient.rejections}, most recently ${ambient.lastRejectedAt}`
+                    : String(ambient.rejections),
+                },
+              ]
+            : undefined,
         },
         {
           id: 'memory',
@@ -457,6 +522,29 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
         request.log.error({ err }, 'failed to point number at the voice agent');
         return reply.status(502).send({ error: err?.message ?? 'could not update the number' });
       }
+    }
+  );
+
+  /**
+   * Turns ambient sound off for one session.
+   *
+   * The voice tab can do this too; it is here because the *reason* to do it —
+   * that this account rejects the attribute on every call — is only visible in
+   * this report. It clears the loop rather than the gain: a gain on its own is a
+   * volume for silence, and `relayTwiml` omits both attributes together.
+   */
+  app.post<{ Querystring: { sessionId?: string } }>(
+    '/api/voice/ambient-sound/clear',
+    { preHandler: requirePresenter },
+    async (request, reply) => {
+      const sessionId = request.query.sessionId;
+      if (!sessionId) return reply.status(400).send({ error: 'sessionId is required' });
+      const session = await getSessionById(sessionId);
+      if (!session) return reply.status(404).send({ error: 'session not found' });
+      // A partial is stored, so the rest of the session's voice settings are
+      // carried through field by field rather than reset to their defaults.
+      const updated = await setSessionRelay(sessionId, { ...(session.relay ?? {}), ambientSound: '' });
+      return { cleared: true, ambientSound: updated?.relay?.ambientSound ?? '' };
     }
   );
 

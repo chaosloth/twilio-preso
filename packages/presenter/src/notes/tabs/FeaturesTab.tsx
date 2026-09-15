@@ -190,6 +190,11 @@ function describeActionResult(body: any): string {
       ? `${body.phoneNumber} now answers with this session.`
       : `Still answering with ${body.registered ?? 'nothing'} — the account may not allow this number to be reconfigured.`;
   }
+  if (body?.cleared === true && typeof body?.ambientSound === 'string') {
+    return body.ambientSound
+      ? `Still set to ${body.ambientSound} — the write did not stick.`
+      : 'Ambient sound is off for this session. The next call sends neither attribute.';
+  }
   if (Array.isArray(body?.created) && body.created.length > 0) {
     return `Declared ${body.created.join(', ')}.`;
   }
