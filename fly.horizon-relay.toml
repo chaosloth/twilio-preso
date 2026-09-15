@@ -1,5 +1,5 @@
 app = "twilio-horizon-preso-relay"
-primary_region = "syd"
+primary_region = "iad"
 
 # A relay session is a WebSocket held open for the length of a call, and Twilio
 # does not reconnect one it loses — a machine that goes away takes every call on
@@ -52,4 +52,4 @@ kill_timeout = 300
 # on every reply at once.
 [[vm]]
   size = "performance-2x"
-  memory = "2gb"
+  memory = "4gb"   # performance-2x has a 4 GB floor; 2gb is rejected outright

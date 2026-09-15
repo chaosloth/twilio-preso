@@ -1,5 +1,5 @@
 app = "twilio-horizon-preso-backend"
-primary_region = "syd"
+primary_region = "sin"
 
 [build]
   dockerfile = "packages/backend/Dockerfile"
