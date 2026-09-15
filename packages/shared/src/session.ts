@@ -41,6 +41,23 @@ export interface SessionRecord {
    */
   relay?: Partial<RelayConfig>;
   /**
+   * Voice-agent settings for calls **this app places** — the HUD's test call,
+   * `voice-agent-connect`, `voice-mass-relay`.
+   *
+   * A second full partial rather than a handful of overrides, because the two
+   * directions are different moments in the talk and nearly every field wants to
+   * differ: an outbound finale opens by announcing itself to someone who did not
+   * ask to be called and lasts three turns, while someone who chose to ring in is
+   * having a twelve-turn conversation. The voice, the tools and the ambience are
+   * as much part of that difference as the prompt.
+   *
+   * **Absent means "use `relay`".** Every session that predates this field, and
+   * every one whose presenter has not touched the outbound tab, keeps answering
+   * both directions with the one config it already has — so adding this changed
+   * no live presentation. Read through `relayConfigFor`, never directly.
+   */
+  relayOutbound?: Partial<RelayConfig>;
+  /**
    * Text-agent settings — the same agent reached over SMS, RCS or WhatsApp.
    *
    * Its own partial rather than a corner of `relay`, because the two are edited

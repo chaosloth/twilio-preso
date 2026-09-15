@@ -1,5 +1,6 @@
 import Twilio from 'twilio';
-import { resolveRelayConfig } from '@twilio-preso/shared';
+import { relayConfigFor } from '@twilio-preso/shared';
+import type { CallDirection } from '@twilio-preso/shared';
 import { config } from '../config.js';
 import { getSessionById } from './sessions.js';
 
@@ -28,6 +29,8 @@ const ALERT_WINDOW_MS = 24 * 60 * 60 * 1000;
 export interface AmbientSoundStatus {
   /** The URL this session would send, or '' when ambience is off. */
   url: string;
+  /** Which of the session's two voice configs this describes. */
+  direction: CallDirection;
   gain: number;
   /** 12200s naming the attribute, inside the window. */
   rejections: number;
@@ -41,9 +44,12 @@ export interface AmbientSoundStatus {
   fileDetail: string;
 }
 
-export async function probeAmbientSound(sessionId?: string): Promise<AmbientSoundStatus> {
+export async function probeAmbientSound(
+  sessionId?: string,
+  direction: CallDirection = 'inbound'
+): Promise<AmbientSoundStatus> {
   const session = sessionId ? await getSessionById(sessionId).catch(() => null) : null;
-  const relay = resolveRelayConfig(session?.relay);
+  const relay = relayConfigFor(session, direction);
   const url = relay.ambientSound;
 
   const [alerts, file] = await Promise.all([
@@ -51,7 +57,7 @@ export async function probeAmbientSound(sessionId?: string): Promise<AmbientSoun
     url ? describeWavFile(url) : Promise.resolve({ fileOk: null, fileDetail: 'No file set.' }),
   ]);
 
-  return { url, gain: relay.ambientSoundGain, ...alerts, ...file };
+  return { url, direction, gain: relay.ambientSoundGain, ...alerts, ...file };
 }
 
 /** The account's own verdict, read from its alerts rather than assumed. */

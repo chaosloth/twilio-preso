@@ -1,6 +1,7 @@
-import { buildCallerContext, tallyRoom } from '@twilio-preso/shared';
+import { buildCallerContext, directionOf, tallyRoom } from '@twilio-preso/shared';
 import type {
   AgentProfileContext,
+  CallDirection,
   CallerContext,
   Participant,
   RelayConfig,
@@ -20,7 +21,8 @@ export interface CallContextLoaders {
   resolveSession(event: SetupEvent): Promise<CallSession | null>;
   listParticipants(sessionId: string): Promise<Participant[]>;
   fetchSessionConfig(
-    sessionId: string | null
+    sessionId: string | null,
+    direction: CallDirection
   ): Promise<{ config: RelayConfig; session: SessionRecord | null }>;
   lookupProfileByPhone(phone: string | null): Promise<string | null>;
   fetchProfileContext(profileId: string | undefined): Promise<AgentProfileContext | null>;
@@ -60,7 +62,13 @@ export async function loadCallContext(
   event: SetupEvent,
   loaders: CallContextLoaders
 ): Promise<LoadedCall> {
-  const inbound = !(event.direction?.startsWith('outbound') ?? false);
+  /**
+   * Which of the session's two voice configs answers this call — declared by the
+   * backend in a custom parameter, since it knows what it placed, and inferred
+   * from Twilio's own `direction` otherwise.
+   */
+  const direction = directionOf(event.customParameters?.direction, event.direction);
+  const inbound = direction === 'inbound';
 
   // The session first: participants live in a per-session map, so without one
   // there is nobody to look up. An unresolved call is still answered.
@@ -75,7 +83,7 @@ export async function loadCallContext(
 
   const [participants, settings] = await Promise.all([
     sessionId ? loaders.listParticipants(sessionId) : Promise.resolve<Participant[]>([]),
-    loaders.fetchSessionConfig(sessionId),
+    loaders.fetchSessionConfig(sessionId, direction),
   ]);
 
   // What the room answered as a whole, from the same list the caller is found

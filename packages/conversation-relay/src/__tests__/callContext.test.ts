@@ -66,7 +66,7 @@ describe('loadCallContext', () => {
     // Both have been asked while neither has answered — which is only possible
     // if the second was not waiting on the first.
     await vi.waitFor(() => expect(deps.listParticipants).toHaveBeenCalledWith('s1'));
-    expect(deps.fetchSessionConfig).toHaveBeenCalledWith('s1');
+    expect(deps.fetchSessionConfig).toHaveBeenCalledWith('s1', 'inbound');
 
     participants.release([attendee()]);
     settings.release({ config: resolveRelayConfig(), session: null });
@@ -158,5 +158,31 @@ describe('loadCallContext', () => {
     );
     expect(loaded.callerPhone).toBe('+61400000001');
     expect(loaded.caller.inbound).toBe(false);
+  });
+});
+
+/**
+ * The session holds two voice configs and this is what chooses between them, so
+ * getting it wrong is an outbound finale greeting someone as if they had rung in.
+ */
+describe('which direction the config is read for', () => {
+  it('asks for the outbound config on a call this app placed', async () => {
+    const deps = loaders();
+    await loadCallContext({ from: '+61400000999', to: '+61400000001', direction: 'outbound-api' }, deps);
+    expect(deps.fetchSessionConfig).toHaveBeenCalledWith('s1', 'outbound');
+  });
+
+  /**
+   * The backend declares it in a custom parameter because it knows what it
+   * placed, and that wins: a leg dialled out of a `<Dial>` reports a direction
+   * describing the leg rather than the moment in the talk.
+   */
+  it('prefers the direction the TwiML declared', async () => {
+    const deps = loaders();
+    await loadCallContext(
+      { ...inboundCall, customParameters: { sessionId: 's1', direction: 'outbound' } },
+      deps
+    );
+    expect(deps.fetchSessionConfig).toHaveBeenCalledWith('s1', 'outbound');
   });
 });

@@ -46,6 +46,10 @@ export interface PresentationSettings {
 /** Everything an export carries besides the deck itself. */
 export interface PresentationExtras {
   relay?: Partial<RelayConfig>;
+  /** The outbound voice config, when the session has one of its own. Absent means
+   *  it inherits from `relay`, which is a fact worth carrying rather than
+   *  flattening into a duplicate. */
+  relayOutbound?: Partial<RelayConfig>;
   text?: Partial<TextAgentConfig>;
   settings?: PresentationSettings;
 }
@@ -64,6 +68,7 @@ export interface DeckTransferFile {
    * only does in combination with the build that wrote it.
    */
   relay?: RelayConfig;
+  relayOutbound?: RelayConfig;
   text?: TextAgentConfig;
   settings?: PresentationSettings;
 }
@@ -82,6 +87,7 @@ export function exportDeck(
     // export must be the deck as it was at that moment.
     deck: structuredClone(deck),
     ...(extras?.relay ? { relay: resolveRelayConfig(extras.relay) } : {}),
+    ...(extras?.relayOutbound ? { relayOutbound: resolveRelayConfig(extras.relayOutbound) } : {}),
     ...(extras?.text ? { text: resolveTextConfig(extras.text) } : {}),
     ...(extras?.settings ? { settings: cleanSettings(extras.settings) } : {}),
   };
@@ -101,6 +107,9 @@ export interface ParsedDeckTransfer {
    * session's own personas alone.
    */
   relay?: RelayConfig;
+  /** Only when the file carried one. A file whose session inherited outbound from
+   *  inbound must import as inheriting too, not as two identical configs. */
+  relayOutbound?: RelayConfig;
   text?: TextAgentConfig;
   settings?: PresentationSettings;
   /** Things the presenter should see before committing — never hard errors. */
@@ -135,6 +144,7 @@ export function parseDeckTransfer(text: string): ParsedDeckTransfer {
   // key this build does not declare is dropped, and a field the file predates
   // arrives as this build's default rather than as undefined.
   const relay = extras.relay ? resolveRelayConfig(extras.relay) : undefined;
+  const relayOutbound = extras.relayOutbound ? resolveRelayConfig(extras.relayOutbound) : undefined;
   const textAgent = extras.text ? resolveTextConfig(extras.text) : undefined;
   const settings = extras.settings ? cleanSettings(extras.settings) : undefined;
 
@@ -146,6 +156,7 @@ export function parseDeckTransfer(text: string): ParsedDeckTransfer {
 
   return {
     ...(relay ? { relay } : {}),
+    ...(relayOutbound ? { relayOutbound } : {}),
     ...(textAgent ? { text: textAgent } : {}),
     ...(settings ? { settings } : {}),
     deck: {
@@ -180,6 +191,7 @@ function extractDeck(parsed: unknown): { deck: RawDeck; extras: PresentationExtr
       deck: deck as RawDeck,
       extras: {
         relay: object(obj.relay) as Partial<RelayConfig> | undefined,
+        relayOutbound: object(obj.relayOutbound) as Partial<RelayConfig> | undefined,
         text: object(obj.text) as Partial<TextAgentConfig> | undefined,
         settings: object(obj.settings) as PresentationSettings | undefined,
       },

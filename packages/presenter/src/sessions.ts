@@ -1,5 +1,6 @@
 import { resolveDeck, resolveRelayConfig, resolveTextConfig } from '@twilio-preso/shared';
 import type {
+  CallDirection,
   Deck,
   DeckWarning,
   PhonePoolUsage,
@@ -89,14 +90,26 @@ export async function saveDeck(id: string, deck: Deck): Promise<SessionWithWarni
  * on the first `.join()`. Merging locally makes a lagging backend a stale default
  * instead of a white screen.
  */
-export async function fetchRelayConfig(id: string): Promise<RelayConfig> {
-  const { relay } = await json(await presenterFetch(`/api/sessions/${id}/relay`));
-  return resolveRelayConfig(relay);
+export async function fetchRelayConfig(
+  id: string,
+  direction: CallDirection = 'inbound'
+): Promise<{ relay: RelayConfig; outboundSet: boolean }> {
+  const body = await json(await presenterFetch(`/api/sessions/${id}/relay?direction=${direction}`));
+  return {
+    relay: resolveRelayConfig(body.relay),
+    // A backend that predates the split answers without this field. Treating that
+    // as "not set" is right either way: there is nothing to have edited.
+    outboundSet: body.outboundSet === true,
+  };
 }
 
-export async function saveRelayConfig(id: string, relay: RelayConfig): Promise<RelayConfig> {
+export async function saveRelayConfig(
+  id: string,
+  relay: RelayConfig,
+  direction: CallDirection = 'inbound'
+): Promise<RelayConfig> {
   const result = await json(
-    await presenterFetch(`/api/sessions/${id}/relay`, {
+    await presenterFetch(`/api/sessions/${id}/relay?direction=${direction}`, {
       method: 'PUT',
       body: JSON.stringify({ relay }),
     })
@@ -126,12 +139,16 @@ export async function saveTextConfig(id: string, text: TextAgentConfig): Promise
  *  before an audience hears them. Own number in rehearsal, anyone once armed. */
 export async function placeTestCall(
   sessionId: string,
-  to?: string
+  to?: string,
+  /** Which of the two configs to hear. The tab sends the one being edited: a test
+   *  call that answered in the other direction's voice would be the bug this
+   *  whole split exists to fix. */
+  direction: CallDirection = 'outbound'
 ): Promise<{ callSid: string; to: string; from: string }> {
   return json(
     await presenterFetch('/api/voice/test-call', {
       method: 'POST',
-      body: JSON.stringify({ sessionId, to: to || undefined }),
+      body: JSON.stringify({ sessionId, to: to || undefined, direction }),
     })
   );
 }

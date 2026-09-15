@@ -16,7 +16,7 @@ import {
   supportsAutoLanguageDetection,
   withLanguageDefaults,
 } from '@twilio-preso/shared';
-import type { LanguageVoice, RelayConfig, RelayToolId } from '@twilio-preso/shared';
+import type { CallDirection, LanguageVoice, RelayConfig, RelayToolId } from '@twilio-preso/shared';
 import { fetchRelayConfig, placeTestCall, saveRelayConfig } from '../../sessions';
 import { ErrorText, Row, caption, heading, panel, smallButton, textInput } from '../ui';
 
@@ -31,6 +31,17 @@ import { ErrorText, Row, caption, heading, panel, smallButton, textInput } from 
  * this avoids — same reason the deck editor works this way.
  */
 export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
+  /**
+   * Which direction's config is being edited. Two stored configs, because the two
+   * are different moments in the talk: someone who rang in chose to and is having
+   * a conversation, while the finale has to introduce itself to a phone that just
+   * started ringing. The number's inbound webhook reads the first, every call this
+   * app places reads the second.
+   */
+  const [direction, setDirection] = useState<CallDirection>('inbound');
+  /** Whether the outbound config has ever been saved. Until it has, it *is* the
+   *  inbound one — so the tab says so rather than pretending to be edits. */
+  const [outboundSet, setOutboundSet] = useState(false);
   const [draft, setDraft] = useState<RelayConfig | null>(null);
   const [saved, setSaved] = useState<RelayConfig | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,16 +51,26 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
   const [testNumber, setTestNumber] = useState('');
 
   useEffect(() => {
+    let current = true;
+    // Cleared first, so switching direction shows "Loading…" rather than the other
+    // direction's values under the new heading for as long as the read takes.
+    setDraft(null);
+    setSaved(null);
     (async () => {
       try {
-        const config = await fetchRelayConfig(sessionId);
-        setDraft(config);
-        setSaved(config);
+        const { relay, outboundSet: set } = await fetchRelayConfig(sessionId, direction);
+        if (!current) return;
+        setOutboundSet(set);
+        setDraft(relay);
+        setSaved(relay);
       } catch (err: any) {
-        setError(err?.message ?? 'Could not read the voice settings');
+        if (current) setError(err?.message ?? 'Could not read the voice settings');
       }
     })();
-  }, [sessionId]);
+    return () => {
+      current = false;
+    };
+  }, [sessionId, direction]);
 
   const set = useCallback(<K extends keyof RelayConfig>(key: K, value: RelayConfig[K]) => {
     setDraft((d) => (d ? { ...d, [key]: value } : d));
@@ -78,10 +99,17 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
     setStatus('Saving…');
     setBusy(true);
     try {
-      const config = await saveRelayConfig(sessionId, draft);
+      const config = await saveRelayConfig(sessionId, draft, direction);
       setDraft(config);
       setSaved(config);
-      setStatus('Saved — the next call uses these settings.');
+      // Saving the outbound tab is what makes it its own config; before that it
+      // was inheriting, and the switch above needs to stop saying so.
+      if (direction === 'outbound') setOutboundSet(true);
+      setStatus(
+        direction === 'inbound'
+          ? 'Saved — the next call *in* uses these settings.'
+          : 'Saved — calls this app places use these settings.'
+      );
     } catch (err: any) {
       setStatus('');
       setError(err?.message ?? 'Save failed');
@@ -95,7 +123,7 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
     setStatus('Calling…');
     setCalling(true);
     try {
-      const result = await placeTestCall(sessionId, testNumber.trim());
+      const result = await placeTestCall(sessionId, testNumber.trim(), direction);
       setStatus(`Calling ${result.to} from ${result.from} — answer it.`);
     } catch (err: any) {
       setStatus('');
@@ -111,8 +139,77 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
 
+  /**
+   * Switching away from unsaved edits would silently discard them — every field
+   * here changes what a live call sounds like, so it asks first.
+   */
+  function switchTo(next: CallDirection) {
+    if (next === direction) return;
+    if (dirty && !window.confirm('Discard the unsaved edits on this direction?')) return;
+    setStatus('');
+    setError('');
+    setDirection(next);
+  }
+
+  /**
+   * Fills this direction's draft from the other one's saved config, so a second
+   * persona is an edit of the first rather than a blank tab. Left unsaved on
+   * purpose: the point of copying is to then change the two or three fields that
+   * differ, and a save that happened by itself would be a surprise on a tab where
+   * every field changes what a ringing phone does.
+   */
+  async function copyFromOther() {
+    const other: CallDirection = direction === 'inbound' ? 'outbound' : 'inbound';
+    setError('');
+    setBusy(true);
+    try {
+      const { relay } = await fetchRelayConfig(sessionId, other);
+      setDraft(relay);
+      setStatus(`Copied from ${other === 'inbound' ? 'calls in' : 'calls out'} — not saved yet.`);
+    } catch (err: any) {
+      setError(err?.message ?? 'Could not read the other direction');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div>
+      <div style={panel}>
+        <Row style={{ justifyContent: 'flex-start', gap: 8 }}>
+          {(['inbound', 'outbound'] as const).map((d) => (
+            <button
+              key={d}
+              style={{
+                ...smallButton,
+                border: d === direction ? '1px solid #ef223a' : '1px solid #4d5777',
+                color: d === direction ? '#ef223a' : '#babecc',
+              }}
+              onClick={() => switchTo(d)}
+            >
+              {d === 'inbound' ? 'Calls in' : 'Calls out'}
+            </button>
+          ))}
+          {/* Most of a talk wants the two nearly identical — one prompt and one
+              greeting apart — so the split must not mean typing everything twice.
+              Copied into the draft, not saved: it is a starting point to edit. */}
+          <button
+            style={{ ...smallButton, marginLeft: 'auto' }}
+            onClick={copyFromOther}
+            disabled={busy}
+          >
+            {direction === 'inbound' ? 'Copy from calls out' : 'Copy from calls in'}
+          </button>
+        </Row>
+        <p style={{ ...caption, textTransform: 'none', letterSpacing: 0, marginTop: 8 }}>
+          {direction === 'inbound'
+            ? 'What an attendee hears when they ring this session’s number — the call-in slide, and the number’s own webhook.'
+            : outboundSet
+              ? 'What every call this app places uses: the test call above, the volunteer connect, and the voice finale.'
+              : 'Not set yet, so calls out still use the “calls in” settings shown here. Saving this tab makes them their own — until then, editing “calls in” changes both.'}
+        </p>
+      </div>
+
       {/* The test call sits first: it is the thing you reach for after every
           other edit on this tab. */}
       <div style={panel}>

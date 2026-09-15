@@ -6,14 +6,15 @@ import { sendToAllOnChannel } from '../services/messaging.js';
 import type { MessageChannel } from '../services/messaging.js';
 import { initiateAgentCall } from '../services/voice.js';
 import {
+  directionOf,
   enabledRelayTools,
-  resolveRelayConfig,
+  relayConfigFor,
   resolvedLanguages,
   responseFor,
   sayVoice,
   supportsAutoLanguageDetection,
 } from '@twilio-preso/shared';
-import type { Participant, RelayConfig, SessionRecord } from '@twilio-preso/shared';
+import type { CallDirection, Participant, RelayConfig, SessionRecord } from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
 import { requireTwilioSignature } from '../services/twilioSignature.js';
 import { requireLiveSession } from '../services/sessionContext.js';
@@ -29,6 +30,19 @@ const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
  */
 function twimlBase(): string {
   return config.publicBaseUrl.replace(/\/$/, '');
+}
+
+/**
+ * The webhook URL for a call **this app places**.
+ *
+ * `direction=outbound` is declared rather than left to Twilio's own `Direction`
+ * field: the backend knows exactly what it is placing, while a leg dialled out of
+ * a `<Dial>` reports a direction that describes the leg and not the moment in the
+ * talk. The webhook still infers it when nothing is declared, so a number
+ * configured by hand is unaffected.
+ */
+function outboundTwimlUrl(path: string, sessionId: string): string {
+  return `${twimlBase()}${path}?sessionId=${encodeURIComponent(sessionId)}&direction=outbound`;
 }
 
 /**
@@ -64,7 +78,12 @@ function relayUrl(): string | null {
  * is enabled and a number is known — an unconditional `<Dial>` would ring the
  * presenter at the end of every ordinary call.
  */
-export function relayTwiml(session: SessionRecord | null, config: RelayConfig, url: string): string {
+export function relayTwiml(
+  session: SessionRecord | null,
+  config: RelayConfig,
+  url: string,
+  direction: CallDirection = 'inbound'
+): string {
   /**
    * `multi` is Twilio's automatic language detection — Deepgram detects what the
    * caller speaks, ElevenLabs what the agent writes. It is only valid on that
@@ -137,9 +156,19 @@ export function relayTwiml(session: SessionRecord | null, config: RelayConfig, u
     })
     .join('');
 
-  const parameter = session
-    ? `\n      <Parameter name="sessionId" value="${escapeXml(session.id)}" />`
-    : '';
+  /**
+   * What the relay is told about this call, beyond the URL.
+   *
+   * The direction is declared here for the same reason it is declared in the
+   * webhook URL: the relay resolves the greeting, the instructions and the turn
+   * limit from one of two configs, and the setup message's own `direction`
+   * describes the leg Twilio dialled rather than the moment in the talk. It falls
+   * back to that field when this parameter is absent, so an older TwiML still
+   * resolves the way it always did.
+   */
+  const parameters =
+    (session ? `\n      <Parameter name="sessionId" value="${escapeXml(session.id)}" />` : '') +
+    `\n      <Parameter name="direction" value="${direction}" />`;
 
   const handoffTo = enabledRelayTools(config).some((t) => t.id === 'handoff_to_human')
     ? config.handoffNumber || session?.ownerPhone || ''
@@ -149,7 +178,7 @@ export function relayTwiml(session: SessionRecord | null, config: RelayConfig, u
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <ConversationRelay ${attrs.join(' ')}>${parameter}${languageChildren}
+    <ConversationRelay ${attrs.join(' ')}>${parameters}${languageChildren}
     </ConversationRelay>
   </Connect>${dial}
 </Response>`;
@@ -303,7 +332,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
             const call = await client.calls.create({
               to: participant.phone,
               from,
-              url: `${twimlBase()}/api/voice/conversation-relay?sessionId=${encodeURIComponent(session.id)}`,
+              url: outboundTwimlUrl('/api/voice/conversation-relay', session.id),
             });
             return { callSid: call.sid, mode: 'conversation-relay' };
           }
@@ -322,7 +351,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
           const called = await callEveryone(
             participants,
             from,
-            `${twimlBase()}/api/voice/demo-bot?sessionId=${encodeURIComponent(session.id)}`
+            outboundTwimlUrl('/api/voice/demo-bot', session.id)
           );
           return { called, total: participants.length, mode: 'static-twiml' };
         }
@@ -340,7 +369,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
               .status(409)
               .send({ error: 'CONVERSATION_RELAY_URL is not set — use voice-mass-outbound for the scripted bot' });
           }
-          const url = `${twimlBase()}/api/voice/conversation-relay?sessionId=${encodeURIComponent(session.id)}`;
+          const url = outboundTwimlUrl('/api/voice/conversation-relay', session.id);
           const called = await callEveryone(participants, from, url);
           return { called, total: participants.length, mode: 'conversation-relay' };
         }
@@ -365,7 +394,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
    * session's own voice settings decide every attribute, and the relay is told
    * which presentation it is on rather than inferring it from the number.
    */
-  app.post<{ Querystring: { sessionId?: string }; Body: VoiceWebhookBody }>(
+  app.post<{ Querystring: { sessionId?: string; direction?: string }; Body: VoiceWebhookBody }>(
     '/api/voice/conversation-relay',
     { preHandler: requireTwilioSignature },
     async (request, reply) => {
@@ -394,7 +423,17 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
   <Hangup/>
 </Response>`;
       }
-      return relayTwiml(session, resolveRelayConfig(session?.relay), url);
+      /**
+       * Which of the session's two voice configs answers this call.
+       *
+       * A number the audience rings gets the inbound config — that is what the
+       * claimed number's `voiceUrl` asks for — while every call this app places
+       * declares `outbound`. They are different moments in the talk: an inbound
+       * caller chose to ring and is having a conversation; an outbound finale has
+       * to announce itself to someone who did not.
+       */
+      const direction = directionOf(request.query.direction, request.body?.Direction);
+      return relayTwiml(session, relayConfigFor(session, direction), url, direction);
     }
   );
 
@@ -407,7 +446,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
    * — but any other number is real outbound traffic and stays behind `isLive`,
    * so this cannot become the one route that texts a room from a draft.
    */
-  app.post<{ Body: { sessionId?: string; to?: string } }>(
+  app.post<{ Body: { sessionId?: string; to?: string; direction?: string } }>(
     '/api/voice/test-call',
     { preHandler: [requirePresenter, requireLiveSession] },
     async (request, reply) => {
@@ -425,12 +464,21 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      /**
+       * The direction the presenter asked to hear, not the direction of the wire.
+       *
+       * This is technically an outbound call either way, but its purpose is to let
+       * someone hear the config they are editing — and hearing the outbound finale
+       * while editing the inbound tab is exactly the confusion the two tabs exist
+       * to remove. Defaults to outbound, which is what this call really is.
+       */
+      const direction = directionOf(request.body?.direction, 'outbound-api');
       const call = await client.calls.create({
         to,
         from: session.phoneNumber,
-        url: `${twimlBase()}/api/voice/conversation-relay?sessionId=${encodeURIComponent(session.id)}`,
+        url: `${twimlBase()}/api/voice/conversation-relay?sessionId=${encodeURIComponent(session.id)}&direction=${direction}`,
       });
-      return { callSid: call.sid, to, from: session.phoneNumber };
+      return { callSid: call.sid, to, from: session.phoneNumber, direction };
     }
   );
 
@@ -444,7 +492,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
    * session is optional because a number's inbound `voiceUrl` also lands here —
    * without one it falls back to the shipped default rather than failing a call.
    */
-  app.post<{ Querystring: { sessionId?: string }; Body: VoiceWebhookBody }>(
+  app.post<{ Querystring: { sessionId?: string; direction?: string }; Body: VoiceWebhookBody }>(
     '/api/voice/demo-bot',
     { preHandler: requireTwilioSignature },
     async (request, reply) => {
@@ -455,7 +503,11 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
         request.query.sessionId ??
         (await sessionIdForClaimedNumber(request.body).catch(() => null));
       const session = sessionId ? await getSessionById(sessionId) : null;
-      const voice = sayVoice(resolveRelayConfig(session?.relay));
+      // The scripted bot is the outbound finale's twin, so it speaks in whichever
+      // config that direction uses — the same reason it uses `sayVoice` at all.
+      const voice = sayVoice(
+        relayConfigFor(session, directionOf(request.query.direction, request.body?.Direction))
+      );
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="${voice}">Hey there! Every phone in this room just rang at the same time — and what you watched today was a startup being created live, on stage, in front of you. That is the power of Twilio. Whether you are reaching one customer or a thousand, Twilio scales with you. If you like, call me back and we can talk about your individual experiences. Thanks for being part of it today.</Say>

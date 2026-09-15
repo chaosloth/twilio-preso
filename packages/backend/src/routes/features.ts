@@ -14,6 +14,7 @@ import {
 } from '../services/sessions.js';
 import { getPresentationState } from '../services/sync.js';
 import { probeAmbientSound } from '../services/ambientSound.js';
+import type { AmbientSoundStatus } from '../services/ambientSound.js';
 import {
   DESIRED_TRAITS,
   ensureTraitGroups,
@@ -79,7 +80,15 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
         sessionId ? getPresentationState(sessionId).catch(() => null) : Promise.resolve(null),
         // Reads the account's own 12200 alerts, so an unreachable Monitor API
         // must leave the rest of the report readable like every probe above.
-        probeAmbientSound(sessionId).catch(() => null),
+        /**
+         * Both directions, because they are two configs now and the loop that
+         * gets rejected may be set on only one of them. Reported as whichever has
+         * something to say: a problem on either is a problem worth the row.
+         */
+        Promise.all([
+          probeAmbientSound(sessionId, 'inbound').catch(() => null),
+          probeAmbientSound(sessionId, 'outbound').catch(() => null),
+        ]).then(worseAmbient),
       ]);
 
       const claimed = new Map(pool.map((p) => [p.phoneNumber, p]));
@@ -311,6 +320,7 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
               : undefined,
           values: ambient?.url
             ? [
+                { label: 'Direction', value: ambient.direction },
                 { label: 'Loop', value: ambient.url },
                 { label: 'Gain', value: String(ambient.gain) },
                 { label: 'File', value: ambient.fileDetail },
@@ -541,9 +551,20 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
       if (!sessionId) return reply.status(400).send({ error: 'sessionId is required' });
       const session = await getSessionById(sessionId);
       if (!session) return reply.status(404).send({ error: 'session not found' });
-      // A partial is stored, so the rest of the session's voice settings are
-      // carried through field by field rather than reset to their defaults.
-      const updated = await setSessionRelay(sessionId, { ...(session.relay ?? {}), ambientSound: '' });
+      /**
+       * Both directions, since the noise is per account and a presenter pressing
+       * this wants the calls quiet — not the inbound ones quiet and the finale
+       * still raising warnings. A partial is stored, so the rest of each config's
+       * voice settings are carried through field by field rather than reset.
+       */
+      await setSessionRelay(sessionId, { ...(session.relay ?? {}), ambientSound: '' }, 'inbound');
+      const updated = session.relayOutbound
+        ? await setSessionRelay(
+            sessionId,
+            { ...session.relayOutbound, ambientSound: '' },
+            'outbound'
+          )
+        : await getSessionById(sessionId);
       return { cleared: true, ambientSound: updated?.relay?.ambientSound ?? '' };
     }
   );
@@ -559,4 +580,23 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(502).send({ error: err?.message ?? 'trait declaration failed' });
     }
   });
+}
+
+/**
+ * Which of the two directions' ambient settings the HUD should report.
+ *
+ * The one with an actual fault first, then the one with a loop set at all — a row
+ * saying "no file set" for outbound while inbound is being rejected is the one
+ * shape of this report that would mislead.
+ */
+function worseAmbient(
+  probes: Array<AmbientSoundStatus | null>
+): AmbientSoundStatus | null {
+  const present = probes.filter((p): p is AmbientSoundStatus => p !== null);
+  return (
+    present.find((p) => p.url && (p.rejections > 0 || p.fileOk !== true)) ??
+    present.find((p) => p.url) ??
+    present[0] ??
+    null
+  );
 }

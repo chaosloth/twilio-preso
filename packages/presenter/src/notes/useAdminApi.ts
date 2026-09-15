@@ -217,7 +217,9 @@ export function useAdminApi(sessionId: string) {
   const applyImport = useCallback(
     async (imported: ParsedDeckTransfer, deck: Deck) => {
       await commitDeck(deck);
-      if (imported.relay) await saveRelayConfig(sessionId, imported.relay);
+      if (imported.relay) await saveRelayConfig(sessionId, imported.relay, 'inbound');
+      if (imported.relayOutbound)
+        await saveRelayConfig(sessionId, imported.relayOutbound, 'outbound');
       if (imported.text) await saveTextConfig(sessionId, imported.text);
       const settings = imported.settings;
       if (settings?.verifyChannel) await setVerifyChannel(settings.verifyChannel);

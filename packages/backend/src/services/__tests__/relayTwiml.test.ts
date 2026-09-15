@@ -108,3 +108,21 @@ describe('claimedNumberOf', () => {
     expect(claimedNumberOf({})).toBeNull();
   });
 });
+
+/**
+ * Which of the session's two voice configs answered the call is declared to the
+ * relay, not left for it to infer: the relay picks the greeting, the instructions
+ * and the turn limit from one of them, and the setup message's own `direction`
+ * describes the leg Twilio dialled rather than the moment in the talk.
+ */
+describe('the direction the relay is told about', () => {
+  it('declares inbound by default — what a number pointed here by hand is doing', () => {
+    expect(twiml()).toContain('<Parameter name="direction" value="inbound" />');
+  });
+
+  it('declares outbound for a call this app placed', () => {
+    expect(
+      relayTwiml(null, resolveRelayConfig(), 'wss://relay.example.com', 'outbound')
+    ).toContain('<Parameter name="direction" value="outbound" />');
+  });
+});

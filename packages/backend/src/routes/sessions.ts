@@ -2,7 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import {
   COUNTRY_CODES,
   VERIFY_CHANNELS,
+  directionOf,
+  relayConfigFor,
   resolveRelayConfig,
+  storedRelayFor,
   resolveTextConfig,
   toPublicSession,
   validateDeck,
@@ -108,27 +111,45 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
    * edits real values rather than blanks, but stored as the partial that was
    * sent — see `setSessionRelay`.
    */
-  app.get<{ Params: { id: string } }>('/api/sessions/:id/relay', async (request, reply) => {
-    const session = await getSessionById(request.params.id);
-    if (!session) return reply.status(404).send({ error: 'Session not found' });
-    return { relay: resolveRelayConfig(session.relay), stored: session.relay ?? {} };
-  });
-
-  app.put<{ Params: { id: string }; Body: { relay: Partial<RelayConfig> } }>(
+  app.get<{ Params: { id: string }; Querystring: { direction?: string } }>(
     '/api/sessions/:id/relay',
     async (request, reply) => {
-      const relay = request.body?.relay;
-      if (!relay || typeof relay !== 'object') {
-        return reply.status(400).send({ error: 'relay object is required' });
-      }
-      // Resolved before storing, so an unknown key from a hand-edited payload is
-      // dropped at the boundary rather than sitting in the record waiting to be
-      // read by something less careful.
-      const session = await setSessionRelay(request.params.id, resolveRelayConfig(relay));
+      const session = await getSessionById(request.params.id);
       if (!session) return reply.status(404).send({ error: 'Session not found' });
-      return { session, relay: resolveRelayConfig(session.relay) };
+      /**
+       * `inbound` by default, which is what a presenter bundle that predates the
+       * split asks for — so an older HUD keeps editing the config the inbound
+       * number answers with rather than silently writing a second one.
+       */
+      const direction = directionOf(request.query.direction, undefined);
+      return {
+        direction,
+        relay: relayConfigFor(session, direction),
+        stored: storedRelayFor(session, direction) ?? {},
+        /** Whether the outbound tab has ever been saved. The HUD says
+         *  "inherited from inbound" rather than showing edits that aren't there. */
+        outboundSet: session.relayOutbound !== undefined,
+      };
     }
   );
+
+  app.put<{
+    Params: { id: string };
+    Querystring: { direction?: string };
+    Body: { relay: Partial<RelayConfig> };
+  }>('/api/sessions/:id/relay', async (request, reply) => {
+    const relay = request.body?.relay;
+    if (!relay || typeof relay !== 'object') {
+      return reply.status(400).send({ error: 'relay object is required' });
+    }
+    const direction = directionOf(request.query.direction, undefined);
+    // Resolved before storing, so an unknown key from a hand-edited payload is
+    // dropped at the boundary rather than sitting in the record waiting to be
+    // read by something less careful.
+    const session = await setSessionRelay(request.params.id, resolveRelayConfig(relay), direction);
+    if (!session) return reply.status(404).send({ error: 'Session not found' });
+    return { session, direction, relay: relayConfigFor(session, direction) };
+  });
 
   /**
    * Text-agent settings: the same shape of edit as the voice tab, for the agent

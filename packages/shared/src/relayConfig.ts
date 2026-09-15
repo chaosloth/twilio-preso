@@ -659,3 +659,48 @@ export function relayToolPrompt(config: RelayConfig): string {
   });
   return `\n\nYou have tools. To use one, include its exact token anywhere in your reply; the caller never hears the token itself:\n${lines.join('\n')}`;
 }
+
+/** Which of a session's two voice configs a call is answered with. */
+export type CallDirection = 'inbound' | 'outbound';
+
+/**
+ * The stored partial for one direction.
+ *
+ * Typed structurally rather than against `SessionRecord`, which imports this
+ * module — and deliberately falling back to `relay` for outbound, so a session
+ * whose presenter has never opened the outbound tab answers both directions the
+ * way it always has. That fallback is the whole migration: there is no backfill,
+ * and `relayOutbound` only starts mattering where someone made it differ.
+ */
+export function storedRelayFor(
+  session: { relay?: Partial<RelayConfig>; relayOutbound?: Partial<RelayConfig> } | null | undefined,
+  direction: CallDirection
+): Partial<RelayConfig> | undefined {
+  if (!session) return undefined;
+  return direction === 'outbound' ? session.relayOutbound ?? session.relay : session.relay;
+}
+
+/** The resolved config a call in this direction should be answered with. */
+export function relayConfigFor(
+  session: { relay?: Partial<RelayConfig>; relayOutbound?: Partial<RelayConfig> } | null | undefined,
+  direction: CallDirection
+): RelayConfig {
+  return resolveRelayConfig(storedRelayFor(session, direction));
+}
+
+/**
+ * Which config a Twilio voice webhook is asking for.
+ *
+ * `Direction` is `inbound` for a call that rang in and `outbound-api` /
+ * `outbound-dial` for one this app placed, so the prefix is the test. The
+ * explicit query parameter wins because the backend building the URL knows
+ * exactly what it is placing, and a `<Dial>`-originated leg can report a
+ * direction that describes the leg rather than the moment in the talk.
+ */
+export function directionOf(
+  declared: string | undefined,
+  webhookDirection: string | undefined
+): CallDirection {
+  if (declared === 'inbound' || declared === 'outbound') return declared;
+  return webhookDirection?.startsWith('outbound') ? 'outbound' : 'inbound';
+}

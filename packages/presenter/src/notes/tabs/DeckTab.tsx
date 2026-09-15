@@ -100,6 +100,9 @@ export function DeckTab({ api, stageIndex, onGoTo }: DeckTabProps) {
     // states what this session actually does rather than only its overrides.
     const file = exportDeck({ ...session!.deck, stages: draft }, session!.title, {
       relay: session!.relay ?? {},
+      // Only when it exists: a session that inherits outbound from inbound must
+      // export as inheriting, not as two configs that will then drift apart.
+      ...(session!.relayOutbound ? { relayOutbound: session!.relayOutbound } : {}),
       text: session!.text ?? {},
       settings: {
         verifyChannel: session!.verifyChannel,

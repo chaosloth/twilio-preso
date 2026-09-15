@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import Twilio from 'twilio';
 import { DEFAULT_DECK, allocateJoinCode, isValidJoinCode, normalizeJoinCode } from '@twilio-preso/shared';
-import type { RelayConfig, TextAgentConfig } from '@twilio-preso/shared';
+import type { CallDirection, RelayConfig, TextAgentConfig } from '@twilio-preso/shared';
 import type {
   Deck,
   PhonePoolClaim,
@@ -428,17 +428,23 @@ export async function setSessionText(
 }
 
 /**
- * Voice-agent settings. Stored as the partial the presenter edited rather than a
- * resolved config, so a field added later still arrives as its new default
- * instead of frozen at whatever shipped the day the session was created.
+ * Voice-agent settings for one direction. Stored as the partial the presenter
+ * edited rather than a resolved config, so a field added later still arrives as
+ * its new default instead of frozen at whatever shipped the day the session was
+ * created.
+ *
+ * The two directions are separate fields for the same reason the text agent is:
+ * they are edited in separate tabs, and a save of one must not carry a stale
+ * copy of the other with it.
  */
 export async function setSessionRelay(
   sessionId: string,
-  relay: Partial<RelayConfig>
+  relay: Partial<RelayConfig>,
+  direction: CallDirection = 'inbound'
 ): Promise<SessionRecord | null> {
   const session = await getSessionById(sessionId);
   if (!session) return null;
-  return updateSession(session, { relay });
+  return updateSession(session, direction === 'outbound' ? { relayOutbound: relay } : { relay });
 }
 
 /**
