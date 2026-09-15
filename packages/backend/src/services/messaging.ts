@@ -1,5 +1,6 @@
 import Twilio from 'twilio';
 import { config } from '../config.js';
+import { fanOut, summarizeFailures } from './fanOut.js';
 import { renderTemplate } from '@twilio-preso/shared';
 import type { Participant } from '@twilio-preso/shared';
 import { contentSidFor, contentVariablesJson } from './content.js';
@@ -44,6 +45,9 @@ export interface ChannelResult {
   whatsapp: number;
   sms: number;
   failed: number;
+  /** Twilio error code -> how many recipients hit it. Present on the mass sends,
+   *  where "12 failed" is not enough to tell a throttle from a bad number. */
+  errors?: Record<string, number>;
 }
 
 /** Twilio's error for a business-initiated free-form WhatsApp message sent
@@ -154,25 +158,29 @@ export async function sendTextOnChannel(
   }
 }
 
-/** The same body to everyone, on the requested channel, with per-recipient
- *  fallback: one attendee outside the WhatsApp window must not drop the room to
- *  SMS, and one hard failure must not stop the rest. */
+/**
+ * The same body to everyone, on the requested channel, with per-recipient
+ * fallback: one attendee outside the WhatsApp window must not drop the room to
+ * SMS, and one hard failure must not stop the rest.
+ *
+ * Bounded by `fanOut` for the same reason the mass call is: a room-sized burst of
+ * simultaneous sends is throttled per account, and each recipient here can cost
+ * *two* requests when WhatsApp falls back to SMS. The retry covers the 429s;
+ * `errors` names whatever is left.
+ */
 export async function sendToAllOnChannel(
   channel: MessageChannel,
   smsFrom: string,
   participants: Participant[],
   messageFn: (p: Participant) => OutboundMessage
 ): Promise<ChannelResult> {
-  const results = await Promise.allSettled(
-    participants.map((p) => sendOnChannel(channel, smsFrom, p.phone, messageFn(p)))
+  const { results, failures } = await fanOut(participants, (p) =>
+    sendOnChannel(channel, smsFrom, p.phone, messageFn(p))
   );
 
-  const tally: ChannelResult = { whatsapp: 0, sms: 0, failed: 0 };
-  for (const result of results) {
-    if (result.status === 'rejected') tally.failed++;
-    else tally[result.value]++;
-  }
-  return tally;
+  const tally: ChannelResult = { whatsapp: 0, sms: 0, failed: failures.length };
+  for (const channelUsed of results) tally[channelUsed]++;
+  return { ...tally, errors: summarizeFailures(failures) };
 }
 
 export async function sendWelcomeSms(from: string, participant: Participant): Promise<void> {

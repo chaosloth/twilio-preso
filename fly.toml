@@ -9,13 +9,31 @@ primary_region = "syd"
   PORT = "3001"
   NODE_ENV = "production"
 
+[deploy]
+  strategy = "rolling"
+
 [http_service]
   internal_port = 3001
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0
+  # Never zero.
+  #
+  # This is what answers `/api/voice/*` — every ringing phone fetches its TwiML
+  # from here — and what serves the text agent. A cold start on the first call of
+  # a finale is a failed call, not a slow one, and scaling up after the burst has
+  # begun is too late. Two machines also mean a rolling deploy always leaves one
+  # serving.
+  min_machines_running = 2
+
+  # A TwiML webhook is a few milliseconds; a text-agent prompt holds an LLM stream
+  # open for seconds. Capping requests per machine well below the default is what
+  # stops the second kind queueing behind a burst of the first.
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 100
+    hard_limit = 150
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  size = "shared-cpu-2x"
+  memory = "1gb"

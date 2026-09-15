@@ -5,6 +5,7 @@ import { getAllParticipants, getParticipant, isSessionLive } from '../services/s
 import { sendToAllOnChannel } from '../services/messaging.js';
 import type { MessageChannel } from '../services/messaging.js';
 import { initiateAgentCall } from '../services/voice.js';
+import { fanOut, summarizeFailures } from '../services/fanOut.js';
 import {
   directionOf,
   enabledRelayTools,
@@ -46,20 +47,31 @@ function outboundTwimlUrl(path: string, sessionId: string): string {
 }
 
 /**
- * Rings every phone in the room with the same TwiML. `allSettled`, because one
- * unreachable handset must not cost the rest of the room the finale.
+ * Rings every phone in the room with the same TwiML.
+ *
+ * Bounded rather than all at once: one unreachable handset must not cost the rest
+ * of the room the finale, and neither must the rate limit a three-hundred-call
+ * burst walks straight into. `fanOut` retries the 429s and reports what actually
+ * failed, so a throttled finale says so instead of returning a smaller number.
+ *
+ * The real ceiling is not here. Outbound calls-per-second is enforced per
+ * *sending number* by the carrier, so a big room dialled from one pool number is
+ * paced by that no matter how many workers this runs — which is why the result
+ * reports failures by code, where that pacing shows up.
  */
 async function callEveryone(
   participants: Participant[],
   from: string,
   url: string
-): Promise<number> {
-  const calls = await Promise.allSettled(
-    participants.map((p) =>
-      client.calls.create({ to: p.phone, from, machineDetection: 'Enable', url })
-    )
+): Promise<{ called: number; failed: number; errors: Record<string, number> }> {
+  const { results, failures } = await fanOut(participants, (p) =>
+    client.calls.create({ to: p.phone, from, machineDetection: 'Enable', url })
   );
-  return calls.filter((c) => c.status === 'fulfilled').length;
+  return {
+    called: results.length,
+    failed: failures.length,
+    errors: summarizeFailures(failures),
+  };
 }
 
 /** The relay's WebSocket URL, or null when the voice agent is not deployed. */
@@ -348,12 +360,12 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
          * either or both, so neither may change under the other.
          */
         case 'voice-mass-outbound': {
-          const called = await callEveryone(
+          const outcome = await callEveryone(
             participants,
             from,
             outboundTwimlUrl('/api/voice/demo-bot', session.id)
           );
-          return { called, total: participants.length, mode: 'static-twiml' };
+          return { ...outcome, total: participants.length, mode: 'static-twiml' };
         }
 
         /**
@@ -370,8 +382,8 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
               .send({ error: 'CONVERSATION_RELAY_URL is not set — use voice-mass-outbound for the scripted bot' });
           }
           const url = outboundTwimlUrl('/api/voice/conversation-relay', session.id);
-          const called = await callEveryone(participants, from, url);
-          return { called, total: participants.length, mode: 'conversation-relay' };
+          const outcome = await callEveryone(participants, from, url);
+          return { ...outcome, total: participants.length, mode: 'conversation-relay' };
         }
 
         case 'sms-closing': {

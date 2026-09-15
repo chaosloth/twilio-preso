@@ -1,11 +1,21 @@
 app = "twilio-horizon-preso-relay"
 primary_region = "syd"
 
+# A relay session is a WebSocket held open for the length of a call, and Twilio
+# does not reconnect one it loses — a machine that goes away takes every call on
+# it to silence. So: drain slowly, and never replace more than one machine at a
+# time.
+kill_timeout = 300
+
 [build]
   dockerfile = "packages/conversation-relay/Dockerfile"
 
 [env]
   CONVERSATION_RELAY_PORT = "3003"
+
+[deploy]
+  strategy = "rolling"
+  max_unavailable = 1
 
 # Twilio holds one WebSocket open for the length of a call, so the machine must
 # not be stopped between calls — a cold start is dead air on a ringing phone.
@@ -14,8 +24,32 @@ primary_region = "syd"
   force_https = true
   auto_stop_machines = false
   auto_start_machines = true
-  min_machines_running = 1
+  # Enough machines to hold the room before the first phone rings. Booting one
+  # mid-finale is dead air, so this covers the peak rather than tracking it.
+  min_machines_running = 4
 
+  # Balanced on **connections**, not requests.
+  #
+  # A call is one long-lived request, so under the default request-count balancing
+  # a WebSocket looks like a single request that never ends — and Fly's proxy will
+  # happily stack an entire room onto one machine while the others sit idle. These
+  # limits are what spread the calls: soft is where the proxy starts preferring
+  # another machine, hard is where it stops sending here at all.
+  #
+  # These numbers are an estimate for a 2-vCPU machine, not a measurement: each
+  # call holds a TLS connection, an LLM stream and its own history, and the real
+  # per-call footprint has not been measured yet. Drive `src/simulate.ts` at the
+  # deployed app with a room's worth of connections and set them from what that
+  # reports — an over-generous soft limit is a machine that saturates while its
+  # neighbours idle.
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 50
+    hard_limit = 75
+
+# Dedicated CPU, not shared: a call's cost here is TLS plus parsing an SSE stream
+# token by token, which is CPU, and hundreds of them on a shared vCPU is latency
+# on every reply at once.
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  size = "performance-2x"
+  memory = "2gb"

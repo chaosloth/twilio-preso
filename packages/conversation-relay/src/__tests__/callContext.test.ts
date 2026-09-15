@@ -186,3 +186,47 @@ describe('which direction the config is read for', () => {
     expect(deps.fetchSessionConfig).toHaveBeenCalledWith('s1', 'outbound');
   });
 });
+
+/**
+ * `Recall` is a semantic search — the slowest read at setup and the one a finale
+ * multiplies by the size of the room. It earns that on the twelve turns an
+ * inbound caller gets; the outbound three are covered by the profile's own
+ * observations, which are fetched either way.
+ */
+describe('recall at scale', () => {
+  it('does not search memory on a call it placed', async () => {
+    const deps = loaders({
+      lookupProfileByPhone: vi.fn(async () => 'pr_1'),
+      fetchProfileContext: vi.fn(async () => ({ traits: {}, observations: ['said a thing'] })),
+    });
+
+    const call = await loadCallContext(
+      { from: '+61400000999', to: '+61400000001', direction: 'outbound-api' },
+      deps
+    );
+
+    expect(deps.recallForProfile).not.toHaveBeenCalled();
+    // The durable context is still read — that is where the name comes from.
+    expect(deps.fetchProfileContext).toHaveBeenCalledWith('pr_1');
+    expect(call.caller.recall).toBeNull();
+  });
+
+  it('still searches memory for a caller who rang in', async () => {
+    const deps = loaders({
+      lookupProfileByPhone: vi.fn(async () => 'pr_1'),
+      recallForProfile: vi.fn(async () => 'wants to build a loyalty app'),
+    });
+
+    const call = await loadCallContext(inboundCall, deps);
+
+    expect(deps.recallForProfile).toHaveBeenCalledTimes(1);
+    expect(call.caller.recall).toBe('wants to build a loyalty app');
+  });
+
+  it('asks nothing of memory when there is no profile, in either direction', async () => {
+    const deps = loaders({ lookupProfileByPhone: vi.fn(async () => null) });
+    await loadCallContext(inboundCall, deps);
+    expect(deps.fetchProfileContext).not.toHaveBeenCalled();
+    expect(deps.recallForProfile).not.toHaveBeenCalled();
+  });
+});

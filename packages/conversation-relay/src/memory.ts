@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { TtlCache } from './cache.js';
 
 /**
  * Conversation Memory recall for the voice agent.
@@ -11,6 +12,45 @@ import { config } from './config.js';
  * Returns `null` whenever memory is unconfigured, the profile is unknown, or the
  * request fails — the agent then falls back to this session's Sync responses.
  */
+
+/**
+ * How long a caller's durable context is reused.
+ *
+ * Minutes rather than seconds, because a Customer Profile is the slow-moving
+ * half of what the agent knows: traits and past observations are what the person
+ * said at previous events, not what the room answered ten seconds ago. Long
+ * enough that a redialled attendee — and the four memory round trips their setup
+ * would otherwise repeat — costs nothing the second time.
+ */
+const PROFILE_TTL_MS = 5 * 60_000;
+
+const profiles = new TtlCache<ProfileContext | null>(PROFILE_TTL_MS);
+const profileIds = new TtlCache<string | null>(PROFILE_TTL_MS);
+
+/** For a test, or a caller whose profile was just written. */
+export function forgetProfiles(): void {
+  profiles.clear();
+  profileIds.clear();
+}
+
+/**
+ * Retain only a real answer.
+ *
+ * Both reads below report *every* failure as `null` — an unconfigured store, an
+ * unknown caller and a request that simply failed are one value. Caching that
+ * would freeze a transient outage in for five minutes, so a `null` is dropped as
+ * soon as it arrives: an unknown caller costs one repeated lookup on their next
+ * call, which is cheap and can never be wrong.
+ */
+async function cachePresent<T>(
+  cache: TtlCache<T | null>,
+  key: string,
+  read: () => Promise<T | null>
+): Promise<T | null> {
+  const value = await cache.get(key, read);
+  if (value === null) cache.invalidate(key);
+  return value;
+}
 
 function storeId(): string | undefined {
   return process.env.TWILIO_MEMORY_STORE_ID;
@@ -59,7 +99,10 @@ export async function fetchProfileContext(
   profileId: string | undefined
 ): Promise<ProfileContext | null> {
   if (!profileId) return null;
+  return cachePresent(profiles, profileId, () => readProfileContext(profileId));
+}
 
+async function readProfileContext(profileId: string): Promise<ProfileContext | null> {
   const [profile, observations] = await Promise.all([
     memoryGet<{ traits?: Record<string, Record<string, string>> }>(`/Profiles/${profileId}`),
     memoryGet<{ observations?: Array<{ content?: string }> }>(
@@ -86,6 +129,10 @@ export async function fetchProfileContext(
  */
 export async function lookupProfileByPhone(phone: string | null): Promise<string | null> {
   if (!storeId() || !phone) return null;
+  return cachePresent(profileIds, phone, () => readProfileId(phone));
+}
+
+async function readProfileId(phone: string): Promise<string | null> {
   try {
     const res = await fetch(
       `https://memory.twilio.com/v1/Stores/${storeId()}/Profiles/Lookup`,

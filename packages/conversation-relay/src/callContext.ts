@@ -8,6 +8,7 @@ import type {
   SessionRecord,
 } from '@twilio-preso/shared';
 import type { CallSession, SetupEvent } from './session.js';
+import { memoizeByRef } from './cache.js';
 
 /**
  * Everything the agent needs before it can say a word, and the reads that
@@ -38,8 +39,19 @@ export interface LoadedCall {
   caller: CallerContext;
 }
 
-/** What the finale asks memory about. Fixed, because the call has not started. */
+/** What the agent asks memory about. Fixed, because the call has not started. */
 const RECALL_QUERY = 'customer experience challenges and what they want to build';
+
+/**
+ * The room's answers, folded once per underlying read rather than once per call.
+ *
+ * `tallyRoom` walks every participant's every response, which is real CPU on a
+ * shared vCPU when three hundred phones ring at once — and all three hundred are
+ * handed the *same* cached array by `listParticipants`, so keying on the array's
+ * identity computes the tally once and cannot fall out of step with the list it
+ * describes. A test passing a fresh array each time simply gets a fresh tally.
+ */
+const roomTally = memoizeByRef(tallyRoom);
 
 /**
  * Assemble the caller's context, in as few round trips as the dependencies allow.
@@ -89,7 +101,7 @@ export async function loadCallContext(
   // What the room answered as a whole, from the same list the caller is found
   // in: the aggregate is what the presentation built from, and a majority can
   // differ from the person on the line.
-  const room = tallyRoom(participants);
+  const room = roomTally(participants);
   const participant = call?.participantPhone
     ? findByPhone(participants, call.participantPhone)
     : null;
@@ -113,6 +125,22 @@ export async function loadCallContext(
     ? participant?.memoryProfileId ?? (await warn(loaders.lookupProfileByPhone(callerPhone)))
     : null;
 
+  /**
+   * `Recall` is asked only of a call that rang **in**.
+   *
+   * It is a semantic search, so it is the slowest read here and the one that
+   * scales worst: a finale rings the whole room at once, and each of those calls
+   * would put its own search on the store inside the same second or two. What it
+   * buys is something *older* than the recent observations — worth a round trip
+   * across the twelve turns an inbound caller has, and not worth it across the
+   * three the finale gets, where the profile's own observations (fetched below,
+   * newest first, and readable the moment they are written) already carry what
+   * the attendee said today.
+   *
+   * To put it back on outbound calls, drop the `inbound &&`.
+   */
+  const wantsRecall = inbound && !!profileId;
+
   // Independently, not as one rejecting `Promise.all`: `Recall` is a semantic
   // index that can fail or lag while the traits are already written, and a dead
   // search must not take the caller's name down with it. With no profile there
@@ -121,7 +149,7 @@ export async function loadCallContext(
   const [profile, recall] = profileId
     ? await Promise.all([
         warn(loaders.fetchProfileContext(profileId)),
-        warn(loaders.recallForProfile(profileId, RECALL_QUERY)),
+        wantsRecall ? warn(loaders.recallForProfile(profileId, RECALL_QUERY)) : Promise.resolve(null),
       ])
     : [null, null];
 
