@@ -158,17 +158,72 @@ export async function claimPhoneNumber(sessionId: string): Promise<string> {
  * Best-effort: a number the account cannot reconfigure (or a relay that isn't
  * running) must not stop a session being created. Outbound still works.
  */
-async function pointNumberAtVoiceAgent(phoneNumber: string, sessionId: string): Promise<void> {
+export async function pointNumberAtVoiceAgent(phoneNumber: string, sessionId: string): Promise<void> {
   try {
     const [number] = await client.incomingPhoneNumbers.list({ phoneNumber, limit: 1 });
     if (!number) return;
-    const voiceUrl = process.env.CONVERSATION_RELAY_URL
-      ? `${config.publicBaseUrl}/api/voice/conversation-relay?sessionId=${encodeURIComponent(sessionId)}`
-      : `${config.publicBaseUrl}/api/voice/demo-bot`;
-    await client.incomingPhoneNumbers(number.sid).update({ voiceUrl, voiceMethod: 'POST' });
+    await client
+      .incomingPhoneNumbers(number.sid)
+      .update({ voiceUrl: expectedVoiceUrl(sessionId), voiceMethod: 'POST' });
   } catch (err) {
     console.warn(`Could not point ${phoneNumber} at the voice agent:`, err);
   }
+}
+
+/**
+ * The inbound `voiceUrl` this session's number should carry.
+ *
+ * The session id is in the query string rather than inferred, because inferring
+ * it costs a Sync read on every ringing phone and because a declared session is
+ * the one thing a hand-configured number cannot get wrong.
+ */
+export function expectedVoiceUrl(sessionId: string): string {
+  return process.env.CONVERSATION_RELAY_URL
+    ? `${config.publicBaseUrl}/api/voice/conversation-relay?sessionId=${encodeURIComponent(sessionId)}`
+    : `${config.publicBaseUrl}/api/voice/demo-bot?sessionId=${encodeURIComponent(sessionId)}`;
+}
+
+export interface NumberWebhook {
+  phoneNumber: string;
+  /** What the number answers with right now. `null` when Twilio has no record
+   *  of it in this account — a pool entry that was released or moved. */
+  registered: string | null;
+  expected: string;
+  /** Whether an inbound call reaches this session's own voice settings without
+   *  the backend having to infer the session from the number. */
+  matches: boolean;
+  /** Whether it reaches this backend at all. A number pointed at a TwiML Bin or
+   *  another environment never runs this code, which is the failure that reads
+   *  as "the deploy did not take". */
+  reachesThisBackend: boolean;
+}
+
+/**
+ * What a session's claimed number actually answers with.
+ *
+ * `pointNumberAtVoiceAgent` writes this once, at claim time, and nothing rewrites
+ * it afterwards — so a number configured by hand, by an older build, or against
+ * another environment keeps answering that way through every redeploy. Nothing
+ * about that fails loudly: the call connects, the caller is greeted by name, and
+ * only the voice and the TwiML attributes are the shipped defaults.
+ */
+export async function describeNumberWebhook(
+  phoneNumber: string,
+  sessionId: string
+): Promise<NumberWebhook> {
+  const expected = expectedVoiceUrl(sessionId);
+  const [number] = await client.incomingPhoneNumbers.list({ phoneNumber, limit: 1 });
+  const registered = number?.voiceUrl || null;
+  return {
+    phoneNumber,
+    registered,
+    expected,
+    matches: registered === expected,
+    // Compared on origin and path, not the whole URL: a number pointed at this
+    // backend without the query string still reaches the code that can infer the
+    // session, which is a different (and survivable) state from a TwiML Bin.
+    reachesThisBackend: !!registered && registered.split('?')[0] === expected.split('?')[0],
+  };
 }
 
 export async function releasePhoneNumber(phoneNumber: string): Promise<void> {

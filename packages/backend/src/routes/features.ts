@@ -4,7 +4,12 @@ import { llmConfigFromEnv } from '@twilio-preso/llm';
 import type { FeatureReport, FeatureStatus, PhonePoolEntry } from '@twilio-preso/shared';
 import { config } from '../config.js';
 import { requirePresenter } from '../services/auth.js';
-import { describePoolUsage } from '../services/sessions.js';
+import {
+  describeNumberWebhook,
+  describePoolUsage,
+  phoneNumberForSession,
+  pointNumberAtVoiceAgent,
+} from '../services/sessions.js';
 import { getPresentationState } from '../services/sync.js';
 import {
   DESIRED_TRAITS,
@@ -92,6 +97,16 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
 
       const thisSessionNumber = phonePool.find((p) => p.isThisSession)?.phoneNumber;
       const relayUrl = process.env.CONVERSATION_RELAY_URL || '';
+      /**
+       * What this session's number actually answers an inbound call with. Read
+       * here rather than beside the other probes because it needs the claim to
+       * have been resolved first, and best-effort like all of them: an
+       * unreachable numbers API must leave the rest of the report readable.
+       */
+      const numberWebhook =
+        sessionId && thisSessionNumber
+          ? await describeNumberWebhook(thisSessionNumber, sessionId).catch(() => null)
+          : null;
       const signatureBypassed = isSignatureBypassed();
 
       let llm: FeatureStatus;
@@ -187,6 +202,61 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
             // is a number an attendee can actually ring — worth reading out.
             ...(thisSessionNumber ? [{ label: 'Call in on', value: thisSessionNumber }] : []),
           ],
+        },
+        {
+          /**
+           * Whether a *call in* reaches this session's own voice settings.
+           *
+           * The number's inbound webhook is written once, when the session claims
+           * it, and nothing rewrites it afterwards — so a number configured by
+           * hand, by an older build, or against another environment keeps
+           * answering that way through every redeploy. It fails as almost
+           * nothing: the call connects and the caller is greeted by name, because
+           * the relay infers the session from the number either way. Only the
+           * voice, the language and the ambient sound are the shipped defaults —
+           * which on stage reads as "the deploy did not take".
+           */
+          id: 'voice-webhook',
+          label: 'Call-in number webhook',
+          state: !sessionId || !thisSessionNumber
+            ? 'off'
+            : !numberWebhook
+              ? 'warn'
+              : numberWebhook.matches
+                ? 'ok'
+                : numberWebhook.reachesThisBackend
+                  ? 'warn'
+                  : 'error',
+          detail: !sessionId
+            ? 'No session selected.'
+            : !thisSessionNumber
+              ? 'No pool number is claimed for this session yet, so there is nothing to call in on.'
+              : !numberWebhook
+                ? 'Could not read the number’s configuration, so what an inbound call does is unknown.'
+                : numberWebhook.matches
+                  ? 'Calling in is answered with this session’s own voice, language and prompt.'
+                  : numberWebhook.reachesThisBackend
+                    ? 'The number reaches this backend but names no session, so the session is inferred from the number. It works — one extra lookup on a ringing phone — and pointing it at this session removes the guess.'
+                    : 'The number answers somewhere else entirely — a TwiML Bin, or another environment — so calling in never runs this presentation at all. Its voice and prompt will be whatever that other place says.',
+          // A single `incomingPhoneNumbers.update`, idempotent, and scoped to the
+          // one number this session already holds — but still a button, because
+          // it writes account configuration that outlives the event.
+          action:
+            sessionId && thisSessionNumber && numberWebhook && !numberWebhook.matches
+              ? {
+                  label: 'Point this number at this session',
+                  path: `/api/voice/number-webhook?sessionId=${encodeURIComponent(sessionId)}`,
+                }
+              : undefined,
+          values: numberWebhook
+            ? [
+                { label: 'Number', value: numberWebhook.phoneNumber },
+                { label: 'Answers with', value: numberWebhook.registered ?? 'nothing configured' },
+                { label: 'Should be', value: numberWebhook.expected },
+              ]
+            : thisSessionNumber
+              ? [{ label: 'Number', value: thisSessionNumber }]
+              : undefined,
         },
         {
           id: 'memory',
@@ -356,6 +426,39 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(502).send({ error: err?.message ?? 'template creation failed' });
     }
   });
+
+  /**
+   * Re-points this session's claimed number at this session's voice agent.
+   *
+   * The same write session creation does, on demand — because that write happens
+   * once and a number can drift out from under it afterwards, and the drift is
+   * invisible until an inbound call is answered in the wrong voice. Idempotent,
+   * and it only ever touches the number this session already holds: the session
+   * id comes from the query rather than the body because the HUD's action button
+   * POSTs a bare path.
+   */
+  app.post<{ Querystring: { sessionId?: string } }>(
+    '/api/voice/number-webhook',
+    { preHandler: requirePresenter },
+    async (request, reply) => {
+      const sessionId = request.query.sessionId;
+      if (!sessionId) return reply.status(400).send({ error: 'sessionId is required' });
+      const phoneNumber = await phoneNumberForSession(sessionId);
+      if (!phoneNumber) {
+        return reply.status(409).send({ error: 'This session holds no pool number to point.' });
+      }
+      try {
+        await pointNumberAtVoiceAgent(phoneNumber, sessionId);
+        // Read it back rather than reporting the write: the write is best-effort
+        // by design (a number this account cannot reconfigure must not fail a
+        // session), so "done" is not the same thing as "pointed".
+        return await describeNumberWebhook(phoneNumber, sessionId);
+      } catch (err: any) {
+        request.log.error({ err }, 'failed to point number at the voice agent');
+        return reply.status(502).send({ error: err?.message ?? 'could not update the number' });
+      }
+    }
+  );
 
   app.post('/api/memory/traits', { preHandler: requirePresenter }, async (request, reply) => {
     if (!config.twilio.memoryStoreId) {

@@ -18,7 +18,7 @@ import { requirePresenter } from '../services/auth.js';
 import { requireTwilioSignature } from '../services/twilioSignature.js';
 import { requireLiveSession } from '../services/sessionContext.js';
 import { recall } from '../services/memory.js';
-import { getSessionById } from '../services/sessions.js';
+import { getSessionById, sessionIdForPhoneNumber } from '../services/sessions.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -161,6 +161,33 @@ function escapeXml(value: string): string {
   return value.replace(/[<>&"']/g, (c) =>
     ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c]!
   );
+}
+
+/** The fields of a Twilio voice webhook this app reads. */
+interface VoiceWebhookBody {
+  To?: string;
+  From?: string;
+  Direction?: string;
+}
+
+/**
+ * Which end of the call is the session's own pool number.
+ *
+ * Outbound, Twilio dials *from* the pool number and the attendee is `To`;
+ * inbound, the attendee rang in, so it is the other way round. Getting it
+ * backwards looks up the attendee's number in the claims map, finds nothing, and
+ * silently serves the default config — the same mistake the relay's own session
+ * resolution documents.
+ */
+export function claimedNumberOf(body: VoiceWebhookBody): string | null {
+  const outbound = body.Direction?.startsWith('outbound') ?? false;
+  return (outbound ? body.From : body.To) ?? null;
+}
+
+/** The session holding that number, if the claim is still live. */
+async function sessionIdForClaimedNumber(body: VoiceWebhookBody): Promise<string | null> {
+  const number = claimedNumberOf(body);
+  return number ? await sessionIdForPhoneNumber(number) : null;
 }
 
 interface TriggerBody {
@@ -338,14 +365,26 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
    * session's own voice settings decide every attribute, and the relay is told
    * which presentation it is on rather than inferring it from the number.
    */
-  app.post<{ Querystring: { sessionId?: string } }>(
+  app.post<{ Querystring: { sessionId?: string }; Body: VoiceWebhookBody }>(
     '/api/voice/conversation-relay',
     { preHandler: requireTwilioSignature },
     async (request, reply) => {
       const url = relayUrl();
-      const session = request.query.sessionId
-        ? await getSessionById(request.query.sessionId)
-        : null;
+      /**
+       * The declared session, or the one that claimed the number this call is on.
+       *
+       * The query string is written into a number's inbound `voiceUrl` when the
+       * session claims it, but that is a single write at claim time: a number
+       * configured by hand, or by a build that predates it, arrives here with no
+       * session at all — and then every attribute below is a *default*, so the
+       * call is answered in the shipped voice rather than this presentation's.
+       * That fails as nothing: the relay still greets the caller by name, because
+       * it infers the session from the same claim. So the TwiML infers it too.
+       */
+      const sessionId =
+        request.query.sessionId ??
+        (await sessionIdForClaimedNumber(request.body).catch(() => null));
+      const session = sessionId ? await getSessionById(sessionId) : null;
       reply.header('Content-Type', 'text/xml');
       if (!url) {
         // A call is already ringing, so say something rather than dropping it.
@@ -405,13 +444,17 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
    * session is optional because a number's inbound `voiceUrl` also lands here —
    * without one it falls back to the shipped default rather than failing a call.
    */
-  app.post<{ Querystring: { sessionId?: string } }>(
+  app.post<{ Querystring: { sessionId?: string }; Body: VoiceWebhookBody }>(
     '/api/voice/demo-bot',
     { preHandler: requireTwilioSignature },
     async (request, reply) => {
-      const session = request.query.sessionId
-        ? await getSessionById(request.query.sessionId)
-        : null;
+      // Inferred from the claimed number when it is not declared, for the same
+      // reason the relay route does it: a number pointed here by hand carries no
+      // session, and the voice is the one thing that must not fall back.
+      const sessionId =
+        request.query.sessionId ??
+        (await sessionIdForClaimedNumber(request.body).catch(() => null));
+      const session = sessionId ? await getSessionById(sessionId) : null;
       const voice = sayVoice(resolveRelayConfig(session?.relay));
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>

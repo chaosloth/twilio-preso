@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveRelayConfig } from '@twilio-preso/shared';
-import { relayTwiml } from '../../routes/trigger.js';
+import { claimedNumberOf, relayTwiml } from '../../routes/trigger.js';
 
 const twiml = (overrides = {}) =>
   relayTwiml(null, resolveRelayConfig(overrides), 'wss://relay.example.com');
@@ -77,5 +77,34 @@ describe('Deepgram Flux TTS', () => {
     const out = twiml({ ttsProvider: 'Deepgram', voice: 'flux-kai-en', textNormalization: 'on' });
     expect(out).not.toContain('elevenlabsTextNormalization');
     expect(out).toContain('language="en-AU"');
+  });
+});
+
+/**
+ * Which end of a call carries the session's own number.
+ *
+ * This is what lets the TwiML route recover a session a hand-configured number
+ * never declared — and getting it backwards is silent: the attendee's number is
+ * looked up in the claims map, finds nothing, and the call is answered in the
+ * shipped default voice instead of the presentation's.
+ */
+describe('claimedNumberOf', () => {
+  it('takes the caller-facing number from an inbound call', () => {
+    expect(
+      claimedNumberOf({ Direction: 'inbound', From: '+61400000000', To: '+6560349453' })
+    ).toBe('+6560349453');
+  });
+
+  it('takes the dialling number from an outbound one', () => {
+    expect(
+      claimedNumberOf({ Direction: 'outbound-api', From: '+6560349453', To: '+61400000000' })
+    ).toBe('+6560349453');
+  });
+
+  /** Twilio omits `Direction` on nothing this app receives, but a webhook body is
+   *  outside data: an absent direction must resolve to *a* number, not throw. */
+  it('assumes inbound when the direction is missing', () => {
+    expect(claimedNumberOf({ From: '+61400000000', To: '+6560349453' })).toBe('+6560349453');
+    expect(claimedNumberOf({})).toBeNull();
   });
 });

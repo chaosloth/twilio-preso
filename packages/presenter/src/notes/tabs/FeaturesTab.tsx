@@ -182,6 +182,14 @@ function describeActionResult(body: any): string {
       .map((t: any) => `${t.key} (${t.status})`)
       .join(', ')}.`;
   }
+  // The number webhook answers with what the number reads back as, not with
+  // whether the write returned 200: pointing a number is best-effort on Twilio's
+  // side, so the only useful answer is what it now answers calls with.
+  if (typeof body?.matches === 'boolean' && typeof body?.expected === 'string') {
+    return body.matches
+      ? `${body.phoneNumber} now answers with this session.`
+      : `Still answering with ${body.registered ?? 'nothing'} — the account may not allow this number to be reconfigured.`;
+  }
   if (Array.isArray(body?.created) && body.created.length > 0) {
     return `Declared ${body.created.join(', ')}.`;
   }
