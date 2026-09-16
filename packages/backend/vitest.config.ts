@@ -17,6 +17,7 @@ export default defineConfig({
       TWILIO_VERIFY_SERVICE_SID: 'VAtest',
       TWILIO_MESSAGING_SERVICE_SID: 'MGtest',
       TWILIO_PHONE_NUMBER: '+61400000000',
+      TWILIO_WHATSAPP_FROM: '+6560349453',
       TWILIO_MEMORY_STORE_ID: 'MStest',
       TWILIO_CONVERSATION_ORCHESTRATION_CONFIG_ID: 'GXtest',
       PUBLIC_BASE_URL: 'https://backend.test',

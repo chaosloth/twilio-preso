@@ -37,13 +37,17 @@ export interface CallSession {
 export async function resolveSession(event: SetupEvent): Promise<CallSession | null> {
   const outbound = event.direction?.startsWith('outbound') ?? false;
   const sessionPhone = outbound ? event.from : event.to;
-  const participantPhone = (outbound ? event.to : event.from) ?? null;
+  // Bare, for the same reason: the participants map and the memory store's
+  // `phone` identifier are both E.164, so a WhatsApp caller left prefixed is a
+  // caller nobody in the room matches.
+  const other = outbound ? event.to : event.from;
+  const participantPhone = other ? bareNumber(other) : null;
 
   const declared = event.customParameters?.sessionId;
   if (declared) return { sessionId: declared, participantPhone };
 
   if (!sessionPhone) return null;
-  const sessionId = await sessionIdForPhoneNumber(sessionPhone);
+  const sessionId = await sessionIdForPhoneNumber(bareNumber(sessionPhone));
   return sessionId ? { sessionId, participantPhone } : null;
 }
 
@@ -55,4 +59,15 @@ async function sessionIdForPhoneNumber(phoneNumber: string): Promise<string | nu
   } catch {
     return null;
   }
+}
+
+/**
+ * A WhatsApp leg names its endpoint `whatsapp:+E164`, and `phone-pool-claims` is
+ * keyed by the bare number — so without this the inferred path misses on every
+ * WhatsApp call and the caller is answered with no session at all. Declared
+ * sessions never reach here; this is only the fallback, and it is the only
+ * fallback WhatsApp has.
+ */
+function bareNumber(endpoint: string): string {
+  return endpoint.startsWith('whatsapp:') ? endpoint.slice('whatsapp:'.length) : endpoint;
 }

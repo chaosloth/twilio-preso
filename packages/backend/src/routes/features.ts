@@ -14,6 +14,10 @@ import {
 } from '../services/sessions.js';
 import { getPresentationState } from '../services/sync.js';
 import { probeAmbientSound } from '../services/ambientSound.js';
+import {
+  describeWhatsAppVoiceWebhook,
+  pointWhatsAppAtVoiceAgent,
+} from '../services/whatsappVoice.js';
 import type { AmbientSoundStatus } from '../services/ambientSound.js';
 import {
   DESIRED_TRAITS,
@@ -121,6 +125,15 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
       const numberWebhook =
         sessionId && thisSessionNumber
           ? await describeNumberWebhook(thisSessionNumber, sessionId).catch(() => null)
+          : null;
+      /**
+       * And what an inbound *WhatsApp* call is answered with, which is a
+       * different question with a different answer: it is routed by the sender's
+       * voice application, not by any number's webhook, so the two can disagree.
+       */
+      const whatsappWebhook =
+        sessionId && config.twilio.whatsappFrom
+          ? await describeWhatsAppVoiceWebhook(sessionId).catch(() => null)
           : null;
       const signatureBypassed = isSignatureBypassed();
 
@@ -271,6 +284,83 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
               ]
             : thisSessionNumber
               ? [{ label: 'Number', value: thisSessionNumber }]
+              : undefined,
+        },
+        {
+          /**
+           * The same question for a call that arrives over **WhatsApp**, which
+           * is routed by something else entirely.
+           *
+           * There is no `voiceUrl` on a WhatsApp sender. Inbound WhatsApp audio
+           * follows the sender's `voice_application_sid` — a TwiML Application —
+           * and that application's own Voice Request URL is what answers the
+           * call. So this can be wrong while the phone number beside it is
+           * right, and it is not the same fix.
+           *
+           * It also fails harder. A claimed number that reaches this backend
+           * without `?sessionId=` still works, because the relay infers the
+           * session from the number that was called; over WhatsApp the setup's
+           * `to` is `whatsapp:+E164` and the claims map is keyed by bare E.164,
+           * so there is nothing to infer from and the caller gets the shipped
+           * default voice. Hence `warn` here where the number's row says the
+           * same state is survivable.
+           */
+          id: 'whatsapp-webhook',
+          label: 'WhatsApp call-in webhook',
+          state: !sessionId || !config.twilio.whatsappFrom
+            ? 'off'
+            : !whatsappWebhook
+              ? 'warn'
+              : !whatsappWebhook.senderSid || !whatsappWebhook.applicationSid
+                ? 'error'
+                : whatsappWebhook.matches
+                  ? 'ok'
+                  : 'error',
+          detail: !sessionId
+            ? 'No session selected.'
+            : !config.twilio.whatsappFrom
+              ? 'TWILIO_WHATSAPP_FROM unset — there is no WhatsApp sender to call in on.'
+              : !whatsappWebhook
+                ? 'Could not read the WhatsApp sender, so what a WhatsApp call does is unknown.'
+                : !whatsappWebhook.senderSid
+                  ? 'This account has no such WhatsApp sender, so a call to it never arrives.'
+                  : !whatsappWebhook.applicationSid
+                    ? 'The sender names no voice application, which means WhatsApp calling is not activated on it — a WhatsApp call is rejected rather than answered.'
+                    : whatsappWebhook.matches
+                      ? 'A WhatsApp call is answered with this session’s own voice, language and prompt.'
+                      : whatsappWebhook.reachesThisBackend
+                        ? 'The voice application reaches this backend but names no session. Unlike the phone number, that cannot be recovered: a WhatsApp call arrives as whatsapp:+E164 and the pool claims are keyed by the bare number, so no session is inferred and the caller hears the shipped default voice.'
+                        : 'The voice application answers somewhere else — another environment, or a dev tunnel — so a WhatsApp call never runs this presentation at all.',
+          /**
+           * Writes the *application's* URL rather than the sender's sid, because
+           * re-writing the sid would deactivate and reactivate WhatsApp calling
+           * to change a URL. The application is account-wide: every WhatsApp
+           * sender routed through it follows this session too.
+           */
+          action:
+            sessionId && whatsappWebhook?.applicationSid && !whatsappWebhook.matches
+              ? {
+                  label: 'Point WhatsApp calling at this session',
+                  path: `/api/voice/whatsapp-webhook?sessionId=${encodeURIComponent(sessionId)}`,
+                }
+              : undefined,
+          values: whatsappWebhook
+            ? [
+                { label: 'Sender', value: whatsappWebhook.sender },
+                {
+                  label: 'Voice application',
+                  value: whatsappWebhook.applicationSid
+                    ? `${whatsappWebhook.applicationSid}${whatsappWebhook.applicationName ? ` (${whatsappWebhook.applicationName})` : ''}`
+                    : 'none — WhatsApp calling not activated',
+                },
+                {
+                  label: 'Answers with',
+                  value: whatsappWebhook.registered ?? 'nothing configured',
+                },
+                { label: 'Should be', value: whatsappWebhook.expected },
+              ]
+            : config.twilio.whatsappFrom
+              ? [{ label: 'Sender', value: config.twilio.whatsappFrom }]
               : undefined,
         },
         {
@@ -531,6 +621,29 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
       } catch (err: any) {
         request.log.error({ err }, 'failed to point number at the voice agent');
         return reply.status(502).send({ error: err?.message ?? 'could not update the number' });
+      }
+    }
+  );
+
+  /**
+   * The same, for WhatsApp calling — a different resource, so a different route.
+   *
+   * It updates the TwiML application the sender already names, which is where
+   * the URL lives. Read back rather than reported, for the same reason: what
+   * matters is what the next check says, not that a write returned 200.
+   */
+  app.post<{ Querystring: { sessionId?: string } }>(
+    '/api/voice/whatsapp-webhook',
+    { preHandler: requirePresenter },
+    async (request, reply) => {
+      const sessionId = request.query.sessionId;
+      if (!sessionId) return reply.status(400).send({ error: 'sessionId is required' });
+      try {
+        await pointWhatsAppAtVoiceAgent(sessionId);
+        return await describeWhatsAppVoiceWebhook(sessionId);
+      } catch (err: any) {
+        request.log.error({ err }, 'failed to point WhatsApp calling at the voice agent');
+        return reply.status(502).send({ error: err?.message ?? 'could not update WhatsApp calling' });
       }
     }
   );
