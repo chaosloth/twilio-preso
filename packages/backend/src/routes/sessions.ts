@@ -51,7 +51,21 @@ export async function publicSessionRoutes(app: FastifyInstance): Promise<void> {
    */
   const guesses = joinCodeGuessLimit({ max: 30, windowMs: 60_000 });
   app.get<{ Params: { code: string } }>('/api/session/:code', async (request, reply) => {
-    const session = await getSessionByCode(request.params.code);
+    let session;
+    try {
+      session = await getSessionByCode(request.params.code);
+    } catch (err) {
+      /**
+       * Sync could not answer — throttled by a room's burst, or briefly down.
+       * Neither a wrong code nor a guess, so it is not counted as a miss, and
+       * the phone is told to retry rather than told its code is wrong.
+       */
+      request.log.warn({ err }, 'join-code lookup failed');
+      return reply
+        .status(503)
+        .header('retry-after', '2')
+        .send({ error: 'Busy joining everyone — trying again…' });
+    }
     /**
      * A code that exists is answered even from an address that has used up its
      * misses. On a venue's Wi-Fi that address is the whole room, so blocking it

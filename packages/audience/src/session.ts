@@ -69,7 +69,19 @@ export async function resolveJoinCode(code: string): Promise<ResolveResult> {
   if (!joinCode) return { ok: false, error: 'Enter the code from the screen' };
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/session/${encodeURIComponent(joinCode)}`);
+    let res = await fetch(`${BACKEND_URL}/api/session/${encodeURIComponent(joinCode)}`);
+    /**
+     * 503 is the backend saying Sync is busy — a room joining at once — not that
+     * the code is wrong. Retried here with backoff and jitter, so a room that
+     * collided does not collide again in lockstep, before anything is shown.
+     */
+    for (let attempt = 0; res.status === 503 && attempt < 4; attempt++) {
+      await new Promise((r) => setTimeout(r, 500 * 2 ** attempt + Math.random() * 500));
+      res = await fetch(`${BACKEND_URL}/api/session/${encodeURIComponent(joinCode)}`);
+    }
+    if (res.status === 503) {
+      return { ok: false, error: 'Lots of people joining — tap to try again' };
+    }
     if (res.status === 429) {
       return { ok: false, error: 'Too many tries — wait a moment and try again' };
     }

@@ -15,6 +15,7 @@ import type {
 import { config } from '../config.js';
 import { initSessionSync, teardownSessionSync } from './sync.js';
 import { isAlreadyExists, isNotFound } from './syncErrors.js';
+import { TtlCache } from './ttlCache.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 const syncService = client.sync.v1.services(config.twilio.syncServiceSid);
@@ -275,24 +276,61 @@ export async function sessionIdForPhoneNumber(phoneNumber: string): Promise<stri
 // Sessions
 // ---------------------------------------------------------------------------
 
-export async function listSessions(): Promise<SessionRecord[]> {
-  const items = await syncService.syncMaps(SESSIONS_MAP).syncMapItems.list({ limit: 200 });
-  return (items.map((item) => item.data as SessionRecord)).sort(
-    (a, b) => b.createdAt - a.createdAt
-  );
+/**
+ * The `sessions` map, cached for a few seconds and **single-flight**.
+ *
+ * A room scanning the QR at once is hundreds of reads of one Sync map inside a
+ * second, and every session-scoped route (`requireLiveSession`, verify, token)
+ * resolves its session by listing it — so each attendee's join is several full
+ * listings. Sync throttles that per object: the production load test after the
+ * rate-limit fix got `Rate limit exceeded for read-map-sessions` on a third of
+ * 300 lookups. Single-flight is what collapses the burst — the phones arriving
+ * together share one read — and the short TTL covers the ones just behind.
+ *
+ * Short because another backend machine may write the record: five seconds is
+ * the longest a presenter's change made elsewhere can be invisible here. Every
+ * write made in *this* process clears it at once (`invalidateSessions`).
+ * A failed read is never cached, and it **throws** — see `getSessionByCode`.
+ */
+const SESSIONS_TTL_MS = 5_000;
+const sessionsCache = new TtlCache<SessionRecord[]>(SESSIONS_TTL_MS);
+const codeCache = new TtlCache<SessionRecord | null>(SESSIONS_TTL_MS);
+
+function invalidateSessions(): void {
+  sessionsCache.clear();
+  codeCache.clear();
 }
 
-/** The join path. `code` may be whatever the audience typed. */
+export async function listSessions(): Promise<SessionRecord[]> {
+  const sessions = await sessionsCache.get('all', async () => {
+    const items = await syncService.syncMaps(SESSIONS_MAP).syncMapItems.list({ limit: 200 });
+    return items.map((item) => item.data as SessionRecord).sort((a, b) => b.createdAt - a.createdAt);
+  });
+  // A copy: callers sort and filter, and the cached array is shared.
+  return [...sessions];
+}
+
+/**
+ * The join path. `code` may be whatever the audience typed.
+ *
+ * Only a *missing* item is `null`. Any other failure — Sync throttling a room's
+ * burst above all — used to be `null` too, which told an attendee holding the
+ * right code "That code doesn't look right" and counted the lookup as a guess
+ * against the venue's address. It throws now, and the route answers 503.
+ */
 export async function getSessionByCode(code: string): Promise<SessionRecord | null> {
   const joinCode = normalizeJoinCode(code);
   // Skip the round-trip on input that could never be a key.
   if (!isValidJoinCode(joinCode)) return null;
-  try {
-    const item = await syncService.syncMaps(SESSIONS_MAP).syncMapItems(joinCode).fetch();
-    return item.data as SessionRecord;
-  } catch {
-    return null;
-  }
+  return codeCache.get(joinCode, async () => {
+    try {
+      const item = await syncService.syncMaps(SESSIONS_MAP).syncMapItems(joinCode).fetch();
+      return item.data as SessionRecord;
+    } catch (err) {
+      if (isNotFound(err)) return null;
+      throw err;
+    }
+  });
 }
 
 /** Keyed by join code, so an id lookup is a scan. Only used by presenter-side
@@ -337,6 +375,7 @@ export async function createSession(input: CreateSessionInput): Promise<SessionR
     };
 
     await syncService.syncMaps(SESSIONS_MAP).syncMapItems.create({ key: joinCode, data: session });
+    invalidateSessions();
     return session;
   } catch (e) {
     await teardownSessionSync(id).catch(() => {});
@@ -354,6 +393,7 @@ async function updateSession(
     .syncMaps(SESSIONS_MAP)
     .syncMapItems(session.joinCode)
     .update({ data: updated });
+  invalidateSessions();
   return updated;
 }
 
