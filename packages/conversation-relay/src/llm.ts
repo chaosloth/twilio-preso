@@ -112,3 +112,39 @@ export async function generateGreeting(
 function staticGreeting(ctx: CallerContext, config: RelayConfig): string {
   return config.staticGreeting.replace(/\{\{name\}\}/g, ctx.name || 'there');
 }
+
+/**
+ * A few sentences for whoever a handoff reaches, so they do not open with "how
+ * can I help?" to someone who has just explained it to the agent.
+ *
+ * Written while the agent's "transferring you" line is still being spoken, so it
+ * costs the caller nothing — and bounded, because a transfer that waits on a
+ * slow model is a caller left in silence. No summary is a worse handoff, not a
+ * failed one: the call still transfers.
+ */
+export async function summarizeCall(
+  ctx: CallerContext,
+  config: RelayConfig,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+  timeoutMs = 4000
+): Promise<string> {
+  const transcript = conversationHistory
+    .map((m) => `${m.role === 'user' ? 'Caller' : 'Agent'}: ${m.content}`)
+    .join('\n');
+  if (!transcript) return '';
+  const who = ctx.name ? `The caller is ${ctx.name}.` : 'The caller is not identified.';
+  const request = llmFor(config.model)
+    .complete({
+      system:
+        'You write handoff notes for a human agent who is about to take over a phone call from an AI agent. In at most three short sentences of plain text, say who the caller is, what they want, and anything already promised or resolved. No preamble, no bullet points.',
+      maxTokens: 120,
+      messages: [{ role: 'user' as const, content: `${who}\n\n${transcript}` }],
+    })
+    .then((text) => text?.trim() ?? '')
+    .catch((err) => {
+      console.warn('Handoff summary failed — transferring without one:', err);
+      return '';
+    });
+  const timeout = new Promise<string>((resolve) => setTimeout(() => resolve(''), timeoutMs));
+  return Promise.race([request, timeout]);
+}

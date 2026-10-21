@@ -1,5 +1,7 @@
 import { GOOGLE_STT_UNSUPPORTED, withLanguageDefaults } from './languages.js';
 import type { LanguageVoice } from './languages.js';
+import { APPLICATION_SID, HANDOFF_MODES } from './handoff.js';
+import type { HandoffMode } from './handoff.js';
 /**
  * How the voice agent behaves, per presentation.
  *
@@ -265,8 +267,18 @@ export interface RelayConfig {
    *  presentation. */
   maxTurnsInbound: number;
   maxTurnsOutbound: number;
-  /** Where `handoff_to_human` dials. Empty falls back to the session owner. */
+  /**
+   * How `handoff_to_human` reaches a person — see `HandoffMode`. Each mode reads
+   * only its own target below; the others are kept, so flipping the dropdown
+   * back does not lose what was typed.
+   */
+  handoffMode: HandoffMode;
+  /** `phone` mode: where to `<Dial>`. Empty falls back to the session owner. */
   handoffNumber: string;
+  /** `twiml-url` mode: an http(s) endpoint serving TwiML, `<Redirect>`ed to. */
+  handoffTwimlUrl: string;
+  /** `application` mode: the TwiML App (`AP…`) to `<Dial><Application>`. */
+  handoffApplicationSid: string;
   /** Voice-agent model override. Empty uses the process's VOICE_LLM_MODEL/LLM_MODEL. */
   model: string;
   tools: RelayTool[];
@@ -362,7 +374,10 @@ Keep every reply SHORT — one or two sentences, because this is a phone call an
     "What the room chose is what we actually built — the majority decides, not any one person. Say what was built from those answers, in the caller's own terms, and if their pick lost, acknowledge it warmly rather than glossing over it.",
   maxTurnsInbound: 12,
   maxTurnsOutbound: 3,
+  handoffMode: 'phone',
   handoffNumber: '',
+  handoffTwimlUrl: '',
+  handoffApplicationSid: '',
   model: '',
   tools: RELAY_TOOLS,
 };
@@ -463,7 +478,13 @@ export function resolveRelayConfig(stored?: Partial<RelayConfig> | null): RelayC
     outcomeInstruction: str('outcomeInstruction'),
     maxTurnsInbound: turns('maxTurnsInbound'),
     maxTurnsOutbound: turns('maxTurnsOutbound'),
-    handoffNumber: str('handoffNumber'),
+    handoffMode: oneOf('handoffMode', HANDOFF_MODES, DEFAULT_RELAY_CONFIG.handoffMode),
+    handoffNumber: str('handoffNumber').trim(),
+    // Validated here rather than at dial time: a URL or sid that cannot work
+    // resolves to empty, and an empty target falls back to dialling a number
+    // instead of a transfer that fails with the caller on the line.
+    handoffTwimlUrl: httpUrl(source.handoffTwimlUrl),
+    handoffApplicationSid: applicationSid(source.handoffApplicationSid),
     model: str('model'),
     tools: mergeTools(source.tools),
   };
@@ -529,6 +550,11 @@ function gain(value: unknown): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return DEFAULT_RELAY_CONFIG.ambientSoundGain;
   return Math.min(1, Math.max(0.1, Math.round(n * 100) / 100));
+}
+
+function applicationSid(value: unknown): string {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return APPLICATION_SID.test(trimmed) ? trimmed : '';
 }
 
 function text(value: unknown): string | undefined {

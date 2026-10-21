@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveRelayConfig } from '@twilio-preso/shared';
-import { claimedNumberOf, relayTwiml } from '../../routes/trigger.js';
+import { claimedNumberOf, handoffTwiml, relayTwiml } from '../../routes/trigger.js';
 
 const twiml = (overrides = {}) =>
   relayTwiml(null, resolveRelayConfig(overrides), 'wss://relay.example.com');
@@ -124,5 +124,98 @@ describe('the direction the relay is told about', () => {
     expect(
       relayTwiml(null, resolveRelayConfig(), 'wss://relay.example.com', 'outbound')
     ).toContain('<Parameter name="direction" value="outbound" />');
+  });
+});
+
+const ACTION = 'https://backend.example.com/api/voice/handoff?direction=inbound';
+const APP_SID = 'AP' + '0123456789abcdef'.repeat(2);
+const withHandoff = (overrides = {}) =>
+  resolveRelayConfig({
+    tools: [{ id: 'handoff_to_human', enabled: true, whenToUse: 'asked' }],
+    ...overrides,
+  });
+
+/**
+ * The handoff is decided *after* the relay ends, through `<Connect action>`,
+ * because the summary and profile it carries only exist at the end of the call.
+ */
+describe('the handoff action', () => {
+  it('is only attached when the handoff tool is enabled', () => {
+    expect(twiml()).toContain('<Connect>');
+    expect(relayTwiml(null, resolveRelayConfig(), 'wss://r', 'inbound', ACTION)).toContain('<Connect>');
+    expect(relayTwiml(null, withHandoff(), 'wss://r', 'inbound', ACTION)).toContain(
+      `<Connect action="${ACTION.replace(/&/g, '&amp;')}">`
+    );
+  });
+
+  it('no longer emits a verb after </Connect> that rings on every hang-up', () => {
+    expect(relayTwiml(null, withHandoff(), 'wss://r', 'inbound', ACTION)).not.toContain('<Dial>');
+  });
+});
+
+describe('handoffTwiml', () => {
+  const call = { accountSid: 'AC123', ownerPhone: '+61400000001' };
+  const data = {
+    reason: 'handoff_to_human',
+    summary: 'Wants pricing & a demo.',
+    profileId: 'mem_profile_1',
+    callerPhone: '+61400000002',
+  };
+
+  it('hangs up on any reason other than a handoff', () => {
+    expect(handoffTwiml(withHandoff(), { reason: 'end_call' }, call)).toContain('<Hangup/>');
+    expect(handoffTwiml(withHandoff(), null, call)).toContain('<Hangup/>');
+  });
+
+  it('dials the configured number, falling back to the session owner', () => {
+    expect(handoffTwiml(withHandoff({ handoffNumber: '+15550001' }), data, call)).toContain(
+      '<Dial>+15550001</Dial>'
+    );
+    expect(handoffTwiml(withHandoff(), data, call)).toContain('<Dial>+61400000001</Dial>');
+  });
+
+  it('redirects to a TwiML URL with the context in the query string', () => {
+    const out = handoffTwiml(
+      withHandoff({ handoffMode: 'twiml-url', handoffTwimlUrl: 'https://handler.example.com/twiml?x=1' }),
+      data,
+      call
+    );
+    const url = new URL(out.match(/<Redirect method="POST">([^<]+)<\/Redirect>/)![1].replace(/&amp;/g, '&'));
+    expect(url.searchParams.get('x')).toBe('1');
+    expect(url.searchParams.get('OriginatingAccountSid')).toBe('AC123');
+    expect(url.searchParams.get('MemoryProfileId')).toBe('mem_profile_1');
+    expect(url.searchParams.get('CallSummary')).toBe('Wants pricing & a demo.');
+  });
+
+  it('dials a TwiML Application with the account, profile and summary as parameters', () => {
+    const out = handoffTwiml(
+      withHandoff({ handoffMode: 'application', handoffApplicationSid: APP_SID }),
+      data,
+      call
+    );
+    expect(out).toContain(`<ApplicationSid>${APP_SID}</ApplicationSid>`);
+    expect(out).toContain('<Parameter name="OriginatingAccountSid" value="AC123" />');
+    expect(out).toContain('<Parameter name="MemoryProfileId" value="mem_profile_1" />');
+    expect(out).toContain('<Parameter name="CallSummary" value="Wants pricing &amp; a demo." />');
+  });
+
+  it('omits a parameter that is not known rather than sending it empty', () => {
+    const out = handoffTwiml(
+      withHandoff({ handoffMode: 'application', handoffApplicationSid: APP_SID }),
+      { reason: 'handoff_to_human' },
+      call
+    );
+    expect(out).not.toContain('MemoryProfileId');
+    expect(out).not.toContain('CallSummary');
+  });
+
+  /** The agent has already said "transferring you" — silence is a dropped call. */
+  it('falls back to dialling when the selected mode has no valid target', () => {
+    expect(
+      handoffTwiml(withHandoff({ handoffMode: 'application', handoffApplicationSid: 'nope' }), data, call)
+    ).toContain('<Dial>+61400000001</Dial>');
+    expect(
+      handoffTwiml(withHandoff({ handoffMode: 'twiml-url', handoffTwimlUrl: 'ftp://x' }), data, call)
+    ).toContain('<Dial>+61400000001</Dial>');
   });
 });

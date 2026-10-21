@@ -36,6 +36,9 @@ export interface LoadedCall {
   config: RelayConfig;
   session: SessionRecord | null;
   callerPhone: string | null;
+  /** The caller's Conversation Memory profile, when one was found — carried to
+   *  whoever a handoff reaches. */
+  profileId: string | null;
   caller: CallerContext;
 }
 
@@ -156,7 +159,7 @@ export async function loadCallContext(
   const caller = buildCallerContext(participant, profile, inbound, room);
   caller.recall = recall;
 
-  return { sessionId, config, session, callerPhone, caller };
+  return { sessionId, config, session, callerPhone, profileId: profileId ?? null, caller };
 }
 
 /** Less context on a working call beats a rejected setup. */

@@ -1,3 +1,5 @@
+import { HANDOFF_SUMMARY_MAX } from '@twilio-preso/shared';
+import type { HandoffData } from '@twilio-preso/shared';
 /**
  * The ConversationRelay wire protocol, as message builders.
  *
@@ -35,8 +37,14 @@ export function textMessage(
  * attribute on `text`, and adding one is how the agent went silent in
  * production — the farewell was discarded and the call was never ended.
  */
-export function endMessage(reason: string): EndMessage {
-  return { type: 'end', handoffData: JSON.stringify({ reason }) };
+export function endMessage(reason: string, extra: Omit<HandoffData, 'reason'> = {}): EndMessage {
+  const data: HandoffData = { reason };
+  // Only what is known: an absent profile is omitted, not sent as null, so the
+  // receiving application can tell "unknown" from a value.
+  if (extra.summary) data.summary = extra.summary.slice(0, HANDOFF_SUMMARY_MAX);
+  if (extra.profileId) data.profileId = extra.profileId;
+  if (extra.callerPhone) data.callerPhone = extra.callerPhone;
+  return { type: 'end', handoffData: JSON.stringify(data) };
 }
 
 export interface LanguageMessage {

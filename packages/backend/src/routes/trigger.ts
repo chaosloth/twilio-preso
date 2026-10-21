@@ -9,13 +9,20 @@ import { fanOut, summarizeFailures } from '../services/fanOut.js';
 import {
   directionOf,
   enabledRelayTools,
+  parseHandoffData,
   relayConfigFor,
   resolvedLanguages,
   responseFor,
   sayVoice,
   supportsAutoLanguageDetection,
 } from '@twilio-preso/shared';
-import type { CallDirection, Participant, RelayConfig, SessionRecord } from '@twilio-preso/shared';
+import type {
+  CallDirection,
+  HandoffData,
+  Participant,
+  RelayConfig,
+  SessionRecord,
+} from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
 import { requireTwilioSignature } from '../services/twilioSignature.js';
 import { requireLiveSession } from '../services/sessionContext.js';
@@ -84,17 +91,21 @@ function relayUrl(): string | null {
  * voice settings rather than from env vars — voice, language, ASR and the
  * handoff are per-presentation, edited in the HUD.
  *
- * The `<Dial>` after `</Connect>` is how the `handoff_to_human` tool actually
- * reaches a person: ending the relay session hands control back to TwiML, so the
- * verb after the `<Connect>` is what runs next. It is emitted only when the tool
- * is enabled and a number is known — an unconditional `<Dial>` would ring the
- * presenter at the end of every ordinary call.
+ * `handoff_to_human` reaches a person through `<Connect action>`: ending the
+ * relay session hands control back to Twilio, which posts the relay's
+ * `handoffData` to that URL and runs whatever TwiML it answers — a `<Dial>`, a
+ * `<Redirect>` or a `<Dial><Application>`, decided by `handoffTwiml`. A fixed
+ * verb after `</Connect>` could not do that: it is written before the call
+ * starts, and the summary and the profile it should carry only exist at the end.
+ * The action is emitted only when the tool is enabled, and the route hangs up on
+ * any reason other than a handoff, so an ordinary goodbye never rings anyone.
  */
 export function relayTwiml(
   session: SessionRecord | null,
   config: RelayConfig,
   url: string,
-  direction: CallDirection = 'inbound'
+  direction: CallDirection = 'inbound',
+  handoffActionUrl?: string
 ): string {
   /**
    * `multi` is Twilio's automatic language detection — Deepgram detects what the
@@ -182,18 +193,89 @@ export function relayTwiml(
     (session ? `\n      <Parameter name="sessionId" value="${escapeXml(session.id)}" />` : '') +
     `\n      <Parameter name="direction" value="${direction}" />`;
 
-  const handoffTo = enabledRelayTools(config).some((t) => t.id === 'handoff_to_human')
-    ? config.handoffNumber || session?.ownerPhone || ''
-    : '';
-  const dial = handoffTo ? `\n  <Dial>${escapeXml(handoffTo)}</Dial>` : '';
+  const handoff =
+    handoffActionUrl && enabledRelayTools(config).some((t) => t.id === 'handoff_to_human');
+  const connect = handoff ? `<Connect action="${escapeXml(handoffActionUrl)}">` : '<Connect>';
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Connect>
+  ${connect}
     <ConversationRelay ${attrs.join(' ')}>${parameters}${languageChildren}
     </ConversationRelay>
-  </Connect>${dial}
+  </Connect>
 </Response>`;
+}
+
+/** What the handoff needs to know about the call, beyond the relay's own data. */
+export interface HandoffCall {
+  /** The account the call is on — Twilio's `AccountSid` on the action request. */
+  accountSid: string;
+  /** The session owner, which `phone` mode falls back to when no number is set. */
+  ownerPhone?: string;
+}
+
+/**
+ * The TwiML that runs once the relay session has ended — the other half of
+ * `<Connect action>`.
+ *
+ * Only a `handoff_to_human` reason transfers. Every other way a session ends —
+ * the agent's goodbye, the caller hanging up, a relay error — hangs up, which is
+ * what a call with no verb after `</Connect>` did before the action existed.
+ *
+ * A mode whose target is not set falls back to dialling a number rather than
+ * failing: the agent has already said "I'm transferring you", and a caller who
+ * then hears nothing has been dropped, whichever mode was meant.
+ */
+export function handoffTwiml(
+  config: RelayConfig,
+  data: HandoffData | null,
+  call: HandoffCall
+): string {
+  const wrap = (body: string) => `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  ${body}
+</Response>`;
+  if (data?.reason !== 'handoff_to_human') return wrap('<Hangup/>');
+
+  /**
+   * The context a receiving application reads, under one set of names whichever
+   * mode carries it. The originating account is stated because an
+   * `<Application>` may live in another account, where the call's own
+   * `AccountSid` is the receiver's.
+   */
+  const context: Array<[string, string | undefined]> = [
+    ['OriginatingAccountSid', call.accountSid],
+    ['MemoryProfileId', data.profileId],
+    ['CallSummary', data.summary],
+    ['CallerPhone', data.callerPhone],
+  ];
+  const present = context.filter((entry): entry is [string, string] => !!entry[1]);
+
+  if (config.handoffMode === 'application' && config.handoffApplicationSid) {
+    const params = present
+      .map(([name, value]) => `\n      <Parameter name="${name}" value="${escapeXml(value)}" />`)
+      .join('');
+    return wrap(`<Dial>
+    <Application>
+      <ApplicationSid>${escapeXml(config.handoffApplicationSid)}</ApplicationSid>${params}
+    </Application>
+  </Dial>`);
+  }
+
+  if (config.handoffMode === 'twiml-url' && config.handoffTwimlUrl) {
+    // `<Redirect>` posts only the standard call parameters, so the context rides
+    // in the query string — where a TwiML Bin can also read it as `{{CallSummary}}`.
+    const url = new URL(config.handoffTwimlUrl);
+    for (const [name, value] of present) url.searchParams.set(name, value);
+    return wrap(`<Redirect method="POST">${escapeXml(url.toString())}</Redirect>`);
+  }
+
+  const number = config.handoffNumber || call.ownerPhone;
+  if (!number) {
+    return wrap(`<Say>Sorry, there is nobody available to take your call right now. Goodbye.</Say>
+  <Hangup/>`);
+  }
+  return wrap(`<Dial>${escapeXml(number)}</Dial>`);
 }
 
 /** TwiML is built as a string here, so anything interpolated into an attribute
@@ -445,9 +527,36 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
        * to announce itself to someone who did not.
        */
       const direction = directionOf(request.query.direction, request.body?.Direction);
-      return relayTwiml(session, relayConfigFor(session, direction), url, direction);
+      const action = `${twimlBase()}/api/voice/handoff?${new URLSearchParams({
+        ...(session ? { sessionId: session.id } : {}),
+        direction,
+      })}`;
+      return relayTwiml(session, relayConfigFor(session, direction), url, direction, action);
     }
   );
+
+  /**
+   * `<Connect action>`: Twilio posts here when the relay session ends, with the
+   * relay's `HandoffData`. The destination is read now rather than baked into the
+   * TwiML at answer time, so a presenter who changes it mid-rehearsal is heard on
+   * the next transfer rather than the next call.
+   */
+  app.post<{
+    Querystring: { sessionId?: string; direction?: string };
+    Body: VoiceWebhookBody & { AccountSid?: string; HandoffData?: string; SessionStatus?: string };
+  }>('/api/voice/handoff', { preHandler: requireTwilioSignature }, async (request, reply) => {
+    const session = request.query.sessionId ? await getSessionById(request.query.sessionId) : null;
+    const direction = directionOf(request.query.direction, request.body?.Direction);
+    const data = parseHandoffData(request.body?.HandoffData);
+    if (request.body?.SessionStatus === 'failed') {
+      request.log.warn({ body: request.body }, 'ConversationRelay session failed');
+    }
+    reply.header('Content-Type', 'text/xml');
+    return handoffTwiml(relayConfigFor(session, direction), data, {
+      accountSid: request.body?.AccountSid || config.twilio.accountSid,
+      ownerPhone: session?.ownerPhone,
+    });
+  });
 
   /**
    * One end-to-end call, on demand: the presenter's own phone, straight into the

@@ -47,6 +47,17 @@ describe('endMessage', () => {
     expect(message.type).toBe('end');
     expect(JSON.parse(message.handoffData)).toEqual({ reason: 'end_call' });
   });
+
+  /** What `<Connect action>` hands the backend for a transfer. Unknown fields
+   *  are omitted, not sent as null, so the receiver can tell them apart. */
+  it('carries the summary and profile for a handoff, and only what is known', () => {
+    const message = endMessage('handoff_to_human', { summary: 'Wants a demo.', profileId: 'p1' });
+    expect(JSON.parse(message.handoffData)).toEqual({
+      reason: 'handoff_to_human',
+      summary: 'Wants a demo.',
+      profileId: 'p1',
+    });
+  });
 });
 
 describe('errorDescription', () => {

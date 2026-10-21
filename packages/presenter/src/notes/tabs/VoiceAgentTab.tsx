@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  HANDOFF_MODES,
   INTERRUPT_MODES,
   LANGUAGE_PRESETS,
   INTERRUPT_SENSITIVITIES,
@@ -16,7 +17,7 @@ import {
   supportsAutoLanguageDetection,
   withLanguageDefaults,
 } from '@twilio-preso/shared';
-import type { CallDirection, LanguageVoice, RelayConfig, RelayToolId } from '@twilio-preso/shared';
+import type { CallDirection, HandoffMode, LanguageVoice, RelayConfig, RelayToolId } from '@twilio-preso/shared';
 import { fetchRelayConfig, placeTestCall, saveRelayConfig } from '../../sessions';
 import { ErrorText, Row, caption, heading, panel, smallButton, textInput } from '../ui';
 
@@ -335,13 +336,7 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
             />
           </div>
         ))}
-        <div style={caption}>Transfer destination for handoff_to_human</div>
-        <input
-          style={{ ...textInput, width: '100%', marginTop: 6 }}
-          placeholder="E.164 — defaults to the presenter who created the session"
-          value={draft.handoffNumber}
-          onChange={(e) => set('handoffNumber', e.target.value)}
-        />
+        <HandoffPanel draft={draft} set={set} />
       </div>
 
       <div style={panel}>
@@ -712,6 +707,81 @@ function NumberField({
         style={{ ...textInput, width: 90, marginTop: 4 }}
         value={value}
         onChange={(e) => onChange(parseInt(e.target.value, 10) || 1)}
+      />
+    </div>
+  );
+}
+
+const HANDOFF_LABELS: Record<HandoffMode, string> = {
+  phone: 'Dial a phone number',
+  'twiml-url': 'Redirect to a TwiML URL',
+  application: 'Dial a TwiML Application',
+};
+
+/**
+ * Where `handoff_to_human` sends the caller. One target per mode, and only the
+ * selected one is shown — the others are kept in the draft, so flipping the
+ * dropdown back does not lose what was typed.
+ *
+ * An invalid URL or sid is said here rather than discovered on a call: the
+ * backend resolves either to empty and falls back to dialling a number, which is
+ * a transfer to the wrong place rather than none at all.
+ */
+function HandoffPanel({
+  draft,
+  set,
+}: {
+  draft: RelayConfig;
+  set: <K extends keyof RelayConfig>(key: K, value: RelayConfig[K]) => void;
+}) {
+  const valid = resolveRelayConfig(draft);
+  const urlInvalid = draft.handoffTwimlUrl.trim() !== '' && !valid.handoffTwimlUrl;
+  const sidInvalid = draft.handoffApplicationSid.trim() !== '' && !valid.handoffApplicationSid;
+  const fallback = 'until it is set, the call dials the handoff number instead';
+  return (
+    <div style={{ marginTop: 6 }}>
+      <Select
+        label="handoff_to_human transfers to"
+        value={draft.handoffMode}
+        options={HANDOFF_MODES.map((m) => ({ value: m, label: HANDOFF_LABELS[m] }))}
+        onChange={(v) => set('handoffMode', v as HandoffMode)}
+      />
+      {draft.handoffMode === 'twiml-url' && (
+        <>
+          <Field
+            label="TwiML URL"
+            hint={`POSTed to; ${fallback}`}
+            value={draft.handoffTwimlUrl}
+            onChange={(v) => set('handoffTwimlUrl', v)}
+          />
+          {urlInvalid && <ErrorText>That is not an http(s) URL Twilio can fetch.</ErrorText>}
+          <p style={{ ...caption, textTransform: 'none', letterSpacing: 0 }}>
+            Receives OriginatingAccountSid, MemoryProfileId, CallSummary and CallerPhone as
+            query parameters — a TwiML Bin reads them as {'{{CallSummary}}'}.
+          </p>
+        </>
+      )}
+      {draft.handoffMode === 'application' && (
+        <>
+          <Field
+            label="TwiML Application SID"
+            hint={`AP…; ${fallback}`}
+            value={draft.handoffApplicationSid}
+            onChange={(v) => set('handoffApplicationSid', v)}
+          />
+          {sidInvalid && <ErrorText>An application sid is AP followed by 32 hex characters.</ErrorText>}
+          <p style={{ ...caption, textTransform: 'none', letterSpacing: 0 }}>
+            The application’s Voice URL receives Param_OriginatingAccountSid,
+            Param_MemoryProfileId, Param_CallSummary and Param_CallerPhone. An application in
+            another account must allow incoming connections from this one.
+          </p>
+        </>
+      )}
+      <Field
+        label={draft.handoffMode === 'phone' ? 'Handoff number' : 'Fallback number'}
+        hint="E.164 — defaults to the presenter who created the session"
+        value={draft.handoffNumber}
+        onChange={(v) => set('handoffNumber', v)}
       />
     </div>
   );

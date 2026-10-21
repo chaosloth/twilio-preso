@@ -1,7 +1,7 @@
 import type { WebSocket } from 'ws';
 import { listParticipants } from './participant.js';
 import { resolveSession } from './session.js';
-import { buildCallerContext, generateGreeting, streamResponse } from './llm.js';
+import { buildCallerContext, generateGreeting, streamResponse, summarizeCall } from './llm.js';
 import type { CallerContext } from './llm.js';
 import { fetchProfileContext, lookupProfileByPhone, recallForProfile } from './memory.js';
 import { fetchSessionConfig } from './relayConfig.js';
@@ -68,6 +68,8 @@ interface SessionState {
   session: SessionRecord | null;
   /** Who is on the line, for a follow-up message. */
   callerPhone: string | null;
+  /** Their memory profile, carried to whoever a handoff reaches. */
+  profileId: string | null;
   /** Everything known about the caller, assembled once at setup — a memory
    *  round-trip between every question and answer is dead air on a phone call. */
   caller: CallerContext;
@@ -81,6 +83,7 @@ export async function handleConnection(ws: WebSocket): Promise<void> {
     config: resolveRelayConfig(),
     session: null,
     callerPhone: null,
+    profileId: null,
     caller: buildCallerContext(null, null, false),
     conversationHistory: [],
     exchangeCount: 0,
@@ -115,6 +118,7 @@ async function handleEvent(
       state.config = loaded.config;
       state.session = loaded.session;
       state.callerPhone = loaded.callerPhone;
+      state.profileId = loaded.profileId;
       state.caller = loaded.caller;
 
       const greeting = await generateGreeting(state.caller, state.config);
@@ -235,9 +239,10 @@ async function handleEvent(
       }
 
       if (called.includes('handoff_to_human')) {
-        // Ending the relay session returns control to TwiML, where the `<Dial>`
-        // the backend emitted after `</Connect>` connects the human.
-        ws.send(JSON.stringify(endMessage('handoff_to_human')));
+        // Ending the relay session hands control back to Twilio, which posts this
+        // `handoffData` to the backend's `<Connect action>` — and the backend
+        // decides there whether that is a number, a TwiML URL or an application.
+        handOff(ws, state);
         return;
       }
 
@@ -283,8 +288,36 @@ function sendResponse(ws: WebSocket, text: string): void {
  * severed farewell.
  */
 function hangUp(ws: WebSocket, state: SessionState): void {
+  setTimeout(() => ws.send(JSON.stringify(endMessage('end_call'))), speakingTime(state));
+}
+
+/** Roughly how long the last line takes to say. */
+function speakingTime(state: SessionState): number {
   const spoken = state.conversationHistory[state.conversationHistory.length - 1]?.content ?? '';
   const words = spoken.split(/\s+/).filter(Boolean).length;
-  const ms = Math.min(15000, 1500 + words * 400);
-  setTimeout(() => ws.send(JSON.stringify(endMessage('end_call'))), ms);
+  return Math.min(15000, 1500 + words * 400);
+}
+
+/**
+ * Transfer the caller, with a summary of the call for whoever picks up.
+ *
+ * The summary is written while "I'm transferring you" is still being spoken, and
+ * the `end` waits for whichever finishes last — the same severed-farewell reason
+ * `hangUp` waits at all. `summarizeCall` is bounded and never rejects, so a slow
+ * or dead model delays the transfer by a few seconds at most and never stops it.
+ */
+function handOff(ws: WebSocket, state: SessionState): void {
+  const spoken = new Promise((resolve) => setTimeout(resolve, speakingTime(state)));
+  const summary = summarizeCall(state.caller, state.config, state.conversationHistory);
+  void Promise.all([summary, spoken]).then(([text]) => {
+    ws.send(
+      JSON.stringify(
+        endMessage('handoff_to_human', {
+          summary: text,
+          profileId: state.profileId ?? undefined,
+          callerPhone: state.callerPhone ?? undefined,
+        })
+      )
+    );
+  });
 }
