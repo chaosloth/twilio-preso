@@ -30,6 +30,8 @@ import type { FastifyInstance } from 'fastify';
 const ROOM = Number(process.env.LOAD_ROOM_SIZE || 300);
 const PROXY = '172.16.33.154';
 const ARRIVAL_GAP_MS = 2;
+/** Arrivals are spread over ROOM × gap, so the timeout has to grow with the room. */
+const TIMEOUT_MS = 10_000 + ROOM * ARRIVAL_GAP_MS * 3;
 const JOIN_CODE = 'F97RSF';
 const SESSION = {
   id: 'sess-load',
@@ -44,7 +46,7 @@ const SESSION = {
 
 // --- Twilio and the control plane, stubbed: this measures the HTTP layer only.
 vi.mock('../../services/sessions.js', () => ({
-  getSessionByCode: async () => SESSION,
+  getSessionByCode: async (code: string) => (code === JOIN_CODE ? SESSION : null),
   getSessionById: async () => SESSION,
   sessionIdForPhoneNumber: async () => SESSION.id,
   expectedVoiceUrl: () => '',
@@ -91,9 +93,19 @@ beforeEach(async () => {
 
 afterEach(() => app.close());
 
+/**
+ * Where the room's traffic leaves the venue. `cellular` gives every phone its
+ * own public address; `venue-wifi` gives them all **one** — a hotel or
+ * conference network NATs the whole room behind a single address, so to the
+ * backend three hundred attendees on the Wi-Fi are one client.
+ */
+type Network = 'cellular' | 'venue-wifi';
+const VENUE_IP = '198.51.100.20';
+
 /** One attendee's phone, as Fly delivers it. */
-function phone(i: number) {
-  const clientIp = `203.0.${Math.floor(i / 250)}.${(i % 250) + 1}`;
+function phone(i: number, network: Network = 'cellular') {
+  const clientIp =
+    network === 'venue-wifi' ? VENUE_IP : `203.0.${Math.floor(i / 250)}.${(i % 250) + 1}`;
   const number = `+614${String(10000000 + i).padStart(8, '0')}`;
   const headers = { 'fly-client-ip': clientIp, 'x-forwarded-for': clientIp };
   const call = (method: 'GET' | 'POST', url: string, payload?: object) =>
@@ -104,8 +116,11 @@ function phone(i: number) {
 type Step = 'resolve' | 'verify-start' | 'verify-check' | 'register' | 'token';
 
 /** The real join sequence. Returns the step it failed on, or null. */
-async function join(i: number): Promise<{ failedAt: Step | null; status?: number }> {
-  const p = phone(i);
+async function join(
+  i: number,
+  network: Network = 'cellular'
+): Promise<{ failedAt: Step | null; status?: number }> {
+  const p = phone(i, network);
   const steps: Array<[Step, () => ReturnType<typeof p.call>]> = [
     ['resolve', () => p.call('GET', `/api/session/${JOIN_CODE}`)],
     ['verify-start', () => p.call('POST', '/api/verify/start', { phone: p.number, sessionId: SESSION.id })],
@@ -127,8 +142,8 @@ async function join(i: number): Promise<{ failedAt: Step | null; status?: number
   return { failedAt: null };
 }
 
-describe(`a room of ${ROOM} joining at once, through Fly's proxy`, () => {
-  it('lets every attendee through the join sequence', async () => {
+describe(`a room of ${ROOM} joining at once, through Fly's proxy`, { timeout: TIMEOUT_MS }, () => {
+  it.each<Network>(['cellular', 'venue-wifi'])('lets every attendee through the join sequence on %s', async (network) => {
     // Phones arrive a couple of milliseconds apart, as a room scanning a QR does
     // over a few seconds — all well inside one rate-limit window. Truly
     // simultaneous requests would mislead: the limiter hands every in-flight
@@ -136,7 +151,7 @@ describe(`a room of ${ROOM} joining at once, through Fly's proxy`, () => {
     // burst of 11 rejects all 11, where a room in practice admits the first 10.
     const results = await Promise.all(
       Array.from({ length: ROOM }, (_, i) =>
-        new Promise((r) => setTimeout(r, i * ARRIVAL_GAP_MS)).then(() => join(i))
+        new Promise((r) => setTimeout(r, i * ARRIVAL_GAP_MS)).then(() => join(i, network))
       )
     );
 
@@ -148,7 +163,7 @@ describe(`a room of ${ROOM} joining at once, through Fly's proxy`, () => {
       }
     }
     const joined = results.filter((r) => !r.failedAt).length;
-    console.log(`joined ${joined}/${ROOM}`, failures);
+    console.log(`${network}: joined ${joined}/${ROOM}`, failures);
 
     expect(failures).toEqual({});
     expect(joined).toBe(ROOM);
@@ -161,7 +176,26 @@ describe(`a room of ${ROOM} joining at once, through Fly's proxy`, () => {
   it('still rate-limits a single phone guessing join codes', async () => {
     const p = phone(9999);
     const statuses: number[] = [];
-    for (let n = 0; n < 15; n++) statuses.push((await p.call('GET', `/api/session/GUESS${n}`)).statusCode);
-    expect(statuses.filter((s) => s === 429).length).toBeGreaterThan(0);
+    for (let n = 0; n < 40; n++) statuses.push((await p.call('GET', `/api/session/GUESS${n}`)).statusCode);
+    expect(statuses.filter((s) => s === 404)).toHaveLength(30);
+    expect(statuses.filter((s) => s === 429)).toHaveLength(10);
+  });
+
+  /**
+   * The case a shared Wi-Fi makes possible: the room joining *while* someone on
+   * the same network guesses. The guesser is stopped; nobody else is.
+   */
+  it('stops a guesser on the venue Wi-Fi without stopping the room on it', async () => {
+    const guesser = phone(9999, 'venue-wifi');
+    for (let n = 0; n < 40; n++) await guesser.call('GET', `/api/session/GUESS${n}`);
+    expect((await guesser.call('GET', '/api/session/GUESS99')).statusCode).toBe(429);
+
+    const results = await Promise.all(
+      Array.from({ length: ROOM }, (_, i) =>
+        new Promise((r) => setTimeout(r, i * ARRIVAL_GAP_MS)).then(() => join(i, 'venue-wifi'))
+      )
+    );
+    expect(results.filter((r) => r.failedAt)).toEqual([]);
+    expect((await guesser.call('GET', '/api/session/GUESS100')).statusCode).toBe(429);
   });
 });

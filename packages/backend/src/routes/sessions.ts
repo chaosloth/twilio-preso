@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { joinCodeGuessLimit } from '../http/rateLimit.js';
 import {
   COUNTRY_CODES,
   VERIFY_CHANNELS,
@@ -42,15 +43,34 @@ interface CreateBody {
  * the deck, the owner, or the session's phone number.
  */
 export async function publicSessionRoutes(app: FastifyInstance): Promise<void> {
-  app.get<{ Params: { code: string } }>(
-    '/api/session/:code',
-    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
-    async (request, reply) => {
-      const session = await getSessionByCode(request.params.code);
-      if (!session) return reply.status(404).send({ error: 'Unknown join code' });
-      return toPublicSession(session);
+  /**
+   * Limited on *failed* lookups, not on all of them. This used to allow ten
+   * lookups a minute per address — and a whole room on a venue's Wi-Fi is one
+   * address, so the eleventh attendee to scan the QR was refused. A room
+   * resolving the right code never misses; a guesser rarely does anything else.
+   */
+  const guesses = joinCodeGuessLimit({ max: 30, windowMs: 60_000 });
+  app.get<{ Params: { code: string } }>('/api/session/:code', async (request, reply) => {
+    const session = await getSessionByCode(request.params.code);
+    /**
+     * A code that exists is answered even from an address that has used up its
+     * misses. On a venue's Wi-Fi that address is the whole room, so blocking it
+     * would let one guesser lock every attendee out — and answering a correct
+     * code tells a guesser nothing, because it is the answer only to someone who
+     * already has it. What a blocked address loses is the ability to tell a
+     * wrong code from a right one: every miss is a 429, not a 404.
+     */
+    if (session) return toPublicSession(session);
+    const wait = guesses.blocked(request);
+    guesses.miss(request);
+    if (wait !== null) {
+      return reply
+        .status(429)
+        .header('retry-after', String(wait))
+        .send({ error: `Too many wrong codes — try again in ${wait} seconds` });
     }
-  );
+    return reply.status(404).send({ error: 'Unknown join code' });
+  });
 }
 
 export async function sessionRoutes(app: FastifyInstance): Promise<void> {
