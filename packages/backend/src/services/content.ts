@@ -34,9 +34,13 @@ import { config } from '../config.js';
 const BASE = 'https://content.twilio.com/v1';
 
 /** Meta requires lowercase alphanumerics and underscores. The prefix keeps this
- *  app's templates distinguishable in an account shared with other demos. */
+ *  app's templates distinguishable in an account shared with other demos.
+ *  Version 1 keeps the unsuffixed name every template was first created under;
+ *  a later version is `_v2`, … — see `ContentTemplate.version`. */
 export function friendlyNameFor(key: string): string {
-  return `wonder_${key.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}`;
+  const base = `wonder_${key.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}`;
+  const version = CONTENT_TEMPLATES[key]?.version ?? 1;
+  return version > 1 ? `${base}_v${version}` : base;
 }
 
 export type ApprovalStatus = 'approved' | 'pending' | 'rejected' | 'unsubmitted' | 'unknown';

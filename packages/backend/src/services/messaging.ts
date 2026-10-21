@@ -4,6 +4,7 @@ import { fanOut, summarizeFailures } from './fanOut.js';
 import { renderTemplate } from '@twilio-preso/shared';
 import type { Participant } from '@twilio-preso/shared';
 import { contentSidFor, contentVariablesJson } from './content.js';
+import { whatsappSenderFor } from './whatsappSender.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -56,6 +57,11 @@ export interface ChannelResult {
  *  by definition, which is why the fallback exists at all. */
 const WHATSAPP_OUTSIDE_WINDOW = 63016;
 
+/**
+ * Whether any WhatsApp sending is configured at all. Which sender a given
+ * session uses is `whatsappSenderFor` — its own pool number when that is
+ * registered — not this global.
+ */
 export function isWhatsAppConfigured(): boolean {
   return !!config.twilio.whatsappFrom;
 }
@@ -81,8 +87,14 @@ export async function sendOnChannel(
   message: OutboundMessage
 ): Promise<'whatsapp' | 'sms'> {
   const body = renderTemplate(message.template, message.values);
-  const whatsappFrom = config.twilio.whatsappFrom;
-  if (channel === 'sms' || !whatsappFrom) {
+  if (channel === 'sms') {
+    await sendSms(smsFrom, to, body);
+    return 'sms';
+  }
+  // The session's own number on WhatsApp, never another session's — see
+  // `whatsappSenderFor`. Empty means this session has no WhatsApp sender.
+  const whatsappFrom = await whatsappSenderFor(smsFrom);
+  if (!whatsappFrom) {
     await sendSms(smsFrom, to, body);
     return 'sms';
   }
@@ -140,8 +152,12 @@ export async function sendTextOnChannel(
   to: string,
   body: string
 ): Promise<'whatsapp' | 'sms'> {
-  const whatsappFrom = config.twilio.whatsappFrom;
-  if (channel === 'sms' || !whatsappFrom) {
+  if (channel === 'sms') {
+    await sendSms(smsFrom, to, body);
+    return 'sms';
+  }
+  const whatsappFrom = await whatsappSenderFor(smsFrom);
+  if (!whatsappFrom) {
     await sendSms(smsFrom, to, body);
     return 'sms';
   }

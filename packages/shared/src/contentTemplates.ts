@@ -29,6 +29,14 @@ export interface ContentTemplate {
   language: string;
   /** The approved text, with `{{n}}` placeholders. */
   body: string;
+  /**
+   * Bumped whenever `body` changes. A Content API template cannot be edited, and
+   * an existing one is found by name — so new copy under the old name would keep
+   * sending the old approved body forever. The version is part of the name, which
+   * makes changed copy a new template that is created and submitted for approval.
+   * Absent is version 1, the name every template shipped under.
+   */
+  version?: number;
   /** Example value per variable — required at creation: Meta reviews the body
    *  with the examples substituted in, and a missing one fails the submission. */
   variables: Record<string, string>;
@@ -83,7 +91,10 @@ export const CONTENT_TEMPLATES: Record<string, ContentTemplate> = {
     key: 'closing',
     category: 'UTILITY',
     language: 'en',
-    body: 'Thanks for joining us, {{1}}! Want to explore the demo yourself? Check it out here: https://www.twilio.com/en-us/solutions/agent-productivity\n\nletsGoMichelangeloMode(); — Wonder by Twilio',
+    // v1 (HX97338f61ad76fcbeba4eeaa8ad8fd74d) linked agent-productivity and
+    // signed off with letsGoMichelangeloMode().
+    version: 2,
+    body: 'Thanks for joining us, {{1}}! Want to explore the demo yourself? Check it out here: https://www.twilio.com/',
     variables: { '1': 'Billy' },
   }),
 };

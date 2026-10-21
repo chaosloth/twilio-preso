@@ -29,6 +29,7 @@ import { probeLlm } from '../services/ai.js';
 import { describeContentTemplates, ensureContentTemplates } from '../services/content.js';
 import { describeOrchestrator, webhookUrl } from '../services/orchestrator.js';
 import { isSignatureBypassed } from '../services/twilioSignature.js';
+import { whatsappSenderFor } from '../services/whatsappSender.js';
 
 const client = Twilio(config.twilio.accountSid, config.twilio.authToken);
 
@@ -133,8 +134,16 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
        */
       const whatsappWebhook =
         sessionId && config.twilio.whatsappFrom
-          ? await describeWhatsAppVoiceWebhook(sessionId).catch(() => null)
+          ? await describeWhatsAppVoiceWebhook(sessionId, thisSessionNumber).catch(() => null)
           : null;
+      /**
+       * The sender this session's WhatsApp actually goes out from. Empty while a
+       * global sender is set means the global one is another session's number,
+       * so this session's `whatsapp-` triggers fall back to SMS.
+       */
+      const sessionWhatsApp = config.twilio.whatsappFrom
+        ? await whatsappSenderFor(thisSessionNumber).catch(() => config.twilio.whatsappFrom)
+        : '';
       const signatureBypassed = isSignatureBypassed();
 
       let llm: FeatureStatus;
@@ -204,13 +213,13 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
         {
           id: 'whatsapp',
           label: 'WhatsApp',
-          state: config.twilio.whatsappFrom ? 'ok' : 'off',
-          detail: config.twilio.whatsappFrom
-            ? 'whatsapp- triggers send over WhatsApp, per recipient, and fall back to SMS when it cannot deliver — an unregistered number, or a closed 24-hour window.'
-            : 'TWILIO_WHATSAPP_FROM unset — whatsapp- triggers send as SMS instead. The message still arrives; it just is not the channel being demonstrated.',
-          values: config.twilio.whatsappFrom
-            ? [{ label: 'Sender', value: config.twilio.whatsappFrom }]
-            : undefined,
+          state: !config.twilio.whatsappFrom ? 'off' : sessionWhatsApp ? 'ok' : 'warn',
+          detail: !config.twilio.whatsappFrom
+            ? 'TWILIO_WHATSAPP_FROM unset — whatsapp- triggers send as SMS instead. The message still arrives; it just is not the channel being demonstrated.'
+            : sessionWhatsApp
+              ? 'whatsapp- triggers send over WhatsApp from this session’s sender, per recipient, and fall back to SMS when it cannot deliver — an unregistered number, or a closed 24-hour window.'
+              : `This session’s number ${thisSessionNumber ?? ''} is not a registered WhatsApp sender, and ${config.twilio.whatsappFrom} belongs to another session — so whatsapp- triggers send as SMS from this session’s own number rather than WhatsApp from someone else’s. Register the number with WhatsApp to send on that channel.`,
+          values: sessionWhatsApp ? [{ label: 'Sender', value: sessionWhatsApp }] : undefined,
         },
         {
           id: 'voice',
@@ -639,8 +648,9 @@ export async function featureRoutes(app: FastifyInstance): Promise<void> {
       const sessionId = request.query.sessionId;
       if (!sessionId) return reply.status(400).send({ error: 'sessionId is required' });
       try {
-        await pointWhatsAppAtVoiceAgent(sessionId);
-        return await describeWhatsAppVoiceWebhook(sessionId);
+        const number = (await getSessionById(sessionId))?.phoneNumber;
+        await pointWhatsAppAtVoiceAgent(sessionId, number);
+        return await describeWhatsAppVoiceWebhook(sessionId, number);
       } catch (err: any) {
         request.log.error({ err }, 'failed to point WhatsApp calling at the voice agent');
         return reply.status(502).send({ error: err?.message ?? 'could not update WhatsApp calling' });

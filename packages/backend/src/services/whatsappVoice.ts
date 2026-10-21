@@ -1,6 +1,7 @@
 import Twilio from 'twilio';
 import { config } from '../config.js';
 import { expectedVoiceUrl } from './sessions.js';
+import { whatsappSenderFor } from './whatsappSender.js';
 
 /**
  * Whether an inbound **WhatsApp call** reaches this session's voice agent.
@@ -48,9 +49,12 @@ export interface WhatsAppVoiceWebhook {
 }
 
 export async function describeWhatsAppVoiceWebhook(
-  sessionId: string
+  sessionId: string,
+  sessionNumber?: string
 ): Promise<WhatsAppVoiceWebhook> {
-  const sender = config.twilio.whatsappFrom;
+  // The sender this session actually uses — its own number when registered —
+  // so the row checks the WhatsApp number the audience is shown, not the global.
+  const sender = sessionNumber ? await whatsappSenderFor(sessionNumber) : config.twilio.whatsappFrom;
   const expected = expectedVoiceUrl(sessionId);
   const blank: WhatsAppVoiceWebhook = {
     sender,
@@ -105,8 +109,11 @@ export async function describeWhatsAppVoiceWebhook(
  * sender routed through it follows this session too. There is one per
  * environment here, which is why that is acceptable rather than surprising.
  */
-export async function pointWhatsAppAtVoiceAgent(sessionId: string): Promise<void> {
-  const current = await describeWhatsAppVoiceWebhook(sessionId);
+export async function pointWhatsAppAtVoiceAgent(
+  sessionId: string,
+  sessionNumber?: string
+): Promise<void> {
+  const current = await describeWhatsAppVoiceWebhook(sessionId, sessionNumber);
   if (!current.applicationSid) {
     throw new Error(
       current.senderSid
