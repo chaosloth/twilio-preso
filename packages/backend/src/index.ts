@@ -2,8 +2,8 @@ import './env.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
-import rateLimit from '@fastify/rate-limit';
 import { config } from './config.js';
+import { registerRateLimiting, serverOptions } from './http/rateLimit.js';
 import { initControlPlane } from './services/sessions.js';
 import { tokenRoutes } from './routes/token.js';
 import { verifyRoutes } from './routes/verify.js';
@@ -20,13 +20,11 @@ import { orchestratorRoutes } from './routes/orchestrator.js';
 import { describeContentTemplates } from './services/content.js';
 import { isWhatsAppConfigured } from './services/messaging.js';
 
-const app = Fastify({ logger: true });
+const app = Fastify(serverOptions);
 
 await app.register(cors, { origin: true });
 await app.register(formbody);
-// Global ceiling; the public auth and join-code lookups tighten it per-route.
-// A guessed join code is the whole attack path on the audience side.
-await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
+await registerRateLimiting(app);
 await app.register(tokenRoutes);
 await app.register(verifyRoutes);
 await app.register(authRoutes);
