@@ -54,7 +54,7 @@ export default function Stage01Opening() {
       </Html>
 
       <FloatingText position={[0, -3.3, 0]} fontSize={0.22} color="#ef223a" delay={0.8}>
-        {`${participants} connected`}
+        {`${participants} registered`}
       </FloatingText>
 
       <pointLight position={[0, 2, 3]} color="#ef223a" intensity={1.5} distance={10} />

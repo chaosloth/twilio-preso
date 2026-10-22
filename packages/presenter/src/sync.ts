@@ -63,10 +63,11 @@ export async function initPresenterSync(sessionId: string): Promise<void> {
       usePresenterStore.getState().addPendingAiPrompt(data as AiPromptPendingEvent);
     } else if (data.type === 'ai-prompt-response') {
       usePresenterStore.getState().addAiPromptResponse(data as AiPromptResponseEvent);
-    } else if (data.type === 'participant-joined') {
-      const store = usePresenterStore.getState();
-      store.setTotalParticipants(store.totalParticipants + 1);
     }
+    // `participant-joined` is deliberately not counted here. The backend writes
+    // the real roster size into the state document on every join, so adding one
+    // per event as well counted each attendee twice — "2 connected" for a room
+    // of one. The document below is the only source of the count.
   });
 
   // Subscribe to presentation state document — this is the PRIMARY sync mechanism
@@ -77,7 +78,7 @@ export async function initPresenterSync(sessionId: string): Promise<void> {
     suppressPublish();
     usePresenterStore.getState().goTo(initialData.currentStageIndex);
   }
-  if (initialData.totalParticipants) {
+  if (typeof initialData.totalParticipants === 'number') {
     usePresenterStore.getState().setTotalParticipants(initialData.totalParticipants);
   }
   if (initialData.isLive !== undefined) {
@@ -92,7 +93,7 @@ export async function initPresenterSync(sessionId: string): Promise<void> {
       suppressPublish();
       store.goTo(data.currentStageIndex);
     }
-    store.setTotalParticipants(data.totalParticipants);
+    if (typeof data.totalParticipants === 'number') store.setTotalParticipants(data.totalParticipants);
     if (data.isLive !== undefined) {
       store.setLive(data.isLive);
     }

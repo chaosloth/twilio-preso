@@ -31,7 +31,7 @@ function HUD() {
   return (
     <>
       <div style={{ position: 'fixed', bottom: 16, right: 16, color: 'white', fontFamily: 'monospace', opacity: 0.5, fontSize: 12 }}>
-        Stage {stageIndex + 1}/{total} | {participants} connected
+        Stage {stageIndex + 1}/{total} | {participants} registered
       </div>
       <img src="/images/twilio-logo-full.png" alt="Twilio" style={{ position: 'fixed', bottom: 16, left: 16, width: 72, height: 'auto', opacity: 0.4 }} />
     </>
