@@ -1,4 +1,4 @@
-import { resolveDeck, resolveRelayConfig, resolveTextConfig } from '@twilio-preso/shared';
+import { resolveDeck, resolveRelayConfig, resolveSayConfig, resolveTextConfig } from '@twilio-preso/shared';
 import type {
   CallDirection,
   Deck,
@@ -8,6 +8,7 @@ import type {
   RelayConfig,
   ResolvedStage,
   SessionRecord,
+  SayConfig,
   TextAgentConfig,
 } from '@twilio-preso/shared';
 import { presenterFetch } from './auth';
@@ -133,6 +134,22 @@ export async function saveTextConfig(id: string, text: TextAgentConfig): Promise
     })
   );
   return resolveTextConfig(result.text);
+}
+
+/** The scripted mass call's `<Say>` settings, resolved locally like the others. */
+export async function fetchSayConfig(id: string): Promise<SayConfig> {
+  const { say } = await json(await presenterFetch(`/api/sessions/${id}/say`));
+  return resolveSayConfig(say);
+}
+
+export async function saveSayConfig(id: string, say: SayConfig): Promise<SayConfig> {
+  const result = await json(
+    await presenterFetch(`/api/sessions/${id}/say`, {
+      method: 'PUT',
+      body: JSON.stringify({ say }),
+    })
+  );
+  return resolveSayConfig(result.say);
 }
 
 /** Places one real call into the agent, so the settings above can be heard

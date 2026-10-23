@@ -20,6 +20,7 @@ import {
 import type { CallDirection, HandoffMode, LanguageVoice, RelayConfig, RelayToolId } from '@twilio-preso/shared';
 import { fetchRelayConfig, placeTestCall, saveRelayConfig } from '../../sessions';
 import { ErrorText, Row, caption, heading, panel, smallButton, textInput } from '../ui';
+import { ScriptedCallPanel } from './ScriptedCallPanel';
 
 /**
  * The voice agent, as the presenter configures it: instructions, greeting,
@@ -33,13 +34,69 @@ import { ErrorText, Row, caption, heading, panel, smallButton, textInput } from 
  */
 export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
   /**
-   * Which direction's config is being edited. Two stored configs, because the two
-   * are different moments in the talk: someone who rang in chose to and is having
-   * a conversation, while the finale has to introduce itself to a phone that just
-   * started ringing. The number's inbound webhook reads the first, every call this
-   * app places reads the second.
+   * Which config is being edited: one of the agent's two directions, or the
+   * scripted mass call. Two agent configs, because the two are different moments
+   * in the talk: someone who rang in chose to and is having a conversation, while
+   * the finale has to introduce itself to a phone that just started ringing. The
+   * scripted call is a third thing — a fixed `<Say>`, not the agent — so it gets
+   * its own sub-tab and its own save rather than a field on either direction.
    */
-  const [direction, setDirection] = useState<CallDirection>('inbound');
+  const [view, setView] = useState<VoiceView>('inbound');
+  /** Set by the editor below, so leaving a sub-tab can ask before discarding. */
+  const [dirty, setDirty] = useState(false);
+
+  function switchTo(next: VoiceView) {
+    if (next === view) return;
+    if (dirty && !window.confirm('Discard the unsaved edits on this tab?')) return;
+    setDirty(false);
+    setView(next);
+  }
+
+  return (
+    <div>
+      <div style={{ ...panel, paddingBottom: 8 }}>
+        <Row style={{ justifyContent: 'flex-start', gap: 8 }}>
+          {VOICE_VIEWS.map((v) => (
+            <button
+              key={v}
+              style={{
+                ...smallButton,
+                border: v === view ? '1px solid #ef223a' : '1px solid #4d5777',
+                color: v === view ? '#ef223a' : '#babecc',
+              }}
+              onClick={() => switchTo(v)}
+            >
+              {VIEW_LABELS[v]}
+            </button>
+          ))}
+        </Row>
+      </div>
+      {view === 'scripted' ? (
+        <ScriptedCallPanel sessionId={sessionId} />
+      ) : (
+        <RelayEditor key={view} sessionId={sessionId} direction={view} onDirtyChange={setDirty} />
+      )}
+    </div>
+  );
+}
+
+type VoiceView = CallDirection | 'scripted';
+const VOICE_VIEWS: readonly VoiceView[] = ['inbound', 'outbound', 'scripted'];
+const VIEW_LABELS: Record<VoiceView, string> = {
+  inbound: 'Calls in',
+  outbound: 'Calls out',
+  scripted: 'Scripted call',
+};
+
+function RelayEditor({
+  sessionId,
+  direction,
+  onDirtyChange,
+}: {
+  sessionId: string;
+  direction: CallDirection;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
   /** Whether the outbound config has ever been saved. Until it has, it *is* the
    *  inbound one — so the tab says so rather than pretending to be edits. */
   const [outboundSet, setOutboundSet] = useState(false);
@@ -72,6 +129,13 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
       current = false;
     };
   }, [sessionId, direction]);
+
+  // Reported up so the sub-tab switch can ask before discarding edits. Computed
+  // here rather than from `dirty` below: that is after an early return, and a
+  // hook cannot follow one.
+  useEffect(() => {
+    onDirtyChange(!!draft && !!saved && JSON.stringify(draft) !== JSON.stringify(saved));
+  }, [draft, saved, onDirtyChange]);
 
   const set = useCallback(<K extends keyof RelayConfig>(key: K, value: RelayConfig[K]) => {
     setDraft((d) => (d ? { ...d, [key]: value } : d));
@@ -141,18 +205,6 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
 
   /**
-   * Switching away from unsaved edits would silently discard them — every field
-   * here changes what a live call sounds like, so it asks first.
-   */
-  function switchTo(next: CallDirection) {
-    if (next === direction) return;
-    if (dirty && !window.confirm('Discard the unsaved edits on this direction?')) return;
-    setStatus('');
-    setError('');
-    setDirection(next);
-  }
-
-  /**
    * Fills this direction's draft from the other one's saved config, so a second
    * persona is an edit of the first rather than a blank tab. Left unsaved on
    * purpose: the point of copying is to then change the two or three fields that
@@ -178,19 +230,6 @@ export function VoiceAgentTab({ sessionId }: { sessionId: string }) {
     <div>
       <div style={panel}>
         <Row style={{ justifyContent: 'flex-start', gap: 8 }}>
-          {(['inbound', 'outbound'] as const).map((d) => (
-            <button
-              key={d}
-              style={{
-                ...smallButton,
-                border: d === direction ? '1px solid #ef223a' : '1px solid #4d5777',
-                color: d === direction ? '#ef223a' : '#babecc',
-              }}
-              onClick={() => switchTo(d)}
-            >
-              {d === 'inbound' ? 'Calls in' : 'Calls out'}
-            </button>
-          ))}
           {/* Most of a talk wants the two nearly identical — one prompt and one
               greeting apart — so the split must not mean typing everything twice.
               Copied into the draft, not saved: it is a starting point to edit. */}

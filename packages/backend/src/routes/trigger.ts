@@ -10,10 +10,11 @@ import {
   directionOf,
   enabledRelayTools,
   parseHandoffData,
+  resolveSayConfig,
+  sayVoiceAttribute,
   relayConfigFor,
   resolvedLanguages,
   responseFor,
-  sayVoice,
   supportsAutoLanguageDetection,
 } from '@twilio-preso/shared';
 import type {
@@ -21,6 +22,7 @@ import type {
   HandoffData,
   Participant,
   RelayConfig,
+  SayConfig,
   SessionRecord,
 } from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
@@ -79,6 +81,24 @@ async function callEveryone(
     failed: failures.length,
     errors: summarizeFailures(failures),
   };
+}
+
+/**
+ * The scripted mass call's TwiML, from the session's own `<Say>` settings
+ * (`SessionRecord.say`, the HUD's voice tab). Pure, so it is tested directly.
+ * `language` is omitted when unset, so the voice's own language applies; the
+ * message is escaped, since it is presenter-typed text inside XML.
+ */
+export function demoBotTwiml(config: SayConfig): string {
+  const attrs = [`voice="${escapeXml(sayVoiceAttribute(config))}"`];
+  if (config.language) attrs.push(`language="${escapeXml(config.language)}"`);
+  if (config.loop !== 1) attrs.push(`loop="${config.loop}"`);
+  const pause = config.pauseSeconds > 0 ? `\n  <Pause length="${config.pauseSeconds}"/>` : '';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say ${attrs.join(' ')}>${escapeXml(config.message)}</Say>${pause}
+  <Hangup/>
+</Response>`;
 }
 
 /** The relay's WebSocket URL, or null when the voice agent is not deployed. */
@@ -604,14 +624,13 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
   );
 
   /**
-   * The scripted bot's TwiML.
+   * The scripted bot's TwiML — what `voice-mass-outbound` rings the room into.
    *
-   * It speaks in the **session's own agent voice** (`sayVoice`), not a
-   * `TWILIO_VOICE` of its own: this trigger and `voice-mass-relay` are two
-   * versions of the same moment in the talk, and a room that hears one voice from
-   * the scripted call and another from the live agent hears two products. The
-   * session is optional because a number's inbound `voiceUrl` also lands here —
-   * without one it falls back to the shipped default rather than failing a call.
+   * Built from the session's own `<Say>` settings (`demoBotTwiml`), edited in the
+   * HUD's voice tab. It used to borrow the outbound agent voice (`sayVoice`); it
+   * has its own config so the scripted finale's voice can change without the
+   * live agent's. The session is optional because a number's inbound `voiceUrl`
+   * also lands here — without one it speaks the shipped defaults.
    */
   app.post<{ Querystring: { sessionId?: string; direction?: string }; Body: VoiceWebhookBody }>(
     '/api/voice/demo-bot',
@@ -624,17 +643,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
         request.query.sessionId ??
         (await sessionIdForClaimedNumber(request.body).catch(() => null));
       const session = sessionId ? await getSessionById(sessionId) : null;
-      // The scripted bot is the outbound finale's twin, so it speaks in whichever
-      // config that direction uses — the same reason it uses `sayVoice` at all.
-      const voice = sayVoice(
-        relayConfigFor(session, directionOf(request.query.direction, request.body?.Direction))
-      );
-      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="${voice}">Hey there! Every phone in this room just rang at the same time — and what you watched today was a startup being created live, on stage, in front of you. That is the power of Twilio. Whether you are reaching one customer or a thousand, Twilio scales with you. If you like, call me back and we can talk about your individual experiences. Thanks for being part of it today.</Say>
-  <Pause length="1"/>
-  <Hangup/>
-</Response>`;
+      const twiml = demoBotTwiml(resolveSayConfig(session?.say));
       reply.header('Content-Type', 'text/xml');
       return twiml;
     }

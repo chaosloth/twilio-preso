@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import Twilio from 'twilio';
 import { DEFAULT_DECK, allocateJoinCode, isValidJoinCode, normalizeJoinCode } from '@twilio-preso/shared';
-import type { CallDirection, RelayConfig, TextAgentConfig } from '@twilio-preso/shared';
+import type { CallDirection, RelayConfig, SayConfig, TextAgentConfig } from '@twilio-preso/shared';
 import type {
   Deck,
   PhonePoolClaim,
@@ -465,6 +465,16 @@ export async function setSessionText(
   const session = await getSessionById(sessionId);
   if (!session) return null;
   return updateSession(session, { text });
+}
+
+/** The scripted mass call's `<Say>`, stored as its own partial. */
+export async function setSessionSay(
+  sessionId: string,
+  say: Partial<SayConfig>
+): Promise<SessionRecord | null> {
+  const session = await getSessionById(sessionId);
+  if (!session) return null;
+  return updateSession(session, { say });
 }
 
 /**

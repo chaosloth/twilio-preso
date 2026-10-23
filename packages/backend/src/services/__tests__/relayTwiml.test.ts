@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRelayConfig } from '@twilio-preso/shared';
-import { claimedNumberOf, handoffTwiml, relayTwiml } from '../../routes/trigger.js';
+import { resolveRelayConfig, resolveSayConfig } from '@twilio-preso/shared';
+import { claimedNumberOf, demoBotTwiml, handoffTwiml, relayTwiml } from '../../routes/trigger.js';
 
 const twiml = (overrides = {}) =>
   relayTwiml(null, resolveRelayConfig(overrides), 'wss://relay.example.com');
@@ -217,5 +217,27 @@ describe('handoffTwiml', () => {
     expect(
       handoffTwiml(withHandoff({ handoffMode: 'twiml-url', handoffTwimlUrl: 'ftp://x' }), data, call)
     ).toContain('<Dial>+61400000001</Dial>');
+  });
+});
+
+describe('the scripted mass call', () => {
+  const say = (overrides = {}) => demoBotTwiml(resolveSayConfig(overrides));
+
+  it('speaks the chosen ElevenLabs voice by default', () => {
+    expect(say()).toContain('<Say voice="ElevenLabs.sai9UY7iXkRDSsXHR0bZ">');
+  });
+
+  it('uses the session\'s provider, voice, language and loop', () => {
+    const out = say({ provider: 'Polly', voice: 'Olivia-Neural', language: 'en-AU', loop: 2 });
+    expect(out).toContain('<Say voice="Polly.Olivia-Neural" language="en-AU" loop="2">');
+  });
+
+  it('escapes the presenter-typed message', () => {
+    expect(say({ message: 'Fish & <chips>' })).toContain('>Fish &amp; &lt;chips&gt;</Say>');
+  });
+
+  it('omits the pause at zero', () => {
+    expect(say({ pauseSeconds: 0 })).not.toContain('<Pause');
+    expect(say({ pauseSeconds: 3 })).toContain('<Pause length="3"/>');
   });
 });

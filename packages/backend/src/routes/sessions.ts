@@ -7,11 +7,12 @@ import {
   relayConfigFor,
   resolveRelayConfig,
   storedRelayFor,
+  resolveSayConfig,
   resolveTextConfig,
   toPublicSession,
   validateDeck,
 } from '@twilio-preso/shared';
-import type { Deck, RelayConfig, TextAgentConfig, VerifyChannel } from '@twilio-preso/shared';
+import type { Deck, RelayConfig, SayConfig, TextAgentConfig, VerifyChannel } from '@twilio-preso/shared';
 import { requirePresenter } from '../services/auth.js';
 import {
   PhonePoolExhaustedError,
@@ -23,6 +24,7 @@ import {
   listSessions,
   setSessionDeck,
   setSessionRelay,
+  setSessionSay,
   setSessionText,
   setSessionStatus,
   setSessionCountryCode,
@@ -189,6 +191,27 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
    * Text-agent settings: the same shape of edit as the voice tab, for the agent
    * an attendee reaches by replying to a message rather than by answering a call.
    */
+  /** The scripted mass call's `<Say>`. Resolved on the way in and out, so a
+   *  hand-crafted body cannot store an attribute TwiML would reject. */
+  app.get<{ Params: { id: string } }>('/api/sessions/:id/say', async (request, reply) => {
+    const session = await getSessionById(request.params.id);
+    if (!session) return reply.status(404).send({ error: 'Session not found' });
+    return { say: resolveSayConfig(session.say) };
+  });
+
+  app.put<{ Params: { id: string }; Body: { say: Partial<SayConfig> } }>(
+    '/api/sessions/:id/say',
+    async (request, reply) => {
+      const say = request.body?.say;
+      if (!say || typeof say !== 'object') {
+        return reply.status(400).send({ error: 'say object is required' });
+      }
+      const session = await setSessionSay(request.params.id, resolveSayConfig(say));
+      if (!session) return reply.status(404).send({ error: 'Session not found' });
+      return { session, say: resolveSayConfig(session.say) };
+    }
+  );
+
   app.get<{ Params: { id: string } }>('/api/sessions/:id/text', async (request, reply) => {
     const session = await getSessionById(request.params.id);
     if (!session) return reply.status(404).send({ error: 'Session not found' });

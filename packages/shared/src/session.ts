@@ -2,6 +2,7 @@ import { countryCodeFor, offeredCountryCodesFor } from './countryCodes.js';
 import type { Deck } from './deck.js';
 import type { RelayConfig } from './relayConfig.js';
 import type { TextAgentConfig } from './textConfig.js';
+import type { SayConfig } from './sayConfig.js';
 
 export type SessionStatus = 'draft' | 'live' | 'ended';
 
@@ -65,6 +66,12 @@ export interface SessionRecord {
    * change what a live call sounds like. Read through `resolveTextConfig`.
    */
   text?: Partial<TextAgentConfig>;
+  /**
+   * The scripted mass call's `<Say>` — voice, language, loop, pause and script.
+   * Separate from `relay` so the scripted finale's voice can change without the
+   * live agent's. Read through `resolveSayConfig`.
+   */
+  say?: Partial<SayConfig>;
   /**
    * Which channel registration offers first for the one-time passcode. A room
    * whose WhatsApp sender is not ready needs SMS, and that is a property of the
